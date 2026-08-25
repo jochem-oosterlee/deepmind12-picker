@@ -152,22 +152,30 @@
     color:var(--accent); }
   .lfo .head .now { margin-left:auto; color:var(--muted); font-weight:400;
     letter-spacing:0; text-transform:none; font-size:11px; }
-  .lfo .wave { display:block; width:100%; height:120px; background:#0f1115;
+  .lfo .wave { display:block; width:100%; height:92px; background:#0f1115;
     border:1px solid var(--border); border-radius:8px; }
-  .shapes { display:flex; gap:5px; margin:8px 0 2px; flex-wrap:wrap; }
-  .shapes button { padding:3px 6px; line-height:0; }
+  .lfobody { display:flex; gap:8px; align-items:flex-start; }
+  .lfomid { flex:1; min-width:0; }
+  .vfgroup { display:flex; gap:6px; }
+
+  /* verticale fader: gedraaid, zodat het op elke engine werkt */
+  .vf { display:flex; flex-direction:column; align-items:center; gap:4px; width:44px; }
+  .vnum { font-size:11px; color:var(--accent); border:1px solid var(--border);
+    border-radius:6px; padding:2px 0; width:100%; text-align:center;
+    background:var(--panel2); font-variant-numeric:tabular-nums; }
+  .vtrack { position:relative; width:32px; height:104px; }
+  .vtrack input { position:absolute; width:104px; height:32px; left:-36px; top:36px;
+    transform:rotate(-90deg); accent-color:var(--accent); background:transparent;
+    margin:0; padding:0; }
+  .vcap { font-size:10px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px; }
+
+  .shapes { display:flex; gap:4px; margin:6px 0 0; flex-wrap:wrap; }
+  .shapes button { padding:2px 5px; line-height:0; }
   .shapes button.on { background:var(--accent-dim); border-color:var(--accent); }
   .shapes svg { display:block; }
-  .faders { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
-    gap:8px 12px; margin-top:10px; }
-  .fader .lab { display:flex; justify-content:space-between; font-size:11px;
-    color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
-  .fader .lab b { color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;
-    text-transform:none; letter-spacing:0; }
-  .fader input[type=range] { width:100%; height:24px; accent-color:var(--accent);
-    background:transparent; }
-  .pills { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-  .pills button { padding:7px 12px; font-size:12px; }
+  .pills { display:flex; gap:5px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+  .pills button { padding:5px 10px; font-size:12px; }
   .pills button.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
   .pills .seg { display:flex; gap:0; }
   .pills .seg button { border-radius:0; }
@@ -1635,6 +1643,39 @@ function lfoWaveSvg(shape, rate, delay, slew, mono) {
     + ' stroke-linejoin="round" stroke-linecap="round"/></svg>';
 }
 
+/** Verticale fader met de waarde erboven en het label eronder. */
+function vFader(label, value, max, onMove, onDone) {
+  const box = document.createElement("div");
+  box.className = "vf";
+  const num = document.createElement("div");
+  num.className = "vnum";
+  num.textContent = value;
+  const track = document.createElement("div");
+  track.className = "vtrack";
+  const r = document.createElement("input");
+  r.type = "range"; r.min = 0; r.max = max; r.value = value;
+  track.appendChild(r);
+  const cap = document.createElement("div");
+  cap.className = "vcap";
+  cap.textContent = label;
+  box.appendChild(num); box.appendChild(track); box.appendChild(cap);
+
+  let timer = null;
+  r.addEventListener("input", () => {
+    num.textContent = r.value;
+    markDragging();
+    if (!timer) timer = setTimeout(() => { timer = null; onMove(+r.value); }, 25);
+  });
+  const fin = () => {
+    dragging = false;
+    clearTimeout(timer); timer = null;
+    onDone(+r.value);
+  };
+  r.addEventListener("change", fin);
+  r.addEventListener("touchend", fin);
+  return {box: box, input: r, num: num};
+}
+
 function renderLfo(base, title) {
   const P = n => ({k: "s", n: n, max: 255});
   const get = off => pval(P(base + off));
@@ -1651,20 +1692,27 @@ function renderLfo(base, title) {
   head.appendChild(hNow);
   box.appendChild(head);
 
+  const body = document.createElement("div");
+  body.className = "lfobody";
+  const leftCol = document.createElement("div");
+  leftCol.className = "vfgroup";
+  const mid = document.createElement("div");
+  mid.className = "lfomid";
+  const rightCol = document.createElement("div");
+  rightCol.className = "vfgroup";
+  body.appendChild(leftCol); body.appendChild(mid); body.appendChild(rightCol);
+  box.appendChild(body);
+
   const waveBox = document.createElement("div");
-  box.appendChild(waveBox);
+  mid.appendChild(waveBox);
 
   const shapes = document.createElement("div");
   shapes.className = "shapes";
-  box.appendChild(shapes);
-
-  const faders = document.createElement("div");
-  faders.className = "faders";
-  box.appendChild(faders);
+  mid.appendChild(shapes);
 
   const pills = document.createElement("div");
   pills.className = "pills";
-  box.appendChild(pills);
+  mid.appendChild(pills);
 
   const draw = () => {
     const shape = Math.min(6, get(2)), mono = get(5);
@@ -1688,33 +1736,14 @@ function renderLfo(base, title) {
     shapes.appendChild(b);
   });
 
-  [[0, "Rate", 255], [6, "Slew", 255], [1, "Delay / fade", 255]].forEach(([off, nm, max]) => {
-    const f = document.createElement("div");
-    f.className = "fader";
-    const lab = document.createElement("div");
-    lab.className = "lab";
-    const t = document.createElement("span"); t.textContent = nm;
-    const v = document.createElement("b"); v.textContent = get(off);
-    lab.appendChild(t); lab.appendChild(v);
-    const r = document.createElement("input");
-    r.type = "range"; r.min = 0; r.max = max; r.value = get(off);
-    let timer = null;
-    r.addEventListener("input", () => {
-      v.textContent = r.value;
-      markDragging();
-      if (!timer) timer = setTimeout(() => { timer = null; doSend(P(base + off), +r.value); draw(); }, 25);
+  // Rate en Slew links, Delay rechts — zoals op het paneel van de synth
+  [[0, "Rate", leftCol], [6, "Slew", leftCol], [1, "Delay", rightCol]]
+    .forEach(([off, nm, col]) => {
+      const f = vFader(nm, get(off), 255,
+        v => { doSend(P(base + off), v); draw(); },
+        v => { sendParam(P(base + off), v); draw(); });
+      col.appendChild(f.box);
     });
-    const fin = () => {
-      dragging = false;
-      clearTimeout(timer); timer = null;
-      sendParam(P(base + off), +r.value);
-      draw();
-    };
-    r.addEventListener("change", fin);
-    r.addEventListener("touchend", fin);
-    f.appendChild(lab); f.appendChild(r);
-    faders.appendChild(f);
-  });
 
   [[3, "Key sync"], [4, "Arp sync"]].forEach(([off, nm]) => {
     const b = document.createElement("button");
@@ -1729,17 +1758,26 @@ function renderLfo(base, title) {
     pills.appendChild(b);
   });
 
-  // poly / mono / spread: één instelling waarin spread de waardes 2-255 gebruikt
+  // poly / mono / spread is één parameter: spread gebruikt de waardes 2 tot 255,
+  // dus de hoeveelheid verschijnt als fader zodra spread gekozen is
+  const spread = vFader("Spread", Math.max(1, get(5) - 1), 254,
+    v => doSend(P(base + 5), v + 1),
+    v => { sendParam(P(base + 5), v + 1); draw(); });
+  spread.box.style.display = "none";
+  rightCol.appendChild(spread.box);
+
   const seg = document.createElement("div");
   seg.className = "seg";
-  const spreadRow = document.createElement("div");
-  spreadRow.style.cssText = "flex:1;min-width:140px";
   const paintSeg = () => {
     const m = get(5);
     Array.from(seg.children).forEach((b, n) => {
       b.classList.toggle("on", n === (m === 0 ? 0 : m === 1 ? 1 : 2));
     });
-    spreadRow.style.display = get(5) >= 2 ? "block" : "none";
+    spread.box.style.display = m >= 2 ? "flex" : "none";
+    if (m >= 2) {
+      spread.input.value = m - 1;
+      spread.num.textContent = m - 1;
+    }
   };
   [["Poly", 0], ["Mono", 1], ["Spread", 2]].forEach(([nm, val]) => {
     const b = document.createElement("button");
@@ -1752,31 +1790,6 @@ function renderLfo(base, title) {
     seg.appendChild(b);
   });
   pills.appendChild(seg);
-
-  const sLab = document.createElement("div");
-  sLab.className = "lab";
-  const sT = document.createElement("span"); sT.textContent = "Spread";
-  const sV = document.createElement("b"); sV.textContent = Math.max(1, get(5) - 1);
-  sLab.appendChild(sT); sLab.appendChild(sV);
-  const sR = document.createElement("input");
-  sR.type = "range"; sR.min = 1; sR.max = 254; sR.value = Math.max(1, get(5) - 1);
-  let sTimer = null;
-  sR.addEventListener("input", () => {
-    sV.textContent = sR.value;
-    markDragging();
-    if (!sTimer) sTimer = setTimeout(() => {
-      sTimer = null;
-      doSend(P(base + 5), +sR.value + 1);
-    }, 25);
-  });
-  sR.addEventListener("change", () => {
-    dragging = false;
-    sendParam(P(base + 5), +sR.value + 1);
-    draw();
-  });
-  spreadRow.appendChild(sLab);
-  spreadRow.appendChild(sR);
-  pills.appendChild(spreadRow);
 
   paintSeg();
   draw();

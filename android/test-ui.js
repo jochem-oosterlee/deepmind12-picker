@@ -366,6 +366,20 @@ setTimeout(() => {
       console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
       failures++;
     }
+    // verticale faders: vier per paneel (rate, slew, delay, spread)
+    const vfs = [];
+    (function walk(e) {
+      if (String(e.className || "") === "vf") vfs.push(e);
+      for (const c of e.children || []) walk(c);
+    })(plist);
+    console.log("verticale faders:", vfs.length);
+    if (vfs.length !== 8) { console.error("FOUT: verwacht 8 faders"); failures++; }
+    // rate-fader van LFO 1 verzetten moet parameter 0 sturen
+    sent = [];
+    const rateInput = findIn(vfs[0], e => e.type === "range");
+    rateInput.value = 200;
+    rateInput.fire("input");
+    setTimeout(() => {}, 0);
   }
 
   // terug naar de Global-tab: de controles hieronder gaan daarover
