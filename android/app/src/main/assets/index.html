@@ -30,6 +30,8 @@
   #dot { width:10px; height:10px; border-radius:50%; background:#ff7b72; flex:none; }
   #dot.ok { background:#6fd487; }
   #ipInput { flex:1; min-width:110px; }
+  #ssidInput, #pwInput { flex:1; min-width:80px; }
+  #wifiToggle.on { border-color:#6fd487; color:#6fd487; }
   .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
   #search { flex:1; min-width:150px; }
   .banks { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
@@ -63,6 +65,13 @@
     <button id="ipBtn">Verbind</button>
     <label style="font-size:12px;color:var(--muted)">Kan.</label>
     <select id="midiCh"></select>
+    <button id="wifiToggle" title="WiFi-instellingen">WiFi</button>
+  </div>
+  <div class="row" id="wifiRow" style="display:none">
+    <input type="text" id="ssidInput" placeholder="SSID">
+    <input type="text" id="pwInput" placeholder="wachtwoord">
+    <button id="wifiBtn">Verbind WiFi</button>
+    <button id="wifiOffBtn">Verbreek</button>
   </div>
 </div>
 
@@ -105,7 +114,10 @@ function poll() {
   try {
     const s = JSON.parse(AndroidBridge.getStatus());
     dot.className = s.connected ? "ok" : "";
-    statusText.textContent = s.status + (!s.connected && s.event ? " · " + s.event : "");
+    let txt = s.status + (!s.connected && s.event ? " · " + s.event : "");
+    if (s.wifi && !s.connected) txt = s.wifi + " · " + txt;
+    statusText.textContent = txt;
+    document.getElementById("wifiToggle").classList.toggle("on", s.wifiConnected);
     if (document.activeElement !== ipInput) ipInput.value = s.ip;
   } catch {
     dot.className = "";
@@ -117,6 +129,27 @@ setInterval(poll, 2000); poll();
 document.getElementById("ipBtn").addEventListener("click", () => {
   AndroidBridge.setIp(ipInput.value.trim());
   setTimeout(poll, 300);
+});
+
+// ---------- WiFi (in-app verbinden met het DeepMind-accesspoint) ----------
+const ssidInput = document.getElementById("ssidInput");
+const pwInput = document.getElementById("pwInput");
+ssidInput.value = store.load("dm12.ssid", "Deepmind12");
+pwInput.value = store.load("dm12.pw", "Passphrase");
+document.getElementById("wifiToggle").addEventListener("click", () => {
+  const r = document.getElementById("wifiRow");
+  r.style.display = r.style.display === "none" ? "flex" : "none";
+});
+document.getElementById("wifiBtn").addEventListener("click", () => {
+  store.save("dm12.ssid", ssidInput.value.trim());
+  store.save("dm12.pw", pwInput.value);
+  AndroidBridge.connectWifi(ssidInput.value.trim(), pwInput.value);
+  statusText.textContent = "WiFi-verzoek gestart — bevestig de systeemdialoog";
+  setTimeout(poll, 1000);
+});
+document.getElementById("wifiOffBtn").addEventListener("click", () => {
+  AndroidBridge.disconnectWifi();
+  setTimeout(poll, 500);
 });
 
 const chSel = document.getElementById("midiCh");

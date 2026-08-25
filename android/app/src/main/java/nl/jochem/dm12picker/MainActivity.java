@@ -9,7 +9,9 @@ import android.net.DhcpInfo;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.wifi.WifiNetworkSpecifier;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,11 +27,17 @@ public class MainActivity extends Activity {
 
     private AppleMidiSession session;
     private WebView web;
+    private ConnectivityManager cm;
+    private ConnectivityManager.NetworkCallback specCallback;
+    private volatile boolean specActive = false;
+    private volatile String wifiState = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
 
         // Het DeepMind-accesspoint heeft geen internet; Android stuurt verkeer dan
         // standaard via een andere route (bijv. mobiele data). Bind het hele proces
@@ -51,13 +59,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        disconnectSpecifier();
         if (session != null) session.close();
     }
 
     private void bindToWifi() {
         try {
-            ConnectivityManager cm = (ConnectivityManager)
-                    getSystemService(Context.CONNECTIVITY_SERVICE);
             NetworkRequest req = new NetworkRequest.Builder()
                     .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                     .build();
@@ -65,18 +72,80 @@ public class MainActivity extends Activity {
             cm.requestNetwork(req, new ConnectivityManager.NetworkCallback() {
                 @Override
                 public void onAvailable(Network network) {
+                    if (specActive) return; // in-app WiFi-verbinding heeft voorrang
                     cm.bindProcessToNetwork(network);
                     if (session != null) session.bindTo(network);
                 }
 
                 @Override
                 public void onLost(Network network) {
-                    cm.bindProcessToNetwork(null);
+                    if (!specActive) cm.bindProcessToNetwork(null);
                 }
             }, new Handler(Looper.getMainLooper()));
         } catch (Exception e) {
             Toast.makeText(this, "WiFi-binding mislukt: " + e.getMessage(),
                     Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Verbind (app-gebonden) met het accesspoint van de DeepMind. Android 10+. */
+    private void connectSpecifier(String ssid, String password) {
+        if (Build.VERSION.SDK_INT < 29) {
+            wifiState = "vereist Android 10+; verbind handmatig via instellingen";
+            return;
+        }
+        disconnectSpecifier();
+        wifiState = "verbinden met " + ssid + "…";
+        WifiNetworkSpecifier.Builder spec = new WifiNetworkSpecifier.Builder()
+                .setSsid(ssid);
+        if (password != null && !password.isEmpty()) {
+            spec.setWpa2Passphrase(password);
+        }
+        NetworkRequest req = new NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(spec.build())
+                .build();
+        specCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                specActive = true;
+                cm.bindProcessToNetwork(network);
+                if (session != null) session.bindTo(network);
+                wifiState = "WiFi verbonden: " + ssid;
+                // de synth is de gateway van zijn eigen accesspoint
+                retargetToGateway();
+            }
+
+            @Override
+            public void onUnavailable() {
+                specActive = false;
+                wifiState = "WiFi-verbinding mislukt of geannuleerd";
+                specCallback = null;
+            }
+
+            @Override
+            public void onLost(Network network) {
+                specActive = false;
+                cm.bindProcessToNetwork(null);
+                wifiState = "WiFi-verbinding verbroken";
+            }
+        };
+        cm.requestNetwork(req, specCallback, new Handler(Looper.getMainLooper()));
+    }
+
+    private void disconnectSpecifier() {
+        if (specCallback != null) {
+            try {
+                cm.unregisterNetworkCallback(specCallback);
+            } catch (Exception ignored) {
+            }
+            specCallback = null;
+        }
+        if (specActive) {
+            specActive = false;
+            cm.bindProcessToNetwork(null);
+            wifiState = "WiFi losgekoppeld";
         }
     }
 
@@ -94,6 +163,12 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
         }
         return "192.168.4.1";
+    }
+
+    /** Na een nieuwe WiFi-verbinding kan het gateway-IP veranderd zijn. */
+    private void retargetToGateway() {
+        String ip = guessDeepMindIp();
+        if (session != null) session.retarget(ip);
     }
 
     private static String jsonEscape(String s) {
@@ -116,7 +191,9 @@ public class MainActivity extends Activity {
             return "{\"connected\":" + session.connected
                     + ",\"status\":\"" + jsonEscape(session.status)
                     + "\",\"event\":\"" + jsonEscape(session.lastEvent)
-                    + "\",\"ip\":\"" + jsonEscape(session.getPeerIp()) + "\"}";
+                    + "\",\"wifi\":\"" + jsonEscape(wifiState)
+                    + "\",\"wifiConnected\":" + specActive
+                    + ",\"ip\":\"" + jsonEscape(session.getPeerIp()) + "\"}";
         }
 
         @JavascriptInterface
@@ -127,10 +204,28 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void connectWifi(String ssid, String password) {
+            if (ssid == null || ssid.trim().isEmpty()) return;
+            String s = ssid.trim();
+            String p = password == null ? "" : password;
+            runOnUiThread(() -> connectSpecifier(s, p));
+        }
+
+        @JavascriptInterface
+        public void disconnectWifi() {
+            runOnUiThread(MainActivity.this::disconnectSpecifier);
+        }
+
+        @JavascriptInterface
+        public void useGatewayIp() {
+            retargetToGateway();
+        }
+
+        @JavascriptInterface
         public void copyToClipboard(String text) {
             runOnUiThread(() -> {
-                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                cm.setPrimaryClip(ClipData.newPlainText("dm12-presets", text));
+                ClipboardManager cmgr = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                cmgr.setPrimaryClip(ClipData.newPlainText("dm12-presets", text));
                 Toast.makeText(MainActivity.this,
                         "Back-up naar klembord gekopieerd", Toast.LENGTH_SHORT).show();
             });
@@ -139,9 +234,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String readClipboard() {
             FutureTask<String> task = new FutureTask<>(() -> {
-                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
-                    CharSequence t = cm.getPrimaryClip().getItemAt(0).getText();
+                ClipboardManager cmgr = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (cmgr.hasPrimaryClip() && cmgr.getPrimaryClip().getItemCount() > 0) {
+                    CharSequence t = cmgr.getPrimaryClip().getItemAt(0).getText();
                     return t != null ? t.toString() : "";
                 }
                 return "";
