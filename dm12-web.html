@@ -1740,6 +1740,8 @@ let gOpen = {};               // welke kaartjes hun labels/menu open hebben staa
 let gDrag = null;             // wat er versleept wordt
 let gLastChanged = "";        // welke bytes het laatst veranderden
 let gUndo = null;             // laatste wijziging, om terug te kunnen draaien
+let gPending = null;          // verstuurde wijziging waarvan we het resultaat nalezen
+let gWriteIgnored = false;    // heeft deze synth een wijziging genegeerd?
 let gRecent = {};             // wanneer een byte veranderde, voor de markering
 let gJustSet = {};            // wanneer wij een byte zetten
 let pRecent = {};             // idem voor parameters uit de editor
@@ -2279,7 +2281,9 @@ function writeByte(i, nv, btn, oldVal) {
   if (done) {
     gUndo = {i: i, old: oldVal, name: naam};
     gJustSet[i] = Date.now();
-    statusText.textContent = naam + " → " + wordt;
+    // niet aannemen dat het gelukt is: nalezen of de synth het overnam
+    gPending = {i: i, want: nv, ms: Date.now(), name: naam, shown: wordt};
+    statusText.textContent = naam + " → " + wordt + ", checking…";
     setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
   } else {
     statusText.textContent = "not sent (no connection, or not read yet)";
@@ -2371,8 +2375,11 @@ function byteCard(i) {
   top.className = "top";
   const idx = document.createElement("span");
   idx.className = "idx";
-  idx.textContent = "#" + String(i).padStart(2, "0");
-  idx.title = "drag onto a menu, or between other settings";
+  // sterretje: deze synth nam eerder een wijziging van deze instelling niet over
+  idx.textContent = "#" + String(i).padStart(2, "0") + (m.refused ? "*" : "");
+  idx.title = m.refused
+    ? "this synth refuses changes to this setting over MIDI — change it on the instrument"
+    : "drag onto a menu, or between other settings";
   const nm = document.createElement("span");
   nm.className = "nm";
   nm.textContent = m.name || (isRecent(i) ? "just changed" : "unknown");
@@ -2485,12 +2492,32 @@ function updateGStat() {
       return (nm ? nm : "#" + String(i).padStart(2, "0")) + " = " + gData.bytes[i];
     }).join(", ");
   }
+  // Nalezen of een verstuurde wijziging echt is overgenomen. Sommige bytes
+  // neemt de synth wel aan en andere niet, dus dat kun je alleen meten.
+  if (gPending && gData && now - gPending.ms > 350) {
+    const got = gData.bytes[gPending.i];
+    const m = bmeta(gPending.i);
+    if (got === gPending.want) {
+      statusText.textContent = gPending.name + " is now " + gPending.shown;
+      if (m.refused) { delete m.refused; saveMeta(); }
+    } else {
+      delete gJustSet[gPending.i];          // niet groen laten alsof het lukte
+      gWriteIgnored = true;
+      if (!m.refused) { m.refused = true; saveMeta(); }
+      statusText.textContent = "the synth kept " + gPending.name + " at "
+        + showValue(gPending.i, got) + " — it refuses changes to this one over MIDI";
+    }
+    gPending = null;
+  }
+
   document.getElementById("gUndoBtn").style.display = gUndo ? "inline-block" : "none";
   stat.textContent = !gData
     ? "Not read yet — tap ‘Read from synth’. You can already create menus."
     : `${gData.bytes.length} settings`
       + (gWatch ? " · following the synth" : " · read " + gData.rev)
-      + (gLastChanged ? " · last changed: " + gLastChanged : "");
+      + (gLastChanged ? " · last changed: " + gLastChanged : "")
+      + (gWriteIgnored ? " · note: the synth accepts some settings and refuses"
+                       + " others — a refused one is reported in the status line" : "");
 }
 
 /**
@@ -2658,6 +2685,10 @@ document.getElementById("gHelpBtn").addEventListener("click", () => {
     + "Drag settings onto a menu header to file them, or onto another setting to place them "
     + "in order; menus can be nested three levels deep. Export your layout now and then — "
     + "it is handwork you would rather not repeat.\n\n"
+    + "Setting a value sends it straight to the synth, and the app reads back to "
+    + "check whether it was taken. Most settings are accepted; a few are refused "
+    + "over MIDI and get a * next to their number — change those on the instrument. "
+    + "Measured on a DeepMind 12: the block is 56 bytes, not the 45 the manual lists.\n\n"
     + "Settings according to the manual: " + GLOBAL_DOC.join(", ") + ".\n\n"
     + "The WiFi control mode (CC or NRPN) is not in the 2016 manual, so it is one of the "
     + "remaining bytes — exactly the kind of thing to find this way.");
