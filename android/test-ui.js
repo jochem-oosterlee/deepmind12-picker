@@ -6,7 +6,9 @@
 const fs = require("fs");
 const path = process.argv[2];
 const html = fs.readFileSync(path, "utf8");
-const script = html.slice(html.indexOf("<script>") + 8, html.lastIndexOf("</script>"));
+// alle scriptblokken, zodat ook de pc-versie (met verbindingslaag ervoor) werkt
+const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+  .map(m => m[1]).join("\n;\n");
 
 const errors = [];
 const elements = new Map();

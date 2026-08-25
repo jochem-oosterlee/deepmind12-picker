@@ -5,9 +5,10 @@ programma (bank A–H, 1–128) op de synth. Drie varianten, van desktop tot tab
 
 | Variant | Bestand | Verbinding | Voor |
 |---|---|---|---|
-| Web-app (desktop) | `deepmind-preset-picker.html` | USB-MIDI via Web MIDI (Chrome/Edge) | pc/Mac |
+| Android-app | `android/` | AppleMIDI / RTP-MIDI over WiFi | tablet of telefoon |
+| Pc-versie | `dm12-web.html` | Web MIDI (USB of rtpMIDI) | dezelfde app op een pc, met een echt toetsenbord |
+| Losse preset-picker | `deepmind-preset-picker.html` | Web MIDI | alleen presets kiezen, niets in te stellen |
 | WiFi-bridge | `dm12-bridge.py` | AppleMIDI / RTP-MIDI over WiFi | elk apparaat met Python (bijv. Termux) |
-| Android-app | `android/` | AppleMIDI / RTP-MIDI over WiFi | Android-tablet/-telefoon |
 
 Alle varianten kunnen presets kiezen: banken A–H, hernoembare presets, favorieten
 met eigen tabblad, zoeken en back-up/herstel. De Android-app is daarnaast een
@@ -44,11 +45,33 @@ client (*GLOBAL → CONNECTIVITY → NETWORK SETTINGS*); de picker praat er
 rechtstreeks AppleMIDI (RTP-MIDI, RFC 6295) tegen — sessie-handshake,
 kloksynchronisatie en MIDI over UDP, zonder externe libraries.
 
-## Web-app (desktop, USB)
+## Pc-versie
 
-Open `deepmind-preset-picker.html` in Chrome of Edge, sta MIDI-toegang toe en
-kies de DeepMind als uitgang. Werkt ook over WiFi met een RTP-MIDI-driver zoals
-[rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html) (Windows).
+`dm12-web.html` is exact dezelfde app, met Web MIDI in plaats van de
+WiFi-verbinding van Android. Open het bestand in Chrome of Edge, sta MIDI met
+SysEx toe en kies bovenin eventueel een andere MIDI-poort door een deel van de
+naam te typen. Handig om de globale instellingen te benoemen en in te delen:
+dat is typewerk.
+
+Verbinding via USB, of over WiFi met
+[rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html) als netwerkpoort.
+Werkt het niet vanaf `file://`, dan serveren via `python -m http.server` en
+`http://localhost:8000/dm12-web.html` openen.
+
+Het bestand wordt gebouwd uit dezelfde interface als de Android-app:
+
+```
+node web/build-web.js
+```
+
+Je indeling van de globale instellingen (namen, waardelabels, menu's) staat per
+apparaat in de browseropslag; wissel hem uit met de knoppen *Exporteer indeling*
+en *Importeer* via het klembord.
+
+## Losse preset-picker
+
+`deepmind-preset-picker.html` doet alleen presets kiezen via Web MIDI, zonder
+editor of bibliotheek.
 
 ## WiFi-bridge (Python)
 
@@ -87,7 +110,14 @@ java -cp out nl.jochem.dm12picker.RtpMidiParserTest
 test de RTP-MIDI-ontleding en de bibliotheek: een complete banknamen-dump wordt
 ingepakt, in stukken geknipt zoals RFC 6295 dat doet en er weer uitgehaald,
 inclusief namen, categorie en patchdata. `RtpMidiParser` en `SysexLibrary` zijn
-daarom vrij van Android-afhankelijkheden. De app detecteert de DeepMind automatisch
+daarom vrij van Android-afhankelijkheden.
+
+```
+node web/test-bridge.js
+```
+doet hetzelfde voor de pc-versie met een nagebootste MIDI-poort, inclusief de
+controle dat het terugschrijven van één globale instelling de andere 44 bytes
+onaangeroerd laat. De app detecteert de DeepMind automatisch
 als WiFi-gateway. Tik = preset laden, lang indrukken = hernoemen.
 
 ## Licentie
