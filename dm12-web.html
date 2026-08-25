@@ -69,6 +69,7 @@
   .p input[type=range] { width:100%; height:26px; accent-color:var(--accent); background:transparent; }
   .p select { width:100%; margin-top:4px; }
   .p .tog { width:100%; margin-top:4px; }
+  .p.changed { border-color:var(--active); background:#2c2415; }
   .p .tog.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
 
   /* ---- bibliotheek ---- */
@@ -102,7 +103,14 @@
   .gcard { background:var(--panel); border:1px solid var(--border); border-radius:8px;
     padding:6px 8px; }
   .gcard.changed { border-color:var(--active); background:#2c2415; }
-  .gcard.drop { border-color:var(--accent); }
+  .gcard.justset { border-color:var(--ok); background:#16281c; }
+  /* lijn die laat zien waar het gesleepte terechtkomt */
+  .gcard.dropbefore { box-shadow:inset 4px 0 0 0 var(--accent); }
+  .gcard.dropafter { box-shadow:inset -4px 0 0 0 var(--accent); }
+  .ghead.dropinto { background:#1b2a3a; border-radius:6px;
+    box-shadow:inset 0 -3px 0 0 var(--accent); }
+  .labnum { width:26px; color:var(--muted); font-size:11px; text-align:right;
+    font-variant-numeric:tabular-nums; flex:none; align-self:center; }
   .gcard .top { display:flex; align-items:center; gap:6px; font-size:13px; }
   .gcard .idx { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
     cursor:grab; }
@@ -175,6 +183,7 @@
   <div class="row" style="flex-wrap:wrap">
     <button class="mini" id="gReadBtn">Lees uit synth</button>
     <button class="mini" id="gWatchBtn" title="blijf uitlezen en toon wat verandert">Volgen</button>
+    <button class="mini" id="gUndoBtn" style="display:none">↶ Ongedaan</button>
     <button class="mini" id="gNewMenu">Nieuw menu</button>
     <button class="mini" id="gExportBtn">Exporteer indeling</button>
     <button class="mini" id="gImportBtn">Importeer</button>
@@ -490,14 +499,23 @@
   function clip(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).catch(() => {});
-      return;
+    } else {
+      const t = document.createElement("textarea");
+      t.value = text;
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(t);
     }
-    const t = document.createElement("textarea");
-    t.value = text;
-    document.body.appendChild(t);
-    t.select();
-    try { document.execCommand("copy"); } catch {}
-    document.body.removeChild(t);
+    // op de pc ook als bestand, want een klembord is een slechte bewaarplek
+    try {
+      const a = document.createElement("a");
+      a.href = "data:application/json;charset=utf-8," + encodeURIComponent(text);
+      a.download = "dm12-backup.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {}
   }
 
   // ---------- dezelfde interface als op Android ----------
@@ -894,10 +912,14 @@ function loadDevNames() {
 function loadSynthParams() {
   try {
     const p = JSON.parse(AndroidBridge.libParams());
-    if (Array.isArray(p)) {
-      synthParams = p;
-      if (!dragging && isParamTab()) renderParams();
+    if (!Array.isArray(p)) return;
+    // markeren wat er sinds de vorige lezing veranderde, zodat je het ziet
+    if (synthParams) {
+      const now = Date.now();
+      for (let i = 0; i < p.length; i++) if (p[i] !== synthParams[i]) pRecent[i] = now;
     }
+    synthParams = p;
+    if (!dragging && isParamTab()) renderParams();
   } catch {}
 }
 
@@ -1038,6 +1060,13 @@ function showTab() {
   else if (tab === "lib") renderLib();
   else if (tab === "global") renderGlobals();
   else renderParams();
+
+  // De Global-tab volgt de synth vanzelf: dat maakt het herkennen van
+  // instellingen snel. Buiten die tab hoeft er niet gepolst te worden.
+  if (tab === "global") {
+    if (!gWatch && store.load("dm12.gwatch", true)) setWatch(true);
+    AndroidBridge.requestGlobals(devId);
+  }
 }
 
 // ================== presets ==================
@@ -1270,7 +1299,9 @@ function renderParams() {
     }
     const v = pval(p);
     const box = document.createElement("div");
-    box.className = "p";
+    const fresh = p.n !== undefined && pRecent[p.n]
+                  && Date.now() - pRecent[p.n] < HILITE_MS;
+    box.className = "p" + (fresh ? " changed" : "");
     const lab = document.createElement("div");
     lab.className = "plab";
     const ls = document.createElement("span"); ls.textContent = p.l;
@@ -1359,7 +1390,7 @@ pushBtn.addEventListener("click", () => {
 // Auto: blijft de synth volgen door de edit buffer periodiek op te vragen.
 // Wijzigingen in de app gaan altijd al direct naar de synth.
 const autoBtn = document.getElementById("autoBtn");
-let autoSync = store.load("dm12.auto", false);
+let autoSync = store.load("dm12.auto", true);   // standaard aan: de app volgt de synth
 let autoTimer = null;
 function setAuto(on) {
   autoSync = on;
@@ -1477,8 +1508,21 @@ let gWatchTimer = null;
 let gOpen = {};               // welke kaartjes hun labels/menu open hebben staan
 let gDrag = null;             // wat er versleept wordt
 let gLastChanged = "";        // welke bytes het laatst veranderden
+let gUndo = null;             // laatste wijziging, om terug te kunnen draaien
+let gRecent = {};             // wanneer een byte veranderde, voor de markering
+let gJustSet = {};            // wanneer wij een byte zetten
+let pRecent = {};             // idem voor parameters uit de editor
+const HILITE_MS = 8000;
 
-function saveMeta() { store.save("dm12.gmeta", gmeta); }
+// Bij elke wijziging blijft de vorige versie bewaard, zodat handwerk niet
+// verloren gaat door een ongelukkige actie.
+function saveMeta() {
+  try {
+    const prev = localStorage.getItem("dm12.gmeta");
+    if (prev && prev.length > 2) localStorage.setItem("dm12.gmeta.prev", prev);
+  } catch {}
+  store.save("dm12.gmeta", gmeta);
+}
 function bmeta(i) { return gmeta.bytes[i] || (gmeta.bytes[i] = {}); }
 function groupExists(id) { return gmeta.groups.some(g => g.id === id); }
 function groupById(id) { return gmeta.groups.find(g => g.id === id); }
@@ -1530,16 +1574,44 @@ async function addGroup(parent) {
 
 // ---------- slepen en neerzetten ----------
 
-function allowDrop(el, handler) {
+let gDropSide = "before";
+
+/** Menukop als doel: alles wat erop valt komt in dat menu. */
+function dropOnHeader(el, gid) {
   el.addEventListener("dragover", e => {
     if (e.preventDefault) e.preventDefault();
-    el.classList.add("drop");
+    el.classList.add("dropinto");
   });
-  el.addEventListener("dragleave", () => el.classList.remove("drop"));
+  el.addEventListener("dragleave", () => el.classList.remove("dropinto"));
   el.addEventListener("drop", e => {
     if (e.preventDefault) e.preventDefault();
-    el.classList.remove("drop");
-    handler();
+    el.classList.remove("dropinto");
+    dropOnGroup(gid);
+  });
+}
+
+/**
+ * Kaartje als doel: een lijn links of rechts laat zien waar het gesleepte
+ * terechtkomt, afhankelijk van welke helft je boven zit.
+ */
+function dropOnCard(el, i) {
+  const clear = () => {
+    el.classList.remove("dropbefore");
+    el.classList.remove("dropafter");
+  };
+  el.addEventListener("dragover", e => {
+    if (e.preventDefault) e.preventDefault();
+    const r = el.getBoundingClientRect();
+    const after = (e.clientX || 0) > r.left + r.width / 2;
+    gDropSide = after ? "after" : "before";
+    el.classList.toggle("dropafter", after);
+    el.classList.toggle("dropbefore", !after);
+  });
+  el.addEventListener("dragleave", clear);
+  el.addEventListener("drop", e => {
+    if (e.preventDefault) e.preventDefault();
+    clear();
+    dropOnByte(i, gDropSide);
   });
 }
 
@@ -1580,13 +1652,13 @@ function dropOnGroup(gid) {
   renderGlobals();
 }
 
-/** Een instelling vóór een andere neerzetten, binnen hetzelfde menu. */
-function dropOnByte(target) {
+/** Een instelling vlak voor of na een andere neerzetten, in datzelfde menu. */
+function dropOnByte(target, side) {
   if (!gDrag || gDrag.kind !== "byte" || gDrag.i === target) { gDrag = null; return; }
   const m = bmeta(gDrag.i);
   const g = groupOf(target);
   if (g) m.group = g; else delete m.group;
-  m.order = byteOrder(target) - 0.5;
+  m.order = byteOrder(target) + (side === "after" ? 0.5 : -0.5);
   gDrag = null;
   normalizeGroup(g);
   saveMeta();
@@ -1605,6 +1677,47 @@ async function renameByte(i) {
  * Labels voor de waardes: links de waarde, rechts de naam die de synth
  * ervoor toont, met een plusje om er meer bij te maken.
  */
+/**
+ * Bestaande labels als lijst waarin de plek de waarde is: 0, 1, 2, …
+ * Ontbrekende waardes worden lege regels, zodat een eerder ingevoerde
+ * toewijzing niet verschuift als je hem opnieuw opslaat.
+ */
+function labelList(i) {
+  const m = gmeta.bytes[i] || {};
+  const keys = Object.keys(m.labels || {}).map(Number);
+  if (!keys.length) return [];
+  const out = new Array(Math.max(...keys) + 1).fill("");
+  keys.forEach(k => { out[k] = m.labels[k]; });
+  return out;
+}
+
+function listToLabels(list) {
+  const labels = {};
+  list.forEach((t, n) => { if (t) labels[n] = t; });
+  return labels;
+}
+
+/** Alle labelsets die al ergens gebruikt worden, plus de bewaarde sets. */
+function knownSets() {
+  const out = [], seen = new Set();
+  for (const s of gmeta.sets || []) {
+    const key = s.labels.join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({name: s.name, labels: s.labels});
+  }
+  for (const k of Object.keys(gmeta.bytes)) {
+    const list = labelList(+k);
+    if (list.length < 2) continue;
+    const key = list.join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const nm = (gmeta.bytes[k] || {}).name || ("#" + k);
+    out.push({name: nm + ": " + list.filter(Boolean).slice(0, 3).join("/"), labels: list});
+  }
+  return out;
+}
+
 function labelEditor(i) {
   const m = bmeta(i);
   const box = document.createElement("div");
@@ -1612,54 +1725,96 @@ function labelEditor(i) {
   const rows = document.createElement("div");
   box.appendChild(rows);
 
-  const addRow = (val, lab) => {
+  const renumber = () => {
+    Array.from(rows.children).forEach((r, n) => { r.children[0].textContent = n; });
+  };
+
+  const addRow = (lab, focus) => {
     const r = document.createElement("div");
     r.className = "labrow";
-    const v = document.createElement("input");
-    v.type = "number"; v.min = 0; v.max = 255; v.className = "v"; v.value = val;
+    const n = document.createElement("span");
+    n.className = "labnum";
     const l = document.createElement("input");
-    l.type = "text"; l.className = "l"; l.placeholder = "naam van deze waarde"; l.value = lab;
+    l.type = "text"; l.className = "l"; l.placeholder = "naam van deze stand"; l.value = lab || "";
     const x = document.createElement("button");
-    x.className = "mini"; x.textContent = "×"; x.title = "regel weghalen";
-    x.addEventListener("click", () => rows.removeChild(r));
-    r.appendChild(v); r.appendChild(l); r.appendChild(x);
+    x.className = "mini"; x.textContent = "×"; x.title = "weghalen";
+    x.addEventListener("click", () => { rows.removeChild(r); renumber(); });
+    // Enter maakt de volgende regel: zo tik je een hele lijst in één keer in
+    l.addEventListener("keydown", e => {
+      if (e.key === "Enter") { addRow("", true); }
+      e.stopPropagation();
+    });
+    r.appendChild(n); r.appendChild(l); r.appendChild(x);
     rows.appendChild(r);
+    renumber();
+    if (focus) l.focus();
     return r;
   };
 
-  const entries = Object.keys(m.labels || {}).map(Number).sort((a, b) => a - b);
-  if (entries.length) entries.forEach(k => addRow(k, m.labels[k]));
-  else addRow(gData.bytes[i], "");
+  const existing = labelList(i);
+  if (existing.length) existing.forEach(t => addRow(t));
+  else { addRow(""); addRow(""); }
 
-  const bar = document.createElement("div");
-  bar.className = "labrow";
-  const plus = document.createElement("button");
-  plus.className = "mini"; plus.textContent = "+ waarde";
-  plus.addEventListener("click", () => {
-    // children is geen echte lijst in de browser, dus eerst omzetten
-    const used = Array.from(rows.children).map(r => +r.children[0].value);
-    let n = 0;
-    while (used.includes(n) && n < 255) n++;
-    addRow(n, "");
-  });
-  const save = document.createElement("button");
-  save.className = "mini"; save.textContent = "Opslaan";
-  save.addEventListener("click", () => {
-    const labels = {};
-    for (const r of Array.from(rows.children)) {
-      const k = parseInt(r.children[0].value, 10);
-      const t = (r.children[1].value || "").trim();
-      if (!isNaN(k) && k >= 0 && k <= 255 && t) labels[k] = t;
-    }
+  const collect = () => Array.from(rows.children)
+    .map(r => (r.children[1].value || "").trim());
+
+  const apply = list => {
+    const labels = listToLabels(list);
     if (Object.keys(labels).length) m.labels = labels; else delete m.labels;
     saveMeta();
     gOpen[i] = null;
     renderGlobals();
+  };
+
+  // hergebruik: kies een set die elders al gebruikt wordt of bewaard is
+  const sets = knownSets();
+  if (sets.length) {
+    const pick = document.createElement("select");
+    const first = document.createElement("option");
+    first.value = ""; first.textContent = "hergebruik een set…";
+    pick.appendChild(first);
+    sets.forEach((s, n) => {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = s.name + "  (" + s.labels.length + ")";
+      pick.appendChild(o);
+    });
+    pick.addEventListener("change", () => {
+      const s = sets[+pick.value];
+      if (!s) return;
+      rows.innerHTML = "";
+      s.labels.forEach(t => addRow(t));
+    });
+    const wrap = document.createElement("div");
+    wrap.className = "labrow";
+    wrap.appendChild(pick);
+    box.appendChild(wrap);
+  }
+
+  const bar = document.createElement("div");
+  bar.className = "labrow";
+  const plus = document.createElement("button");
+  plus.className = "mini"; plus.textContent = "+";
+  plus.title = "regel erbij (of druk Enter)";
+  plus.addEventListener("click", () => addRow("", true));
+  const save = document.createElement("button");
+  save.className = "mini"; save.textContent = "Opslaan";
+  save.addEventListener("click", () => apply(collect()));
+  const keep = document.createElement("button");
+  keep.className = "mini"; keep.textContent = "Bewaar als set";
+  keep.title = "deze lijst een naam geven om later te hergebruiken";
+  keep.addEventListener("click", async () => {
+    const list = collect().filter(Boolean);
+    if (!list.length) return;
+    const nm = await askText("Naam voor deze set waardes", list.slice(0, 3).join("/"));
+    if (nm === null || !nm.trim()) return;
+    gmeta.sets = gmeta.sets || [];
+    gmeta.sets.push({name: nm.trim(), labels: list});
+    apply(collect());
   });
   const close = document.createElement("button");
   close.className = "mini"; close.textContent = "Sluiten";
   close.addEventListener("click", () => { gOpen[i] = null; renderGlobals(); });
-  bar.appendChild(plus); bar.appendChild(save); bar.appendChild(close);
+  bar.appendChild(plus); bar.appendChild(save); bar.appendChild(keep); bar.appendChild(close);
   box.appendChild(bar);
   return box;
 }
@@ -1689,21 +1844,33 @@ function menuPicker(i) {
   return box;
 }
 
-async function writeByte(i, nv, btn, oldVal) {
+/** Zet een instelling direct, zonder tussenvraag. Terugdraaien kan met de knop. */
+function writeByte(i, nv, btn, oldVal) {
   if (isNaN(nv) || nv === oldVal) return;
   const m = gmeta.bytes[i] || {};
-  const naam = m.name ? `“${m.name}” (#${i})` : `instelling #${i}`;
-  const was = m.labels && m.labels[oldVal] ? `${m.labels[oldVal]} (${oldVal})` : oldVal;
+  const naam = m.name ? `“${m.name}”` : `#${i}`;
   const wordt = m.labels && m.labels[nv] ? `${m.labels[nv]} (${nv})` : nv;
-  const ok = await ask("Instelling van de synth wijzigen?\n\n" + naam + ": " + was + " → " + wordt
-    + "\n\nWeet je niet zeker welke instelling dit is, lees dan eerst uit en vergelijk."
-    + " Alle andere instellingen blijven ongewijzigd.");
-  if (!ok) { renderGlobals(); return; }
   const done = AndroidBridge.writeGlobal(i, nv, devId);
   flash(btn, done);
-  statusText.textContent = done ? naam + " naar " + wordt + " gestuurd"
-                                : "niet verstuurd (geen verbinding of nog niet uitgelezen)";
-  if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
+  if (done) {
+    gUndo = {i: i, old: oldVal, name: naam};
+    gJustSet[i] = Date.now();
+    statusText.textContent = naam + " → " + wordt;
+    setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
+  } else {
+    statusText.textContent = "niet verstuurd (geen verbinding of nog niet uitgelezen)";
+  }
+  renderGlobals();
+}
+
+function undoWrite() {
+  if (!gUndo) return;
+  const u = gUndo;
+  gUndo = null;
+  const done = AndroidBridge.writeGlobal(u.i, u.old, devId);
+  statusText.textContent = done ? u.name + " terug naar " + u.old : "terugzetten mislukt";
+  if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
+  renderGlobals();
 }
 
 function groupHeader(g, depth) {
@@ -1712,7 +1879,7 @@ function groupHeader(g, depth) {
   h.style.marginLeft = (depth * 12) + "px";
   h.draggable = true;
   h.addEventListener("dragstart", () => { gDrag = {kind: "group", id: g.id}; });
-  allowDrop(h, () => dropOnGroup(g.id));
+  dropOnHeader(h, g.id);
 
   const tog = document.createElement("button");
   tog.className = "mini";
@@ -1759,15 +1926,22 @@ function groupHeader(g, depth) {
   return h;
 }
 
-function byteCard(i, changed) {
+function isRecent(i) {
+  const now = Date.now();
+  return (gRecent[i] && now - gRecent[i] < HILITE_MS)
+      || (gJustSet[i] && now - gJustSet[i] < HILITE_MS);
+}
+
+function byteCard(i) {
   const m = gmeta.bytes[i] || {};
   const v = gData.bytes[i];
+  const mine = gJustSet[i] && Date.now() - gJustSet[i] < HILITE_MS;
   const card = document.createElement("div");
-  card.className = "gcard" + (changed.has(i) ? " changed" : "");
+  card.className = "gcard" + (mine ? " justset" : (isRecent(i) ? " changed" : ""));
   card.dataset.byte = i;
   card.draggable = true;
   card.addEventListener("dragstart", () => { gDrag = {kind: "byte", i}; });
-  allowDrop(card, () => dropOnByte(i));
+  dropOnCard(card, i);
 
   const top = document.createElement("div");
   top.className = "top";
@@ -1777,7 +1951,7 @@ function byteCard(i, changed) {
   idx.title = "sleep naar een menu of tussen andere instellingen";
   const nm = document.createElement("span");
   nm.className = "nm";
-  nm.textContent = m.name || (changed.has(i) ? "net veranderd" : "onbekend");
+  nm.textContent = m.name || (isRecent(i) ? "net veranderd" : "onbekend");
   if (!m.name) nm.style.color = "var(--muted)";
   nm.title = "tik om een naam te geven";
   nm.addEventListener("click", () => renameByte(i));
@@ -1854,19 +2028,23 @@ function renderGlobals() {
   const stat = document.getElementById("gStat");
   list.innerHTML = "";
 
-  const changed = new Set(gData ? gData.changed || [] : []);
-  if (changed.size) {
-    gLastChanged = [...changed].map(i => "#" + String(i).padStart(2, "0")).join(", ");
+  const changed = gData ? (gData.changed || []) : [];
+  const now = Date.now();
+  for (const i of changed) {
+    if (!gJustSet[i] || now - gJustSet[i] > 2000) gRecent[i] = now;   // niet onze eigen actie
   }
+  if (changed.length) {
+    gLastChanged = changed.map(i => {
+      const nm = (gmeta.bytes[i] || {}).name;
+      return (nm ? nm : "#" + String(i).padStart(2, "0")) + " = " + gData.bytes[i];
+    }).join(", ");
+  }
+  document.getElementById("gUndoBtn").style.display = gUndo ? "inline-block" : "none";
   stat.textContent = !gData
     ? "Nog niet uitgelezen — tik op ‘Lees uit synth’. Menu's aanmaken kan al wel."
-    : `${gData.bytes.length} instellingen · lezing ${gData.rev}`
-      + (gData.hadPrevious
-          ? (changed.size ? ` · nu veranderd: ${gLastChanged}`
-                          : " · niets veranderd sinds de vorige lezing")
-          : " · verander iets op de synth en lees opnieuw om ze te herkennen")
-      + (gLastChanged && !changed.size ? ` · laatst veranderd: ${gLastChanged}` : "")
-      + (gWatch ? " · volgen aan" : "");
+    : `${gData.bytes.length} instellingen`
+      + (gWatch ? " · volgt de synth" : " · lezing " + gData.rev)
+      + (gLastChanged ? " · laatst veranderd: " + gLastChanged : "");
 
   const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
   const grid = (members, depth) => {
@@ -1874,7 +2052,7 @@ function renderGlobals() {
     const g = document.createElement("div");
     g.className = "ggrid";
     g.style.marginLeft = (depth * 12) + "px";
-    members.forEach(i => g.appendChild(byteCard(i, changed)));
+    members.forEach(i => g.appendChild(byteCard(i)));
     list.appendChild(g);
   };
 
@@ -1896,7 +2074,7 @@ function renderGlobals() {
     t.className = "gtitle";
     t.textContent = rest.length ? "Niet ingedeeld" : "Niet ingedeeld (leeg)";
     h.appendChild(t);
-    allowDrop(h, () => dropOnGroup(null));   // hierheen slepen haalt uit een menu
+    dropOnHeader(h, null);   // hierheen slepen haalt iets weer uit een menu
     list.appendChild(h);
   }
   grid(rest, 0);
@@ -1923,19 +2101,29 @@ gReadBtn.addEventListener("click", () => {
 // Volgen: blijft uitlezen, zodat je op de synth iets kunt verzetten en direct
 // ziet welke byte daarbij hoort. Dat is de snelste manier om ze te herkennen.
 const gWatchBtn = document.getElementById("gWatchBtn");
-gWatchBtn.addEventListener("click", () => {
-  gWatch = !gWatch;
-  gWatchBtn.classList.toggle("on", gWatch);
+
+function setWatch(on) {
+  gWatch = on;
+  store.save("dm12.gwatch", on);
+  gWatchBtn.classList.toggle("on", on);
   clearInterval(gWatchTimer);
   gWatchTimer = null;
-  if (gWatch) {
+  if (on) {
     AndroidBridge.requestGlobals(devId);
-    gWatchTimer = setInterval(() => AndroidBridge.requestGlobals(devId), 1500);
-    statusText.textContent = "volgen aan — verzet nu iets in het GLOBAL-menu van de synth";
-  } else {
-    statusText.textContent = "volgen uit";
+    gWatchTimer = setInterval(() => {
+      if (tab === "global") AndroidBridge.requestGlobals(devId);
+    }, 1200);
   }
+}
+
+gWatchBtn.addEventListener("click", () => {
+  setWatch(!gWatch);
+  statusText.textContent = gWatch
+    ? "volgt de synth — verzet iets in het GLOBAL-menu en je ziet het hier"
+    : "volgen uit";
 });
+
+document.getElementById("gUndoBtn").addEventListener("click", undoWrite);
 
 document.getElementById("gNewMenu").addEventListener("click", () => addGroup(null));
 document.getElementById("gExportBtn").addEventListener("click", () => {

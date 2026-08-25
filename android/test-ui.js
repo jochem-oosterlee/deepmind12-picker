@@ -211,6 +211,47 @@ document.getElementById("gNewMenu").fire("click");
 document.getElementById("modalInput").value = "MIDI-instellingen";
 document.getElementById("modalYes").fire("click");
 
+// labels invoeren op de snelle manier: waardes lopen automatisch van 0 op
+function findIn(el, pred) {
+  if (pred(el)) return el;
+  for (const c of el.children || []) {
+    const hit = findIn(c, pred);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function testLabels() {
+  const glist = document.getElementById("gList");
+  const card = findIn(glist, e => String(e.className || "").includes("gcard"));
+  if (!card) { console.error("FOUT: geen kaartje gevonden"); failures++; return; }
+  const abc = findIn(card, e => e.textContent === "abc");
+  if (!abc) { console.error("FOUT: labelknop ontbreekt"); failures++; return; }
+  abc.fire("click");
+
+  const card2 = findIn(document.getElementById("gList"),
+    e => String(e.className || "").includes("gcard"));
+  const inputs = [];
+  (function walk(e) {
+    if (e.className === "l") inputs.push(e);
+    for (const c of e.children || []) walk(c);
+  })(card2);
+  console.log("labeleditor open, invoervelden:", inputs.length);
+  if (inputs.length < 2) { console.error("FOUT: labelregels ontbreken"); failures++; return; }
+  inputs[0].value = "Rx";
+  inputs[1].value = "Tx";
+  const save = findIn(card2, e => e.textContent === "Opslaan");
+  save.fire("click");
+
+  const stored = JSON.parse(localStorage.getItem("dm12.gmeta"));
+  const labels = stored.bytes && stored.bytes["0"] && stored.bytes["0"].labels;
+  console.log("opgeslagen labels:", JSON.stringify(labels));
+  if (!labels || labels["0"] !== "Rx" || labels["1"] !== "Tx") {
+    console.error("FOUT: labels niet bewaard met waardes 0 en 1");
+    failures++;
+  }
+}
+
 setTimeout(() => {
   const gAfter = document.getElementById("gList").children.length;
   console.log("menu aanmaken:", gBefore, "->", gAfter, "elementen in de lijst");
@@ -219,6 +260,7 @@ setTimeout(() => {
     console.error("FOUT: instellingen kwijt na het aanmaken van een menu");
     failures++;
   }
+  testLabels();
 
   if (global.__onerror && errors.length) console.log("meldingen:", errors);
   console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");

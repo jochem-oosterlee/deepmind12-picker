@@ -279,14 +279,23 @@
   function clip(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).catch(() => {});
-      return;
+    } else {
+      const t = document.createElement("textarea");
+      t.value = text;
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(t);
     }
-    const t = document.createElement("textarea");
-    t.value = text;
-    document.body.appendChild(t);
-    t.select();
-    try { document.execCommand("copy"); } catch {}
-    document.body.removeChild(t);
+    // op de pc ook als bestand, want een klembord is een slechte bewaarplek
+    try {
+      const a = document.createElement("a");
+      a.href = "data:application/json;charset=utf-8," + encodeURIComponent(text);
+      a.download = "dm12-backup.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {}
   }
 
   // ---------- dezelfde interface als op Android ----------
