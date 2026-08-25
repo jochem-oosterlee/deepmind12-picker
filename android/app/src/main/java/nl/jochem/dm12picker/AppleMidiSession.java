@@ -35,6 +35,20 @@ public class AppleMidiSession {
     volatile String status = "wacht op verbinding";
     volatile String lastEvent = "";
 
+    /** Meldingen over binnenkomende MIDI van de synth. */
+    public interface MidiListener {
+        void onSysEx(byte[] msg);
+        void onControlChange(int ch, int cc, int value);
+        void onProgramChange(int ch, int program);
+    }
+
+    private volatile MidiListener listener;
+    private final ByteArrayOutputStream sysex = new ByteArrayOutputStream();
+
+    public void setListener(MidiListener l) {
+        this.listener = l;
+    }
+
     private DatagramSocket ctrl;
     private DatagramSocket data;
     private int seq = new Random().nextInt(0xFFFF);
@@ -194,7 +208,8 @@ public class AppleMidiSession {
     }
 
     private void rxLoop(DatagramSocket sock) {
-        byte[] buf = new byte[4096];
+        // ruim genoeg voor de grootste dump (banknamen: ~2360 bytes)
+        byte[] buf = new byte[16384];
         while (!stop) {
             DatagramPacket p = new DatagramPacket(buf, buf.length);
             try {
@@ -276,8 +291,98 @@ public class AppleMidiSession {
                 default:
                     break;
             }
+        } else {
+            parseRtpMidi(pkt);
         }
-        // anders: binnenkomende RTP-MIDI van de synth — genegeerd
+    }
+
+    /**
+     * Ontleedt de MIDI-command-sectie van een RTP-MIDI-pakket (RFC 6295):
+     * headerbyte(s) met lengte, dan MIDI-berichten gescheiden door delta-tijden,
+     * met running status. SysEx kan over meerdere pakketten verdeeld zijn.
+     */
+    private void parseRtpMidi(byte[] pkt) {
+        if (pkt.length < 13) return;
+        int b0 = pkt[12] & 0xFF;
+        int len, off;
+        if ((b0 & 0x80) != 0) { // lange vorm: 12-bits lengte
+            if (pkt.length < 14) return;
+            len = ((b0 & 0x0F) << 8) | (pkt[13] & 0xFF);
+            off = 14;
+        } else {
+            len = b0 & 0x0F;
+            off = 13;
+        }
+        boolean leadingDelta = (b0 & 0x20) != 0; // Z-bit
+        int end = Math.min(pkt.length, off + len);
+        int i = off;
+        boolean first = true;
+        int running = 0;
+
+        while (i < end) {
+            if (!first || leadingDelta) { // delta-tijd: variabele lengte
+                while (i < end && (pkt[i] & 0x80) != 0) i++;
+                if (i < end) i++;
+            }
+            first = false;
+            if (i >= end) break;
+
+            int st = pkt[i] & 0xFF;
+            if (st == 0xF0 || (st == 0xF7 && sysex.size() > 0)) {
+                i++;
+                if (st == 0xF0) {
+                    sysex.reset();
+                    sysex.write(0xF0);
+                }
+                while (i < end) {
+                    int v = pkt[i++] & 0xFF;
+                    if (v == 0xF7) {
+                        sysex.write(0xF7);
+                        flushSysEx();
+                        break;
+                    }
+                    sysex.write(v);
+                }
+                continue;
+            }
+
+            if (st >= 0x80) {
+                i++;
+                if (st < 0xF0) running = st; // system-berichten wissen running status
+            } else {
+                st = running;
+            }
+            if (st == 0) break;
+
+            int n = dataByteCount(st);
+            if (i + n > end) break;
+            int d1 = n > 0 ? pkt[i] & 0x7F : 0;
+            int d2 = n > 1 ? pkt[i + 1] & 0x7F : 0;
+            i += n;
+
+            MidiListener l = listener;
+            if (l != null) {
+                int ch = st & 0x0F;
+                if ((st & 0xF0) == 0xB0) l.onControlChange(ch, d1, d2);
+                else if ((st & 0xF0) == 0xC0) l.onProgramChange(ch, d1);
+            }
+        }
+    }
+
+    private static int dataByteCount(int status) {
+        if (status >= 0x80 && status < 0xC0) return 2;   // note off/on, aftertouch, CC
+        if (status < 0xE0) return 1;                     // program change, channel pressure
+        if (status < 0xF0) return 2;                     // pitch bend
+        if (status == 0xF1 || status == 0xF3) return 1;
+        if (status == 0xF2) return 2;
+        return 0;
+    }
+
+    private void flushSysEx() {
+        byte[] msg = sysex.toByteArray();
+        sysex.reset();
+        MidiListener l = listener;
+        if (l != null) l.onSysEx(msg);
     }
 
     private static String extractName(byte[] pkt, int offset) {
@@ -316,6 +421,30 @@ public class AppleMidiSession {
                 return false;
             }
         }
+    }
+
+    public boolean sendCC(int cc, int value, int ch) {
+        return sendMidi(List.of(new byte[]{
+                (byte) (0xB0 | ch), (byte) (cc & 0x7F), (byte) (value & 0x7F)}));
+    }
+
+    /**
+     * NRPN volgens de DeepMind-handleiding: parameternummer via CC99/CC98,
+     * waarde (0-255) via Data Entry MSB (CC6) en LSB (CC38).
+     * De param-select wordt altijd meegestuurd: UDP kan pakketten verliezen en
+     * een gemiste select zou de waarde op de vorige parameter laten landen.
+     */
+    public boolean sendNRPN(int param, int value, int ch) {
+        byte st = (byte) (0xB0 | ch);
+        return sendMidi(List.of(
+                new byte[]{st, 99, (byte) ((param >> 7) & 0x7F)},
+                new byte[]{st, 98, (byte) (param & 0x7F)},
+                new byte[]{st, 6, (byte) ((value >> 7) & 0x7F)},
+                new byte[]{st, 38, (byte) (value & 0x7F)}));
+    }
+
+    public boolean sendSysEx(byte[] data) {
+        return sendMidi(List.of(data));
     }
 
     public boolean sendProgram(int bank, int prog, int ch) {

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
 import android.net.Network;
@@ -25,9 +26,15 @@ import java.util.concurrent.FutureTask;
 
 public class MainActivity extends Activity {
 
+    private static final String DEFAULT_SSID = "Deepmind12";
+    private static final String DEFAULT_PW = "Passphrase";
+
     private AppleMidiSession session;
+    private SysexLibrary lib;
     private WebView web;
+    private SharedPreferences prefs;
     private ConnectivityManager cm;
+    private int rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
     private ConnectivityManager.NetworkCallback specCallback;
     private volatile boolean specActive = false;
     private volatile String wifiState = "";
@@ -38,13 +45,52 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        prefs = getSharedPreferences("dm12", MODE_PRIVATE);
 
         // Het DeepMind-accesspoint heeft geen internet; Android stuurt verkeer dan
         // standaard via een andere route (bijv. mobiele data). Bind het hele proces
         // aan het WiFi-netwerk zodat de UDP-pakketten echt via WiFi gaan.
         bindToWifi();
 
+        lib = new SysexLibrary();
+        lib.load(getFilesDir());
+
         session = new AppleMidiSession(guessDeepMindIp(), AppleMidiSession.APPLEMIDI_PORT);
+        session.setListener(new AppleMidiSession.MidiListener() {
+            @Override
+            public void onSysEx(byte[] msg) {
+                lib.handleSysEx(msg);
+            }
+
+            @Override
+            public void onControlChange(int ch, int cc, int value) {
+                // NRPN van de synth volgen, zodat de editor meebeweegt met de faders
+                switch (cc) {
+                    case 99: rxParamMsb = value; rxDataMsb = 0; break;
+                    case 98: rxParamLsb = value; rxDataMsb = 0; break;
+                    case 6: rxDataMsb = value; break;
+                    case 38:
+                        lib.handleParam((rxParamMsb << 7) | rxParamLsb,
+                                (rxDataMsb << 7) | value);
+                        break;
+                    default: break;
+                }
+            }
+
+            @Override
+            public void onProgramChange(int ch, int program) {
+                lib.handleProgramChange(-1, program);
+            }
+        });
+
+        // Verbind zelf met het accesspoint van de synth als de sessie niet binnen
+        // een paar seconden staat (dan zit de tablet nog op een ander netwerk).
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!session.connected && !specActive) {
+                connectSpecifier(prefs.getString("ssid", DEFAULT_SSID),
+                        prefs.getString("pw", DEFAULT_PW));
+            }
+        }, 4000);
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -60,6 +106,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         disconnectSpecifier();
+        if (lib != null) lib.save(getFilesDir());
         if (session != null) session.close();
     }
 
@@ -224,7 +271,105 @@ public class MainActivity extends Activity {
             if (ssid == null || ssid.trim().isEmpty()) return;
             String s = ssid.trim();
             String p = password == null ? "" : password;
+            prefs.edit().putString("ssid", s).putString("pw", p).apply();
             runOnUiThread(() -> connectSpecifier(s, p));
+        }
+
+        @JavascriptInterface
+        public String getWifiCreds() {
+            return "{\"ssid\":\"" + jsonEscape(prefs.getString("ssid", DEFAULT_SSID))
+                    + "\",\"pw\":\"" + jsonEscape(prefs.getString("pw", DEFAULT_PW)) + "\"}";
+        }
+
+        @JavascriptInterface
+        public boolean sendCC(int cc, int value, int ch) {
+            return session.sendCC(Math.max(0, Math.min(127, cc)),
+                    Math.max(0, Math.min(127, value)), Math.max(0, Math.min(15, ch)));
+        }
+
+        @JavascriptInterface
+        public boolean sendNRPN(int param, int value, int ch) {
+            return session.sendNRPN(Math.max(0, Math.min(16383, param)),
+                    Math.max(0, Math.min(255, value)), Math.max(0, Math.min(15, ch)));
+        }
+
+        /**
+         * App Notify: hiermee meldt een bedieningsapp zich aan. De synth zet dan
+         * NRPN en SysEx aan op deze interface (handleiding 19.2.2).
+         */
+        @JavascriptInterface
+        public boolean appNotify(int deviceId) {
+            if (deviceId < 0) { // device-ID onbekend: alle 16 proberen, de synth antwoordt op de zijne
+                boolean ok = false;
+                for (int id = 0; id < 16; id++) {
+                    ok |= session.sendSysEx(SysexLibrary.reqAppNotify(id));
+                }
+                return ok;
+            }
+            return session.sendSysEx(SysexLibrary.reqAppNotify(Math.min(15, deviceId)));
+        }
+
+        // ---------- bibliotheek ----------
+
+        @JavascriptInterface
+        public boolean requestBankNames(int bank, int dev) {
+            return session.sendSysEx(SysexLibrary.reqBankNames(dev, Math.max(0, Math.min(7, bank))));
+        }
+
+        @JavascriptInterface
+        public boolean requestProgram(int bank, int prog, int dev) {
+            return session.sendSysEx(SysexLibrary.reqProgram(dev,
+                    Math.max(0, Math.min(7, bank)), Math.max(0, Math.min(127, prog))));
+        }
+
+        @JavascriptInterface
+        public boolean requestEditBuffer(int dev) {
+            return session.sendSysEx(SysexLibrary.reqEditBuffer(dev));
+        }
+
+        /** Stuurt een opgeslagen patch naar de edit buffer: hoorbaar, niets overschreven. */
+        @JavascriptInterface
+        public boolean patchToEditBuffer(int bank, int prog, int dev) {
+            byte[] p = lib.getPatch(bank, prog);
+            if (p == null) return false;
+            return session.sendSysEx(SysexLibrary.toEditBuffer(dev, p));
+        }
+
+        /** Schrijft een opgeslagen patch naar een slot in de synth — overschrijft dat slot. */
+        @JavascriptInterface
+        public boolean patchToSlot(int srcBank, int srcProg, int dstBank, int dstProg, int dev) {
+            byte[] p = lib.getPatch(srcBank, srcProg);
+            if (p == null) return false;
+            return session.sendSysEx(SysexLibrary.writeProgram(dev,
+                    Math.max(0, Math.min(7, dstBank)), Math.max(0, Math.min(127, dstProg)), p));
+        }
+
+        @JavascriptInterface
+        public String libNames() {
+            return lib.namesJson();
+        }
+
+        @JavascriptInterface
+        public String libStatus() {
+            return lib.statusJson();
+        }
+
+        @JavascriptInterface
+        public String libParams() {
+            return lib.paramsJson();
+        }
+
+        @JavascriptInterface
+        public void libSave() {
+            lib.save(getFilesDir());
+        }
+
+        @JavascriptInterface
+        public boolean panic(int ch) {
+            int c = Math.max(0, Math.min(15, ch));
+            boolean a = session.sendCC(123, 0, c); // All Notes Off
+            boolean b = session.sendCC(120, 0, c); // All Sound Off
+            return a && b;
         }
 
         @JavascriptInterface

@@ -3,240 +3,467 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DeepMind 12 — Program Picker</title>
+<title>DeepMind 12 — Controller</title>
 <style>
   :root {
     --bg:#14161a; --panel:#1d2026; --panel2:#23272e; --border:#32363e;
     --text:#e8eaed; --muted:#8a919c; --accent:#4da3ff; --accent-dim:#2a5a8f;
-    --active:#ffb547; --star:#ffd24d; --radius:10px;
+    --active:#ffb547; --star:#ffd24d; --ok:#6fd487; --bad:#ff7b72; --radius:10px;
   }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; padding:0 12px 12px; }
-  #topbar { position:sticky; top:0; z-index:10; background:var(--bg); padding:10px 0 8px;
-    display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--border); margin-bottom:10px; }
-  .row { display:flex; align-items:center; gap:8px; }
-  h1 { font-size:15px; font-weight:600; white-space:nowrap; }
-  h1 span { color:var(--accent); }
+  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif;
+    padding:0 10px 24px; font-size:14px; }
+
+  /* ---- kop ---- */
+  #topbar { position:sticky; top:0; z-index:20; background:var(--bg); padding:8px 0 0;
+    border-bottom:1px solid var(--border); }
+  .row { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  #led { width:14px; height:14px; border-radius:50%; background:var(--bad); flex:none;
+    box-shadow:0 0 6px rgba(255,123,114,.6); }
+  #led.wifi { background:var(--active); box-shadow:0 0 6px rgba(255,181,71,.6); }
+  #led.ok { background:var(--ok); box-shadow:0 0 8px rgba(111,212,135,.7); }
+  #statusText { flex:1; min-width:0; font-size:12px; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   select, input[type="text"], button {
     background:var(--panel2); color:var(--text); border:1px solid var(--border);
-    border-radius:var(--radius); padding:10px 12px; font-size:14px; outline:none;
-  }
+    border-radius:var(--radius); padding:8px 10px; font-size:13px; outline:none; }
   select:focus, input:focus { border-color:var(--accent); }
   button { cursor:pointer; }
-  #status { flex:1; display:flex; align-items:center; gap:8px; font-size:13px; padding:8px 12px;
-    border-radius:var(--radius); background:var(--panel); border:1px solid var(--border);
-    color:var(--muted); min-width:0; }
-  #statusText { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #dot { width:10px; height:10px; border-radius:50%; background:#ff7b72; flex:none; }
-  #dot.ok { background:#6fd487; }
-  #ipInput { flex:1; min-width:110px; }
-  #ssidInput, #pwInput { flex:1; min-width:80px; }
-  #wifiToggle.on { border-color:#6fd487; color:#6fd487; }
-  .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
-  #search { flex:1; min-width:150px; }
-  .banks { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
-  .bank-btn { flex:1; min-width:44px; padding:12px 0; text-align:center; font-weight:600; font-size:15px; }
-  .bank-btn.selected { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
-  .bank-btn.fav-tab.selected { background:#5c4a15; border-color:var(--star); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  button.mini { padding:6px 8px; font-size:12px; }
+  #settings input { flex:1; min-width:70px; }
+  #tabs { display:flex; gap:5px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none; }
+  #tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:none; padding:8px 12px; font-size:13px; white-space:nowrap; }
+  .tab.sel { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+
+  /* ---- presets ---- */
+  .banks { display:flex; gap:5px; margin:10px 0; flex-wrap:wrap; }
+  .bank-btn { flex:1; min-width:38px; padding:10px 0; text-align:center; font-weight:600; }
+  .bank-btn.sel { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+  .bank-btn.fav.sel { background:#5c4a15; border-color:var(--star); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:8px; }
   .prog { position:relative; background:var(--panel); border:1px solid var(--border);
-    border-radius:var(--radius); padding:12px 12px 10px; cursor:pointer; user-select:none; min-height:64px; }
+    border-radius:var(--radius); padding:10px 10px 8px; cursor:pointer; user-select:none; min-height:60px; }
   .prog:active { background:var(--panel2); border-color:var(--accent); }
   .prog.current { border-color:var(--active); background:#2c2415; }
   .prog .num { font-size:11px; color:var(--muted); }
   .prog.current .num { color:var(--active); }
-  .prog .name { font-size:14px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .prog .name input { width:100%; padding:4px; font-size:14px; border-radius:6px; }
-  .prog .star { position:absolute; top:4px; right:4px; font-size:16px; padding:6px; color:var(--border); }
+  .prog .name { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prog .name input { width:100%; padding:3px; font-size:13px; border-radius:6px; }
+  .prog .star { position:absolute; top:2px; right:2px; font-size:15px; padding:6px; color:var(--border); }
   .prog .star.on { color:var(--star); }
-  footer { margin-top:16px; font-size:12px; color:var(--muted); line-height:1.7; }
-  .empty { grid-column:1/-1; color:var(--muted); padding:30px; text-align:center; }
+  .prog .cat { font-size:10px; color:var(--accent); text-transform:uppercase; }
+
+  /* ---- parameters ---- */
+  .phead { margin:14px 0 6px; font-size:12px; font-weight:600; color:var(--accent);
+    text-transform:uppercase; letter-spacing:.5px; }
+  .p { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:8px 10px; margin-bottom:6px; }
+  .p .plab { display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-bottom:2px; }
+  .p .pval { color:var(--accent); font-variant-numeric:tabular-nums; }
+  .p input[type=range] { width:100%; height:26px; accent-color:var(--accent); background:transparent; }
+  .p select { width:100%; margin-top:4px; }
+  .p .tog { width:100%; margin-top:4px; }
+  .p .tog.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+
+  /* ---- bibliotheek ---- */
+  .lrow { display:flex; align-items:center; gap:6px; background:var(--panel);
+    border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; margin-bottom:5px; }
+  .lrow .lnum { font-size:11px; color:var(--muted); width:38px; flex:none; }
+  .lrow .lname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lrow .lcat { font-size:10px; color:var(--accent); text-transform:uppercase; flex:none; }
+  .lrow .dotp { width:7px; height:7px; border-radius:50%; background:var(--border); flex:none; }
+  .lrow .dotp.has { background:var(--ok); }
+  .note { font-size:12px; color:var(--muted); line-height:1.6; margin:8px 0; }
+  .warn { color:var(--active); }
+  .empty { color:var(--muted); padding:26px; text-align:center; }
+  footer { margin-top:18px; font-size:11px; color:var(--muted); line-height:1.6; }
 </style>
 </head>
 <body>
 
 <div id="topbar">
   <div class="row">
-    <h1>DM<span>12</span></h1>
-    <div id="status"><span id="dot"></span><span id="statusText">verbinden…</span></div>
+    <span id="led" title="verbindingsstatus"></span>
+    <span id="statusText">verbinden…</span>
+    <button class="mini" id="gearBtn" title="instellingen">⚙</button>
   </div>
+  <div id="settings" style="display:none">
+    <div class="row">
+      <input type="text" id="ipInput" placeholder="IP van de synth">
+      <button class="mini" id="ipBtn">IP</button>
+      <label style="font-size:12px;color:var(--muted)">Kan.</label>
+      <select id="midiCh"></select>
+    </div>
+    <div class="row">
+      <input type="text" id="ssidInput" placeholder="SSID">
+      <input type="text" id="pwInput" placeholder="wachtwoord">
+      <button class="mini" id="wifiBtn">WiFi</button>
+      <button class="mini" id="wifiOffBtn">Los</button>
+    </div>
+    <div class="row">
+      <button class="mini" id="notifyBtn">Aanmelden bij synth</button>
+      <button class="mini" id="panicBtn">Panic</button>
+      <span id="devInfo" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+  </div>
+  <div id="tabs"></div>
+</div>
+
+<div id="page-presets">
+  <div class="row"><input type="text" id="search" placeholder="Zoek preset…" style="flex:1">
+    <button class="mini" id="backupBtn">Back-up</button>
+    <button class="mini" id="restoreBtn">Herstel</button></div>
+  <div class="banks" id="bankTabs"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div id="page-lib" style="display:none">
+  <div class="row" style="flex-wrap:wrap">
+    <button class="mini" id="scanNames">Scan alle namen</button>
+    <button class="mini" id="scanBankPatches">Haal patches van bank</button>
+    <button class="mini" id="libSaveBtn">Opslaan</button>
+    <button class="mini" id="libExportBtn">Exporteer</button>
+  </div>
+  <div class="note" id="libStat">—</div>
+  <div class="banks" id="libBanks"></div>
+  <div id="libList"></div>
+</div>
+
+<div id="page-params" style="display:none">
   <div class="row">
-    <input type="text" id="ipInput" placeholder="IP DeepMind" title="IP van de DeepMind (GLOBAL → CONNECTIVITY → NETWORK SETTINGS)">
-    <button id="ipBtn">Verbind</button>
-    <label style="font-size:12px;color:var(--muted)">Kan.</label>
-    <select id="midiCh"></select>
-    <button id="wifiToggle" title="WiFi-instellingen">WiFi</button>
+    <button class="mini" id="readBtn">Lees synth uit</button>
+    <button class="mini" id="pushBtn">Stuur pagina</button>
+    <span id="paramNote" style="font-size:11px;color:var(--muted);flex:1"></span>
   </div>
-  <div class="row" id="wifiRow" style="display:none">
-    <input type="text" id="ssidInput" placeholder="SSID">
-    <input type="text" id="pwInput" placeholder="wachtwoord">
-    <button id="wifiBtn">Verbind WiFi</button>
-    <button id="wifiOffBtn">Verbreek</button>
-  </div>
+  <div id="paramList"></div>
 </div>
 
-<div class="toolbar">
-  <input type="text" id="search" placeholder="Zoek preset…">
-  <button id="exportBtn" title="Namen + favorieten naar klembord">Back-up</button>
-  <button id="importBtn" title="Back-up van klembord terugzetten">Herstel</button>
-</div>
-
-<div class="banks" id="bankTabs"></div>
-<div class="grid" id="grid"></div>
-
-<footer>
-  <b>Tik</b> = preset laden · <b>lang indrukken</b> = hernoemen · <b>★</b> = favoriet (eigen tabblad) ·
-  Back-up kopieert je namen als tekst naar het klembord.<br>
-  Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i> of <i>Both</i>. · v1.4
-</footer>
+<footer id="foot">v1.5 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
 
 <script>
 "use strict";
-window.onerror = (msg) => {
-  const el = document.getElementById("statusText");
-  if (el) el.textContent = "JS-fout: " + msg;
-};
+window.onerror = m => { const e = document.getElementById("statusText"); if (e) e.textContent = "JS-fout: " + m; };
+
 const BANKS = ["A","B","C","D","E","F","G","H"];
 const PROGS = 128;
+const CATS = ["NONE","BASS","PAD","LEAD","MONO","POLY","STAB","SFX","ARP","SEQ","PERC",
+              "AMBIENT","MODULAR","USER-1","USER-2","USER-3","USER-4"];
 
 const store = {
   load(k, f) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch { return f; } },
   save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
-let names = store.load("dm12.names", {});
-let favs = new Set(store.load("dm12.favs", []));
-let channel = store.load("dm12.channel", 0);
-let currentBank = store.load("dm12.bank", "A");
-let current = store.load("dm12.current", null);
 
-// ---------- status & instellingen ----------
-const dot = document.getElementById("dot");
+let names   = store.load("dm12.names", {});     // eigen namen
+let favs    = new Set(store.load("dm12.favs", []));
+let vals    = store.load("dm12.vals", {});      // laatst verstuurde parameterwaarden
+let channel = store.load("dm12.channel", 0);
+let curBank = store.load("dm12.bank", "A");
+let current = store.load("dm12.current", null);
+let tab     = "presets";
+let libBank = 0;
+let devNames = {};        // "A-0" -> [naam, categorie, heeftPatch]
+let devId = 0;
+let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
+let lastParamRev = -1, lastNameCount = -1, wasConnected = false;
+let dragging = false;
+
+// ================== parameterdefinities ==================
+const S = (n, l, max) => ({k:"s", n, l, max: max || 255});
+const B = (n, l) => ({k:"b", n, l, max:255});
+const T = (n, l) => ({k:"t", n, l, max:1});
+const E = (n, l, o) => ({k:"e", n, l, o, max:o.length - 1});
+const H = l => ({k:"h", l});
+const CS = (cc, l, max) => ({k:"s", cc, l, max: max || 127});
+const CT = (cc, l) => ({k:"t", cc, l, max:1});
+
+const RANGE = ["16'","8'","4'"];
+const MODSRC = ["Manual","LFO 1","LFO 2","VCA Env","VCF Env","Mod Env"];
+const MODSEL = ["LFO 1","LFO 2","VCA Env","VCF Env","Mod Env","LFO 1 unipolair","LFO 2 unipolair"];
+const PORTA = ["Normaal","Fingered","Vaste snelheid","Vast fingered","Exponentieel","Exp. fingered",
+               "Vast +2","Vast -2","Vast +5","Vast -5","Vast +12","Vast -12","Vast +24","Vast -24"];
+const SHAPE = ["Sinus","Driehoek","Blok","Ramp op","Ramp neer","Sample & Hold","Sample & Glide"];
+const TRIG  = ["Toets","LFO 1","LFO 2","Loop","Ctrl-seq stap"];
+const POLY  = ["Poly","Unison 2","Unison 3","Unison 4","Unison 6","Unison 12","Mono","Mono 2",
+               "Mono 3","Mono 4","Mono 6","Poly 6","Poly 8"];
+const PRIO  = ["Laagste","Hoogste","Laatste"];
+const ETRIG = ["Mono","Re-trigger","Legato","One-shot"];
+const AMODE = ["Op","Neer","Op & neer","Op inv","Neer inv","Op & neer inv","Op alt","Neer alt",
+               "Willekeurig","Zoals gespeeld","Akkoord"];
+const ACLK  = ["1/2","3/8","1/3","1/4","3/16","1/6","1/8","3/32","1/12","1/16","1/24","1/32","1/48"];
+const FXT   = ["TC-DeepVRB","AmbVerb","RoomRev","VintageRev","HallRev","ChamberRev","PlateRev",
+               "RichPltRev","GatedRev","Reverse","ChorusVerb","DelayVerb","FlangVerb","MidasEQ",
+               "Enhancer","FairComp","MulBndDist","RackAmp","EdisonEX1","AutoPan","NoiseGate","Delay",
+               "3TapDelay","4TapDelay","T-RayDelay","DecimDelay","ModDlyRev","Chorus","Chorus-D",
+               "Flanger","Phaser","MoodFilter","DualPitch","RotarySpkr"];
+
+const fxSlot = (nr, type, p1, gain) => [
+  H("FX-slot " + nr), E(type, "FX " + nr + " type", FXT), S(gain, "FX " + nr + " gain", 150),
+  ...Array.from({length: 12}, (_, i) => S(p1 + i, "FX " + nr + " par " + (i + 1)))
+];
+
+const PAGES = [
+  {id:"osc", name:"OSC", params:[
+    H("Oscillator 1"),
+    E(14,"Bereik",RANGE), T(18,"Pulsgolf"), T(19,"Zaagtand"), T(20,"OSC sync"),
+    S(25,"PWM-diepte"), E(16,"PWM-bron",MODSRC),
+    S(21,"Pitch-mod diepte"), E(22,"Pitch-mod bron",MODSEL),
+    E(38,"Pitch-mod bereik",["OSC 1+2","alleen OSC 1"]),
+    S(23,"Aftertouch → pitch"), S(24,"Modwheel → pitch"),
+    H("Oscillator 2"),
+    E(15,"Bereik",RANGE), S(26,"Niveau"), S(27,"Toonhoogte"),
+    S(28,"Tone-mod diepte"), E(17,"Tone-mod bron",MODSRC),
+    S(29,"Pitch-mod diepte"), E(32,"Pitch-mod bron",MODSEL),
+    S(30,"Aftertouch → pitch"), S(31,"Modwheel → pitch"),
+    H("Algemeen"),
+    S(33,"Ruisniveau"), S(34,"Portamento-tijd"), E(35,"Portamento-modus",PORTA),
+    S(36,"Pitchbend omhoog",24), S(37,"Pitchbend omlaag",24),
+  ]},
+  {id:"vcf", name:"Filter", params:[
+    S(39,"Frequentie"), S(41,"Resonantie"), S(40,"Hoogdoorlaat (HPF)"),
+    S(42,"Envelope-diepte"), E(50,"Envelope-polariteit",["Negatief","Positief"]),
+    E(51,"Filterpolen",["4-polig","2-polig"]), T(52,"Bass boost"),
+    S(49,"Toetsvolging"), S(43,"Envelope → velocity"),
+    S(45,"LFO-diepte"), E(46,"LFO-keuze",["LFO 1","LFO 2"]),
+    S(47,"Aftertouch → LFO"), S(48,"Modwheel → LFO"), S(44,"Pitchbend → frequentie"),
+  ]},
+  {id:"env", name:"Env", params:[
+    H("VCA envelope"),
+    S(53,"Attack"), S(54,"Decay"), S(55,"Sustain"), S(56,"Release"), E(57,"Trigger",TRIG),
+    S(80,"VCA niveau"), S(81,"Envelope-diepte"), S(82,"Velocity"), B(83,"Pan spread"),
+    H("VCF envelope"),
+    S(62,"Attack"), S(63,"Decay"), S(64,"Sustain"), S(65,"Release"), E(66,"Trigger",TRIG),
+    H("MOD envelope"),
+    S(71,"Attack"), S(72,"Decay"), S(73,"Sustain"), S(74,"Release"), E(75,"Trigger",TRIG),
+  ]},
+  {id:"voice", name:"Stem", params:[
+    E(85,"Stemmenmodus",POLY), E(84,"Stemprioriteit",PRIO), E(86,"Envelope-trigger",ETRIG),
+    S(87,"Unison detune"), S(88,"Voice drift"), S(89,"Parameter drift"), S(90,"Drift rate"),
+    B(91,"Portamento-balans"), T(92,"Key down reset"),
+  ]},
+  {id:"lfo", name:"LFO", params:[
+    H("LFO 1"),
+    S(0,"Snelheid"), S(1,"Delay / fade"), E(2,"Vorm",SHAPE), T(3,"Key sync"), T(4,"Arp sync"),
+    S(5,"Poly / mono / spread"), S(6,"Slew rate"),
+    H("LFO 2"),
+    S(7,"Snelheid"), S(8,"Delay / fade"), E(9,"Vorm",SHAPE), T(10,"Key sync"), T(11,"Arp sync"),
+    S(12,"Poly / mono / spread"), S(13,"Slew rate"),
+  ]},
+  {id:"arp", name:"Arp/Seq", params:[
+    H("Arpeggiator"),
+    T(155,"Aan"), E(156,"Modus",AMODE), S(157,"Tempo (20–275 bpm)"), E(158,"Klokdeler",ACLK),
+    T(159,"Key sync"), S(160,"Gate-tijd"), T(161,"Hold"), S(162,"Patroon",64),
+    S(163,"Swing (50–75%)",25), S(164,"Octaven (1–6)",5),
+    H("Control sequencer"),
+    T(117,"Aan"), S(119,"Lengte (1–32 stappen)",31), S(118,"Klokdeler",15),
+    S(120,"Swing (50–75%)",25), E(121,"Key sync & loop",["Loop aan","Key sync aan","Beide aan"]),
+    S(122,"Slew rate"),
+  ]},
+  {id:"fx", name:"FX", params:[
+    E(222,"FX-modus",["Insert","Send","Bypass"]), S(165,"FX-routing",9),
+    CT(113,"Analog thru"), CS(115,"3D-controller X"), CS(116,"3D-controller Y"), CS(117,"3D-controller Z"),
+    ...fxSlot(1, 166, 167, 218),
+    ...fxSlot(2, 179, 180, 219),
+    ...fxSlot(3, 192, 193, 220),
+    ...fxSlot(4, 205, 206, 221),
+  ]},
+  {id:"mod", name:"Mod", params:[
+    ...[0,1,2,3,4,5,6,7].flatMap(i => [
+      H("Mod " + (i + 1)),
+      S(93 + i * 3, "Bron (0–22, zie handleiding)", 22),
+      S(94 + i * 3, "Doel (0–129, zie handleiding)", 129),
+      B(95 + i * 3, "Diepte"),
+    ]),
+  ]},
+];
+
+// ================== verbinding & status ==================
+const led = document.getElementById("led");
 const statusText = document.getElementById("statusText");
 const ipInput = document.getElementById("ipInput");
 
 function poll() {
-  try {
-    const s = JSON.parse(AndroidBridge.getStatus());
-    dot.className = s.connected ? "ok" : "";
-    let txt = s.status + (!s.connected && s.event ? " · " + s.event : "");
-    if (s.wifi && !s.connected) txt = s.wifi + " · " + txt;
-    statusText.textContent = txt;
-    document.getElementById("wifiToggle").classList.toggle("on", s.wifiConnected);
-    if (document.activeElement !== ipInput) ipInput.value = s.ip;
-  } catch {
-    dot.className = "";
-    statusText.textContent = "bridge-fout";
+  let s;
+  try { s = JSON.parse(AndroidBridge.getStatus()); }
+  catch { led.className = ""; statusText.textContent = "bridge-fout"; return; }
+
+  led.className = s.connected ? "ok" : (s.wifiConnected ? "wifi" : "");
+  let txt = s.connected ? "verbonden" : s.status;
+  if (!s.connected && s.wifi) txt = s.wifi + " · " + txt;
+  if (!s.connected && s.event) txt += " · " + s.event;
+  if (document.activeElement !== ipInput) ipInput.value = s.ip;
+
+  // meld je aan zodra de sessie er is: dan zet de synth NRPN + SysEx aan
+  if (s.connected && !wasConnected) { AndroidBridge.appNotify(-1); }
+  wasConnected = s.connected;
+
+  let lib;
+  try { lib = JSON.parse(AndroidBridge.libStatus()); } catch { lib = null; }
+  if (lib) {
+    if (lib.dev >= 0) devId = lib.dev;
+    document.getElementById("devInfo").textContent =
+      "dev " + (lib.dev < 0 ? "?" : lib.dev) + (lib.iface >= 0 ? " · iface " + lib.iface : "");
+    if (s.connected && lib.curBank >= 0 && lib.curProg >= 0) {
+      txt += " · synth: " + BANKS[lib.curBank] + (lib.curProg + 1);
+    }
+    if (lib.info) txt += " · " + lib.info;
+    document.getElementById("libStat").textContent =
+      `namen: ${lib.names}/1024 · patches: ${lib.patches} · dumps: ${lib.nameDumps}/${lib.patchDumps}`
+      + (queue.length ? ` · bezig: ${queue.length} verzoeken` : "");
+    if (lib.names !== lastNameCount) { lastNameCount = lib.names; loadDevNames(); }
+    if (lib.paramRev !== lastParamRev) {
+      lastParamRev = lib.paramRev;
+      loadSynthParams();
+    }
   }
+  statusText.textContent = txt;
 }
-setInterval(poll, 2000); poll();
+setInterval(poll, 1500); poll();
 
+function loadDevNames() {
+  try { devNames = JSON.parse(AndroidBridge.libNames()) || {}; } catch { devNames = {}; }
+  if (tab === "presets") renderGrid();
+  if (tab === "lib") renderLib();
+}
+
+function loadSynthParams() {
+  try {
+    const p = JSON.parse(AndroidBridge.libParams());
+    if (Array.isArray(p)) {
+      synthParams = p;
+      if (!dragging && isParamTab()) renderParams();
+    }
+  } catch {}
+}
+
+document.getElementById("gearBtn").addEventListener("click", () => {
+  const s = document.getElementById("settings");
+  s.style.display = s.style.display === "none" ? "block" : "none";
+});
 document.getElementById("ipBtn").addEventListener("click", () => {
-  AndroidBridge.setIp(ipInput.value.trim());
-  setTimeout(poll, 300);
+  AndroidBridge.setIp(ipInput.value.trim()); setTimeout(poll, 300);
 });
-
-// ---------- WiFi (in-app verbinden met het DeepMind-accesspoint) ----------
-const ssidInput = document.getElementById("ssidInput");
-const pwInput = document.getElementById("pwInput");
-ssidInput.value = store.load("dm12.ssid", "Deepmind12");
-pwInput.value = store.load("dm12.pw", "Passphrase");
-document.getElementById("wifiToggle").addEventListener("click", () => {
-  const r = document.getElementById("wifiRow");
-  r.style.display = r.style.display === "none" ? "flex" : "none";
-});
-document.getElementById("wifiBtn").addEventListener("click", () => {
-  store.save("dm12.ssid", ssidInput.value.trim());
-  store.save("dm12.pw", pwInput.value);
-  AndroidBridge.connectWifi(ssidInput.value.trim(), pwInput.value);
-  statusText.textContent = "WiFi-verzoek gestart — bevestig de systeemdialoog";
-  setTimeout(poll, 1000);
-});
-document.getElementById("wifiOffBtn").addEventListener("click", () => {
-  AndroidBridge.disconnectWifi();
-  setTimeout(poll, 500);
-});
-
 const chSel = document.getElementById("midiCh");
 for (let i = 0; i < 16; i++) {
-  const o = document.createElement("option");
-  o.value = i; o.textContent = i + 1; chSel.appendChild(o);
+  const o = document.createElement("option"); o.value = i; o.textContent = i + 1; chSel.appendChild(o);
 }
 chSel.value = channel;
 chSel.addEventListener("change", () => { channel = +chSel.value; store.save("dm12.channel", channel); });
 
-// ---------- versturen ----------
-function sendProgram(bank, prog) {
-  const ok = AndroidBridge.send(BANKS.indexOf(bank), prog, channel);
-  if (ok) {
-    current = bank + "-" + prog;
-    store.save("dm12.current", current);
-    statusText.textContent = `verstuurd: ${bank}${prog + 1}`;
-    dot.className = "ok";
-  } else {
-    statusText.textContent = "niet verbonden met DeepMind";
-    dot.className = "";
-  }
-  updateCurrent();
+const ssidInput = document.getElementById("ssidInput");
+const pwInput = document.getElementById("pwInput");
+try {
+  const c = JSON.parse(AndroidBridge.getWifiCreds());
+  ssidInput.value = c.ssid; pwInput.value = c.pw;
+} catch { ssidInput.value = "Deepmind12"; pwInput.value = "Passphrase"; }
+document.getElementById("wifiBtn").addEventListener("click", () => {
+  AndroidBridge.connectWifi(ssidInput.value.trim(), pwInput.value);
+  statusText.textContent = "WiFi-verzoek gestart…";
+});
+document.getElementById("wifiOffBtn").addEventListener("click", () => AndroidBridge.disconnectWifi());
+document.getElementById("notifyBtn").addEventListener("click", () => {
+  AndroidBridge.appNotify(-1);
+  statusText.textContent = "aanmelding verstuurd";
+});
+document.getElementById("panicBtn").addEventListener("click", () => AndroidBridge.panic(channel));
+
+// ================== wachtrij voor SysEx-verzoeken ==================
+let queue = [], queueTimer = null;
+function enqueue(fn) {
+  queue.push(fn);
+  if (!queueTimer) queueTimer = setInterval(() => {
+    const f = queue.shift();
+    if (!f) { clearInterval(queueTimer); queueTimer = null; return; }
+    f();
+  }, 160);
 }
 
-// actieve preset markeren zonder het grid te herbouwen
-function updateCurrent() {
-  for (const el of document.querySelectorAll(".prog")) {
-    el.classList.toggle("current", el.dataset.key === current);
+// ================== tabs ==================
+function buildTabs() {
+  const t = document.getElementById("tabs");
+  t.innerHTML = "";
+  const all = [{id:"presets", name:"Presets"}, {id:"lib", name:"Bibliotheek"}, ...PAGES];
+  for (const p of all) {
+    const b = document.createElement("button");
+    b.className = "tab" + (tab === p.id ? " sel" : "");
+    b.textContent = p.name;
+    b.addEventListener("click", () => { tab = p.id; showTab(); });
+    t.appendChild(b);
   }
 }
 
-// ---------- UI ----------
+function isParamTab() { return PAGES.some(p => p.id === tab); }
+
+function showTab() {
+  buildTabs();
+  document.getElementById("page-presets").style.display = tab === "presets" ? "block" : "none";
+  document.getElementById("page-lib").style.display = tab === "lib" ? "block" : "none";
+  document.getElementById("page-params").style.display = isParamTab() ? "block" : "none";
+  if (tab === "presets") renderGrid();
+  else if (tab === "lib") renderLib();
+  else renderParams();
+}
+
+// ================== presets ==================
 const grid = document.getElementById("grid");
-const bankTabs = document.getElementById("bankTabs");
 const search = document.getElementById("search");
 
-function progName(key) { return names[key] || ""; }
-function progLabel(b, p) { return names[b + "-" + p] || `Preset ${b}${p + 1}`; }
+function progLabel(b, p) {
+  const k = b + "-" + p;
+  if (names[k]) return names[k];
+  const d = devNames[k];
+  if (d && d[0]) return d[0];
+  return "Preset " + b + (p + 1);
+}
+function progCat(b, p) {
+  const d = devNames[b + "-" + p];
+  return d && d[1] > 0 ? CATS[d[1]] || "" : "";
+}
 
-function buildTabs() {
-  bankTabs.innerHTML = "";
-  for (const b of BANKS.concat(["FAV"])) {
+function buildBankTabs(el, sel, onPick, withFav) {
+  el.innerHTML = "";
+  const list = withFav ? BANKS.concat(["FAV"]) : BANKS;
+  for (const b of list) {
     const btn = document.createElement("button");
     const isFav = b === "FAV";
-    btn.className = "bank-btn" + (isFav ? " fav-tab" : "") + (currentBank === b ? " selected" : "");
+    btn.className = "bank-btn" + (isFav ? " fav" : "") + (sel === b ? " sel" : "");
     btn.textContent = isFav ? "★" : b;
-    btn.addEventListener("click", () => {
-      currentBank = b; store.save("dm12.bank", b); search.value = ""; render();
-    });
-    bankTabs.appendChild(btn);
+    btn.addEventListener("click", () => onPick(b));
+    el.appendChild(btn);
   }
 }
 
 function visibleProgs() {
   const q = search.value.trim().toLowerCase();
-  const list = [];
+  const out = [];
   if (q) {
     for (const b of BANKS) for (let p = 0; p < PROGS; p++) {
-      const label = (progName(b + "-" + p) || `preset ${b}${p + 1}`).toLowerCase();
-      if (label.includes(q) || (b + (p + 1)).toLowerCase() === q || String(p + 1) === q) list.push([b, p]);
+      const lab = progLabel(b, p).toLowerCase();
+      if (lab.includes(q) || (b + (p + 1)).toLowerCase() === q) out.push([b, p]);
     }
-    return list;
+    return out;
   }
-  if (currentBank === "FAV") {
-    for (const key of favs) { const [b, p] = key.split("-"); list.push([b, +p]); }
-    list.sort((x, y) => x[0] === y[0] ? x[1] - y[1] : BANKS.indexOf(x[0]) - BANKS.indexOf(y[0]));
-    return list;
+  if (curBank === "FAV") {
+    for (const k of favs) { const [b, p] = k.split("-"); out.push([b, +p]); }
+    out.sort((x, y) => x[0] === y[0] ? x[1] - y[1] : BANKS.indexOf(x[0]) - BANKS.indexOf(y[0]));
+    return out;
   }
-  for (let p = 0; p < PROGS; p++) list.push([currentBank, p]);
-  return list;
+  for (let p = 0; p < PROGS; p++) out.push([curBank, p]);
+  return out;
 }
 
 let pressTimer = null, longPressed = false;
 
-function render() {
-  buildTabs();
+function renderGrid() {
+  buildBankTabs(document.getElementById("bankTabs"), curBank,
+    b => { curBank = b; store.save("dm12.bank", b); search.value = ""; renderGrid(); }, true);
   grid.innerHTML = "";
   const progs = visibleProgs();
   if (!progs.length) {
     const d = document.createElement("div");
     d.className = "empty";
-    d.textContent = currentBank === "FAV" && !search.value
+    d.textContent = curBank === "FAV" && !search.value
       ? "Nog geen favorieten — tik op de ★ van een preset." : "Geen presets gevonden.";
     grid.appendChild(d);
     return;
@@ -252,86 +479,302 @@ function render() {
     num.textContent = bank + String(prog + 1).padStart(3, "0");
     div.appendChild(num);
 
-    const name = document.createElement("div");
-    name.className = "name";
-    name.textContent = progLabel(bank, prog);
-    if (!progName(key)) name.style.color = "var(--muted)";
-    div.appendChild(name);
+    const nm = document.createElement("div");
+    nm.className = "name";
+    nm.textContent = progLabel(bank, prog);
+    if (!names[key] && !(devNames[key] && devNames[key][0])) nm.style.color = "var(--muted)";
+    div.appendChild(nm);
+
+    const cat = progCat(bank, prog);
+    if (cat) {
+      const c = document.createElement("div");
+      c.className = "cat"; c.textContent = cat; div.appendChild(c);
+    }
 
     const star = document.createElement("span");
     star.className = "star" + (favs.has(key) ? " on" : "");
     star.textContent = "★";
     star.addEventListener("click", e => {
       e.stopPropagation();
-      if (favs.has(key)) favs.delete(key); else favs.add(key);
+      favs.has(key) ? favs.delete(key) : favs.add(key);
       store.save("dm12.favs", [...favs]);
-      render();
+      renderGrid();
     });
     div.appendChild(star);
 
-    // tik = versturen, lang indrukken = hernoemen
-    const startPress = () => {
+    const start = () => {
       longPressed = false;
-      pressTimer = setTimeout(() => { longPressed = true; startRename(div, key, bank, prog); }, 550);
+      pressTimer = setTimeout(() => { longPressed = true; rename(div, key, bank, prog); }, 550);
     };
-    const endPress = () => clearTimeout(pressTimer);
-    div.addEventListener("touchstart", startPress, { passive: true });
-    div.addEventListener("touchend", endPress);
-    div.addEventListener("touchmove", endPress, { passive: true });
-    div.addEventListener("mousedown", startPress);
-    div.addEventListener("mouseup", endPress);
-    div.addEventListener("mouseleave", endPress);
+    const stop = () => clearTimeout(pressTimer);
+    div.addEventListener("touchstart", start, {passive:true});
+    div.addEventListener("touchend", stop);
+    div.addEventListener("touchmove", stop, {passive:true});
+    div.addEventListener("mousedown", start);
+    div.addEventListener("mouseup", stop);
+    div.addEventListener("mouseleave", stop);
     div.addEventListener("click", () => { if (!longPressed) sendProgram(bank, prog); });
     div.addEventListener("contextmenu", e => e.preventDefault());
     grid.appendChild(div);
   }
 }
 
-function startRename(div, key, bank, prog) {
-  const nameEl = div.querySelector(".name");
+function sendProgram(bank, prog) {
+  const ok = AndroidBridge.send(BANKS.indexOf(bank), prog, channel);
+  if (ok) {
+    current = bank + "-" + prog;
+    store.save("dm12.current", current);
+    statusText.textContent = "verstuurd: " + bank + (prog + 1);
+    for (const el of document.querySelectorAll(".prog")) {
+      el.classList.toggle("current", el.dataset.key === current);
+    }
+    // parameters van het nieuwe programma ophalen
+    setTimeout(() => AndroidBridge.requestEditBuffer(devId), 250);
+  } else {
+    statusText.textContent = "niet verbonden met de synth";
+  }
+}
+
+function rename(div, key, bank, prog) {
+  const el = div.querySelector(".name");
   const input = document.createElement("input");
   input.type = "text";
-  input.value = progName(key);
-  input.placeholder = `Preset ${bank}${prog + 1}`;
-  nameEl.innerHTML = "";
-  nameEl.appendChild(input);
+  input.value = names[key] || "";
+  input.placeholder = progLabel(bank, prog);
+  el.innerHTML = ""; el.appendChild(input);
   input.focus();
-  const finish = save => {
+  const fin = save => {
     if (save) {
       const v = input.value.trim();
-      if (v) names[key] = v; else delete names[key];
+      v ? names[key] = v : delete names[key];
       store.save("dm12.names", names);
     }
-    render();
+    renderGrid();
   };
   input.addEventListener("keydown", e => {
-    if (e.key === "Enter") finish(true);
-    if (e.key === "Escape") finish(false);
+    if (e.key === "Enter") fin(true);
+    if (e.key === "Escape") fin(false);
     e.stopPropagation();
   });
-  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("blur", () => fin(true));
   input.addEventListener("click", e => e.stopPropagation());
 }
 
-search.addEventListener("input", render);
-
-// ---------- back-up via klembord ----------
-document.getElementById("exportBtn").addEventListener("click", () => {
-  AndroidBridge.copyToClipboard(JSON.stringify({ names, favs: [...favs] }));
-});
-document.getElementById("importBtn").addEventListener("click", () => {
+search.addEventListener("input", renderGrid);
+document.getElementById("backupBtn").addEventListener("click", () =>
+  AndroidBridge.copyToClipboard(JSON.stringify({names, favs:[...favs], vals})));
+document.getElementById("restoreBtn").addEventListener("click", () => {
   try {
     const d = JSON.parse(AndroidBridge.readClipboard());
-    if (d.names && typeof d.names === "object") names = d.names;
+    if (d.names) names = d.names;
     if (Array.isArray(d.favs)) favs = new Set(d.favs);
-    store.save("dm12.names", names);
-    store.save("dm12.favs", [...favs]);
-    render();
-    statusText.textContent = "back-up hersteld";
+    if (d.vals) vals = d.vals;
+    store.save("dm12.names", names); store.save("dm12.favs", [...favs]); store.save("dm12.vals", vals);
+    renderGrid();
   } catch { alert("Geen geldige back-up op het klembord"); }
 });
 
-render();
+// ================== parameters ==================
+function pkey(p) { return p.n !== undefined ? "n" + p.n : "c" + p.cc; }
+function pval(p) {
+  if (p.n !== undefined && synthParams && p.n < synthParams.length && vals[pkey(p)] === undefined) {
+    return synthParams[p.n];
+  }
+  const v = vals[pkey(p)];
+  return v === undefined ? (p.k === "s" ? Math.round(p.max / 2) : 0) : v;
+}
+function fmt(p, v) {
+  if (p.k === "e") return p.o[v] !== undefined ? p.o[v] : v;
+  if (p.k === "t") return v ? "aan" : "uit";
+  if (p.k === "b") return (v - 128 > 0 ? "+" : "") + (v - 128);
+  return String(v);
+}
+function doSend(p, v) {
+  vals[pkey(p)] = v;
+  if (p.n !== undefined) AndroidBridge.sendNRPN(p.n, v, channel);
+  else AndroidBridge.sendCC(p.cc, v, channel);
+  if (synthParams && p.n !== undefined && p.n < synthParams.length) synthParams[p.n] = v;
+}
+let saveTimer = null;
+function sendParam(p, v) {
+  doSend(p, v);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => store.save("dm12.vals", vals), 800);
+}
+
+function renderParams() {
+  const page = PAGES.find(x => x.id === tab);
+  const wrap = document.getElementById("paramList");
+  document.getElementById("paramNote").textContent = synthParams
+    ? "waarden gelezen uit de synth" : "tik op ‘Lees synth uit’ voor de echte waarden";
+  wrap.innerHTML = "";
+  if (!page) return;
+  for (const p of page.params) {
+    if (p.k === "h") {
+      const h = document.createElement("div");
+      h.className = "phead"; h.textContent = p.l; wrap.appendChild(h);
+      continue;
+    }
+    const v = pval(p);
+    const box = document.createElement("div");
+    box.className = "p";
+    const lab = document.createElement("div");
+    lab.className = "plab";
+    const ls = document.createElement("span"); ls.textContent = p.l;
+    const vs = document.createElement("span"); vs.className = "pval"; vs.textContent = fmt(p, v);
+    lab.appendChild(ls); lab.appendChild(vs);
+    box.appendChild(lab);
+
+    if (p.k === "e") {
+      const sel = document.createElement("select");
+      p.o.forEach((o, i) => {
+        const opt = document.createElement("option");
+        opt.value = i; opt.textContent = o; sel.appendChild(opt);
+      });
+      sel.value = Math.min(v, p.max);
+      sel.addEventListener("change", () => {
+        const nv = +sel.value; vs.textContent = fmt(p, nv); sendParam(p, nv);
+      });
+      box.appendChild(sel);
+    } else if (p.k === "t") {
+      const btn = document.createElement("button");
+      btn.className = "tog" + (v ? " on" : "");
+      btn.textContent = v ? "aan" : "uit";
+      btn.addEventListener("click", () => {
+        const nv = btn.classList.contains("on") ? 0 : 1;
+        btn.classList.toggle("on", !!nv);
+        btn.textContent = nv ? "aan" : "uit";
+        vs.textContent = fmt(p, nv);
+        sendParam(p, nv);
+      });
+      box.appendChild(btn);
+    } else {
+      const r = document.createElement("input");
+      r.type = "range"; r.min = 0; r.max = p.max; r.value = v;
+      let t = null;
+      r.addEventListener("input", () => {
+        const nv = +r.value;
+        vs.textContent = fmt(p, nv);
+        dragging = true;
+        if (!t) t = setTimeout(() => { t = null; doSend(p, +r.value); }, 25);
+      });
+      const fin = () => {
+        dragging = false;
+        clearTimeout(t); t = null;
+        sendParam(p, +r.value);
+      };
+      r.addEventListener("change", fin);
+      r.addEventListener("touchend", fin);
+      box.appendChild(r);
+    }
+    wrap.appendChild(box);
+  }
+}
+
+document.getElementById("readBtn").addEventListener("click", () => {
+  AndroidBridge.appNotify(devId);
+  AndroidBridge.requestEditBuffer(devId);
+  statusText.textContent = "edit buffer opgevraagd…";
+});
+document.getElementById("pushBtn").addEventListener("click", () => {
+  const page = PAGES.find(x => x.id === tab);
+  if (!page) return;
+  let n = 0;
+  for (const p of page.params) {
+    if (p.k === "h") continue;
+    doSend(p, pval(p)); n++;
+  }
+  statusText.textContent = n + " parameters verstuurd";
+});
+
+// ================== bibliotheek ==================
+function renderLib() {
+  buildBankTabs(document.getElementById("libBanks"), BANKS[libBank],
+    b => { libBank = BANKS.indexOf(b); renderLib(); }, false);
+  const list = document.getElementById("libList");
+  list.innerHTML = "";
+  const bl = BANKS[libBank];
+  for (let p = 0; p < PROGS; p++) {
+    const key = bl + "-" + p;
+    const d = devNames[key];
+    const row = document.createElement("div");
+    row.className = "lrow";
+
+    const num = document.createElement("span");
+    num.className = "lnum"; num.textContent = bl + String(p + 1).padStart(3, "0");
+    row.appendChild(num);
+
+    const nm = document.createElement("span");
+    nm.className = "lname";
+    nm.textContent = d && d[0] ? d[0] : "—";
+    if (!d || !d[0]) nm.style.color = "var(--muted)";
+    row.appendChild(nm);
+
+    if (d && d[1] > 0) {
+      const c = document.createElement("span");
+      c.className = "lcat"; c.textContent = CATS[d[1]] || ""; row.appendChild(c);
+    }
+
+    const dot = document.createElement("span");
+    dot.className = "dotp" + (d && d[2] ? " has" : "");
+    dot.title = "patch opgeslagen"; row.appendChild(dot);
+
+    const get = document.createElement("button");
+    get.className = "mini"; get.textContent = "⤓";
+    get.title = "patch ophalen van de synth";
+    get.addEventListener("click", () => {
+      enqueue(() => AndroidBridge.requestProgram(libBank, p, devId));
+    });
+    row.appendChild(get);
+
+    const load = document.createElement("button");
+    load.className = "mini"; load.textContent = "▶";
+    load.title = "opgeslagen patch beluisteren (edit buffer)";
+    load.addEventListener("click", () => {
+      if (!AndroidBridge.patchToEditBuffer(libBank, p, devId)) {
+        statusText.textContent = "geen patch opgeslagen voor " + key;
+      } else {
+        statusText.textContent = key + " naar edit buffer";
+      }
+    });
+    row.appendChild(load);
+
+    const wr = document.createElement("button");
+    wr.className = "mini"; wr.textContent = "⤴";
+    wr.title = "opgeslagen patch terugschrijven naar dit slot";
+    wr.addEventListener("click", () => {
+      if (!confirm("Patch terugschrijven naar " + key + "?\n\nDit overschrijft het programma in de synth.")) return;
+      const ok = AndroidBridge.patchToSlot(libBank, p, libBank, p, devId);
+      statusText.textContent = ok ? key + " teruggeschreven" : "geen patch opgeslagen voor " + key;
+    });
+    row.appendChild(wr);
+
+    list.appendChild(row);
+  }
+}
+
+document.getElementById("scanNames").addEventListener("click", () => {
+  AndroidBridge.appNotify(devId);
+  for (let b = 0; b < 8; b++) enqueue(() => AndroidBridge.requestBankNames(b, devId));
+  statusText.textContent = "namen van 8 banken opgevraagd…";
+});
+document.getElementById("scanBankPatches").addEventListener("click", () => {
+  if (!confirm("Alle 128 patches van bank " + BANKS[libBank] + " ophalen?\nDit duurt ongeveer 20 seconden.")) return;
+  for (let p = 0; p < PROGS; p++) {
+    const prog = p;
+    enqueue(() => AndroidBridge.requestProgram(libBank, prog, devId));
+  }
+});
+document.getElementById("libSaveBtn").addEventListener("click", () => {
+  AndroidBridge.libSave();
+  statusText.textContent = "bibliotheek opgeslagen op dit apparaat";
+});
+document.getElementById("libExportBtn").addEventListener("click", () => {
+  AndroidBridge.copyToClipboard(AndroidBridge.libNames());
+  statusText.textContent = "namen naar klembord gekopieerd";
+});
+
+showTab();
 </script>
 </body>
 </html>
