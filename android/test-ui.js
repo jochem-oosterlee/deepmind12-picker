@@ -42,7 +42,10 @@ function makeEl(id) {
     querySelectorAll() { return []; },
     focus() {}, select() {}, click() { this.fire("click"); },
     fire(ev, arg) {
-      for (const fn of this.handlers[ev] || []) fn(arg || {stopPropagation() {}, preventDefault() {}, key: "", target: {}});
+      const e = arg || {stopPropagation() {}, preventDefault() {}, key: "", target: {}};
+      for (const fn of this.handlers[ev] || []) fn(e);
+      // de dialoogknoppen gebruiken onclick in plaats van addEventListener
+      if (ev === "click" && typeof this.onclick === "function") this.onclick(e);
     },
     getBoundingClientRect() { return {top: 0, left: 0, width: 100, height: 20}; },
     setAttribute() {}, getAttribute() { return null; },
@@ -185,6 +188,20 @@ try {
   if (!sent.some(s => s[0] === "nrpn")) { console.error("FOUT: geen NRPN verstuurd"); failures++; }
 } catch (e) { console.error("FOUT bij regelaar:", e.message); failures++; }
 
-if (global.__onerror && errors.length) console.log("meldingen:", errors);
-console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
-process.exit(failures ? 1 : 0);
+// menu aanmaken via de eigen dialoog (asynchroon, dus met een tik wachten)
+const globalTab = [...document.getElementById("tabs").children].find(t => t.textContent === "Global");
+globalTab.fire("click");
+const gBefore = document.getElementById("gList").children.length;
+document.getElementById("gNewMenu").fire("click");
+document.getElementById("modalInput").value = "MIDI-instellingen";
+document.getElementById("modalYes").fire("click");
+
+setTimeout(() => {
+  const gAfter = document.getElementById("gList").children.length;
+  console.log("menu aanmaken:", gBefore, "->", gAfter, "elementen in de lijst");
+  if (gAfter <= gBefore) { console.error("FOUT: menu niet toegevoegd"); failures++; }
+
+  if (global.__onerror && errors.length) console.log("meldingen:", errors);
+  console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
+  process.exit(failures ? 1 : 0);
+}, 20);

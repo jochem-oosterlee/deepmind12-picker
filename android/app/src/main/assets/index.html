@@ -89,6 +89,13 @@
   .grow { flex:1; }
   .gchanged { border-color:var(--active); background:#2c2415; }
   .gname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ghead { display:flex; align-items:center; gap:6px; margin:12px 0 4px; font-size:12px;
+    font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; }
+  .ghead .gtitle { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ghead input { text-transform:none; font-weight:400; flex:1; }
+  .p.changed { border-color:var(--active); background:#2c2415; }
+  .p select, .p input[type=number] { width:auto; flex:1; min-width:70px; margin:0; }
+  .p .row { margin:6px 0 0; }
   .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
   .lrow input[type=number] { width:64px; padding:6px; }
   .warn { color:var(--active); }
@@ -137,6 +144,7 @@
 <div id="modal" style="display:none">
   <div class="box">
     <div id="modalText"></div>
+    <input type="text" id="modalInput" style="display:none;width:100%;margin-bottom:12px">
     <div class="row" style="justify-content:flex-end;margin:0">
       <button id="modalNo">Annuleren</button>
       <button id="modalYes">Doorgaan</button>
@@ -147,6 +155,9 @@
 <div id="page-global" style="display:none">
   <div class="row" style="flex-wrap:wrap">
     <button class="mini" id="gReadBtn">Lees uit synth</button>
+    <button class="mini" id="gNewMenu">Nieuw menu</button>
+    <button class="mini" id="gExportBtn">Exporteer indeling</button>
+    <button class="mini" id="gImportBtn">Importeer</button>
     <button class="mini" id="gHelpBtn">Uitleg</button>
   </div>
   <div class="note" id="gStat">Nog niet uitgelezen.</div>
@@ -175,7 +186,7 @@
   <div id="paramList"></div>
 </div>
 
-<footer id="foot">v1.10 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
+<footer id="foot">v1.11 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
 
 <script>
 "use strict";
@@ -483,21 +494,38 @@ function ask(msg) {
   return new Promise(res => {
     const m = document.getElementById("modal");
     document.getElementById("modalText").textContent = msg;
+    document.getElementById("modalInput").style.display = "none";
     m.style.display = "flex";
-    const yes = document.getElementById("modalYes");
-    const no = document.getElementById("modalNo");
     const done = v => { m.style.display = "none"; res(v); };
-    yes.onclick = () => done(true);
-    no.onclick = () => done(false);
+    document.getElementById("modalYes").onclick = () => done(true);
+    document.getElementById("modalNo").onclick = () => done(false);
+  });
+}
+
+/** Vraagt om tekst; geeft null terug bij annuleren. */
+function askText(msg, initial) {
+  return new Promise(res => {
+    const m = document.getElementById("modal");
+    const inp = document.getElementById("modalInput");
+    document.getElementById("modalText").textContent = msg;
+    inp.style.display = "block";
+    inp.value = initial || "";
+    m.style.display = "flex";
+    inp.focus();
+    const done = v => { m.style.display = "none"; inp.style.display = "none"; res(v); };
+    document.getElementById("modalYes").onclick = () => done(inp.value);
+    document.getElementById("modalNo").onclick = () => done(null);
   });
 }
 
 function tell(msg) {
   const m = document.getElementById("modal");
   document.getElementById("modalText").textContent = msg;
+  document.getElementById("modalInput").style.display = "none";
   m.style.display = "flex";
-  document.getElementById("modalYes").onclick = () => { m.style.display = "none"; };
-  document.getElementById("modalNo").onclick = () => { m.style.display = "none"; };
+  const close = () => { m.style.display = "none"; };
+  document.getElementById("modalYes").onclick = close;
+  document.getElementById("modalNo").onclick = close;
 }
 
 // ================== tabs ==================
@@ -949,81 +977,255 @@ const GLOBAL_DOC = [
   "send NRPN on load", "keyboard octave"
 ];
 
-let gNames = store.load("dm12.gnames", {});
+// Alles wat je hier zelf invult -- namen, betekenis van de waardes en de
+// indeling in menu's -- wordt op dit apparaat bewaard en is te exporteren.
+let gmeta = store.load("dm12.gmeta", null);
+if (!gmeta) {
+  gmeta = {groups: [], bytes: {}};
+  const old = store.load("dm12.gnames", {});   // eerdere versie: alleen namen
+  for (const k in old) gmeta.bytes[k] = {name: old[k]};
+}
 let gData = null;
+
+function saveMeta() { store.save("dm12.gmeta", gmeta); }
+function bmeta(i) { return gmeta.bytes[i] || (gmeta.bytes[i] = {}); }
+function groupExists(id) { return gmeta.groups.some(g => g.id === id); }
+function groupOf(i) {
+  const g = (gmeta.bytes[i] || {}).group;
+  return g && groupExists(g) ? g : null;
+}
+function newGroupId() {
+  let n = 1;
+  while (groupExists("g" + n)) n++;
+  return "g" + n;
+}
+function groupOptions() {
+  const out = [];
+  const walk = (parent, prefix) => {
+    for (const g of gmeta.groups.filter(x => (x.parent || null) === parent)) {
+      out.push([g.id, prefix + g.name]);
+      walk(g.id, prefix + "· ");
+    }
+  };
+  walk(null, "");
+  return out;
+}
+
+async function addGroup(parent) {
+  const s = await askText(parent ? "Naam van het nieuwe submenu" : "Naam van het nieuwe menu", "");
+  if (s === null || !s.trim()) return;
+  gmeta.groups.push({id: newGroupId(), name: s.trim(), parent: parent || undefined, open: true});
+  saveMeta();
+  renderGlobals();
+}
+
+async function renameByte(i) {
+  const s = await askText("Naam van instelling #" + i, (gmeta.bytes[i] || {}).name || "");
+  if (s === null) return;
+  if (s.trim()) bmeta(i).name = s.trim(); else delete bmeta(i).name;
+  saveMeta();
+  renderGlobals();
+}
+
+/** Betekenis van de waardes, zoals de synth ze in zijn menu's toont. */
+async function editLabels(i) {
+  const m = bmeta(i);
+  const cur = Object.keys(m.labels || {}).map(Number).sort((a, b) => a - b)
+    .map(k => k + "=" + m.labels[k]).join(", ");
+  const t = await askText("Waardes van #" + i + " een naam geven.\n\n"
+    + "Schrijf als:  0=Rx, 1=Tx, 2=Both\nLeeg laten wist de labels.", cur);
+  if (t === null) return;
+  const labels = {};
+  for (const part of t.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const k = parseInt(part.slice(0, eq).trim(), 10);
+    const v = part.slice(eq + 1).trim();
+    if (!isNaN(k) && k >= 0 && k <= 255 && v) labels[k] = v;
+  }
+  if (Object.keys(labels).length) m.labels = labels; else delete m.labels;
+  saveMeta();
+  renderGlobals();
+}
+
+async function writeByte(i, nv, btn, oldVal) {
+  if (isNaN(nv) || nv === oldVal) return;
+  const m = gmeta.bytes[i] || {};
+  const naam = m.name ? `“${m.name}” (#${i})` : `instelling #${i}`;
+  const was = m.labels && m.labels[oldVal] ? `${m.labels[oldVal]} (${oldVal})` : oldVal;
+  const wordt = m.labels && m.labels[nv] ? `${m.labels[nv]} (${nv})` : nv;
+  const ok = await ask("Instelling van de synth wijzigen?\n\n" + naam + ": " + was + " → " + wordt
+    + "\n\nWeet je niet zeker welke instelling dit is, lees dan eerst uit en vergelijk."
+    + " Alle andere instellingen blijven ongewijzigd.");
+  if (!ok) { renderGlobals(); return; }
+  const done = AndroidBridge.writeGlobal(i, nv, devId);
+  flash(btn, done);
+  statusText.textContent = done ? naam + " naar " + wordt + " gestuurd"
+                                : "niet verstuurd (geen verbinding of nog niet uitgelezen)";
+  if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
+}
+
+function groupHeader(g, depth) {
+  const h = document.createElement("div");
+  h.className = "ghead";
+  h.style.marginLeft = (depth * 12) + "px";
+
+  const tog = document.createElement("button");
+  tog.className = "mini";
+  tog.textContent = g.open === false ? "▸" : "▾";
+  tog.addEventListener("click", () => {
+    g.open = (g.open === false);
+    saveMeta();
+    renderGlobals();
+  });
+  h.appendChild(tog);
+
+  const t = document.createElement("span");
+  t.className = "gtitle";
+  t.textContent = g.name;
+  t.addEventListener("click", async () => {
+    const s = await askText("Naam van dit menu", g.name);
+    if (s === null || !s.trim()) return;
+    g.name = s.trim();
+    saveMeta();
+    renderGlobals();
+  });
+  h.appendChild(t);
+
+  const sub = document.createElement("button");
+  sub.className = "mini"; sub.textContent = "+";
+  sub.title = "submenu toevoegen";
+  sub.addEventListener("click", () => addGroup(g.id));
+  h.appendChild(sub);
+
+  const del = document.createElement("button");
+  del.className = "mini"; del.textContent = "×";
+  del.addEventListener("click", async () => {
+    if (!await ask("Menu “" + g.name + "” verwijderen?\n\nDe instellingen erin blijven bestaan;"
+        + " die komen weer onder ‘niet ingedeeld’ te staan.")) return;
+    for (const c of gmeta.groups) if (c.parent === g.id) c.parent = g.parent || undefined;
+    gmeta.groups = gmeta.groups.filter(x => x.id !== g.id);
+    for (const k in gmeta.bytes) if (gmeta.bytes[k].group === g.id) delete gmeta.bytes[k].group;
+    saveMeta();
+    renderGlobals();
+  });
+  h.appendChild(del);
+  return h;
+}
+
+function byteCard(i, depth, changed) {
+  const m = gmeta.bytes[i] || {};
+  const v = gData.bytes[i];
+  const box = document.createElement("div");
+  box.className = "p" + (changed.has(i) ? " changed" : "");
+  box.style.marginLeft = (depth * 12) + "px";
+  box.dataset.byte = i;
+
+  const lab = document.createElement("div");
+  lab.className = "plab";
+  const ls = document.createElement("span");
+  ls.textContent = "#" + String(i).padStart(2, "0") + " · "
+    + (m.name || (changed.has(i) ? "net veranderd — geef een naam" : "onbekend"));
+  if (!m.name) ls.style.color = "var(--muted)";
+  ls.addEventListener("click", () => renameByte(i));
+  const vs = document.createElement("span");
+  vs.className = "pval";
+  vs.textContent = m.labels && m.labels[v] ? m.labels[v] : String(v);
+  lab.appendChild(ls);
+  lab.appendChild(vs);
+  box.appendChild(lab);
+
+  const row = document.createElement("div");
+  row.className = "row";
+
+  if (m.labels && Object.keys(m.labels).length) {
+    const sel = document.createElement("select");
+    const vals = Object.keys(m.labels).map(Number);
+    if (!vals.includes(v)) vals.push(v);
+    vals.sort((a, b) => a - b).forEach(n => {
+      const o = document.createElement("option");
+      o.value = n;
+      o.textContent = (m.labels[n] || "onbekend") + " (" + n + ")";
+      sel.appendChild(o);
+    });
+    sel.value = v;
+    sel.addEventListener("change", () => writeByte(i, +sel.value, sel, v));
+    row.appendChild(sel);
+  } else {
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
+    const set = document.createElement("button");
+    set.className = "mini"; set.textContent = "Zet";
+    set.addEventListener("click", () =>
+      writeByte(i, Math.max(0, Math.min(255, parseInt(inp.value, 10))), set, v));
+    row.appendChild(inp);
+    row.appendChild(set);
+  }
+
+  const lb = document.createElement("button");
+  lb.className = "mini"; lb.textContent = "Labels";
+  lb.title = "namen voor de waardes";
+  lb.addEventListener("click", () => editLabels(i));
+  row.appendChild(lb);
+
+  const gsel = document.createElement("select");
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "— geen menu —";
+  gsel.appendChild(none);
+  for (const [id, label] of groupOptions()) {
+    const o = document.createElement("option");
+    o.value = id; o.textContent = label;
+    gsel.appendChild(o);
+  }
+  gsel.value = groupOf(i) || "";
+  gsel.addEventListener("change", () => {
+    if (gsel.value) bmeta(i).group = gsel.value; else delete bmeta(i).group;
+    saveMeta();
+    renderGlobals();
+  });
+  row.appendChild(gsel);
+
+  box.appendChild(row);
+  return box;
+}
 
 function renderGlobals() {
   const list = document.getElementById("gList");
   const stat = document.getElementById("gStat");
   list.innerHTML = "";
-  if (!gData) {
-    stat.textContent = "Nog niet uitgelezen — tik op ‘Lees uit synth’.";
-    return;
+
+  const changed = new Set(gData ? gData.changed || [] : []);
+  stat.textContent = !gData
+    ? "Nog niet uitgelezen — tik op ‘Lees uit synth’. Menu's aanmaken kan al wel."
+    : `${gData.bytes.length} instellingen · lezing ${gData.rev}`
+      + (gData.hadPrevious
+          ? (changed.size ? ` · ${changed.size} veranderd sinds de vorige lezing`
+                          : " · niets veranderd sinds de vorige lezing")
+          : " · verander iets op de synth en lees opnieuw om ze te herkennen");
+
+  const drawGroup = (g, depth) => {
+    list.appendChild(groupHeader(g, depth));
+    if (g.open === false) return;
+    if (gData) {
+      gData.bytes.forEach((_, i) => {
+        if (groupOf(i) === g.id) list.appendChild(byteCard(i, depth + 1, changed));
+      });
+    }
+    for (const c of gmeta.groups.filter(x => x.parent === g.id)) drawGroup(c, depth + 1);
+  };
+  for (const g of gmeta.groups.filter(x => !x.parent)) drawGroup(g, 0);
+
+  if (!gData) return;
+  const rest = gData.bytes.map((_, i) => i).filter(i => !groupOf(i));
+  if (rest.length) {
+    if (gmeta.groups.length) {
+      const h = document.createElement("div");
+      h.className = "ghead";
+      h.textContent = "Niet ingedeeld";
+      list.appendChild(h);
+    }
+    for (const i of rest) list.appendChild(byteCard(i, 0, changed));
   }
-  const ch = new Set(gData.changed || []);
-  stat.textContent = `${gData.bytes.length} bytes · lezing ${gData.rev}`
-    + (gData.hadPrevious
-        ? (ch.size ? ` · ${ch.size} byte(s) veranderd sinds de vorige lezing`
-                   : " · niets veranderd sinds de vorige lezing")
-        : " · lees nog eens na een wijziging op de synth om bytes te herkennen");
-
-  gData.bytes.forEach((v, i) => {
-    const row = document.createElement("div");
-    row.className = "lrow" + (ch.has(i) ? " gchanged" : "");
-
-    const num = document.createElement("span");
-    num.className = "lnum"; num.textContent = "#" + String(i).padStart(2, "0");
-    row.appendChild(num);
-
-    const nm = document.createElement("span");
-    nm.className = "gname";
-    nm.textContent = gNames[i] || (ch.has(i) ? "← net veranderd, geef een naam" : "—");
-    if (!gNames[i]) nm.style.color = "var(--muted)";
-    nm.addEventListener("click", () => {
-      const inp = document.createElement("input");
-      inp.type = "text";
-      inp.value = gNames[i] || "";
-      inp.placeholder = "naam van deze instelling";
-      nm.replaceWith(inp);
-      inp.focus();
-      const fin = () => {
-        const t = inp.value.trim();
-        if (t) gNames[i] = t; else delete gNames[i];
-        store.save("dm12.gnames", gNames);
-        renderGlobals();
-      };
-      inp.addEventListener("blur", fin);
-      inp.addEventListener("keydown", e => { if (e.key === "Enter") fin(); e.stopPropagation(); });
-    });
-    row.appendChild(nm);
-
-    const val = document.createElement("span");
-    val.className = "gval"; val.textContent = v;
-    row.appendChild(val);
-
-    const inp = document.createElement("input");
-    inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
-    row.appendChild(inp);
-
-    const set = document.createElement("button");
-    set.className = "mini"; set.textContent = "Zet";
-    set.addEventListener("click", async () => {
-      const nv = Math.max(0, Math.min(255, parseInt(inp.value, 10)));
-      if (isNaN(nv) || nv === v) return;
-      const label = gNames[i] ? `“${gNames[i]}” (byte #${i})` : `byte #${i}`;
-      const ok = await ask("Globale instelling wijzigen?\n\n" + label + ": " + v + " → " + nv
-        + "\n\nDit past een instelling van de synth aan. Weet je niet zeker welke instelling"
-        + " dit is, lees dan eerst uit en vergelijk. Alle andere bytes blijven ongewijzigd.");
-      if (!ok) return;
-      const done = AndroidBridge.writeGlobal(i, nv, devId);
-      flash(set, done);
-      statusText.textContent = done ? "byte #" + i + " naar " + nv + " gestuurd"
-                                    : "niet verstuurd (geen verbinding of geen lezing)";
-      if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
-    });
-    row.appendChild(set);
-    list.appendChild(row);
-  });
 }
 
 function loadGlobals() {
@@ -1044,12 +1246,35 @@ gReadBtn.addEventListener("click", () => {
   flash(gReadBtn, ok);
   statusText.textContent = ok ? "globale instellingen opgevraagd…" : "niet verbonden";
 });
+document.getElementById("gNewMenu").addEventListener("click", () => addGroup(null));
+document.getElementById("gExportBtn").addEventListener("click", () => {
+  AndroidBridge.copyToClipboard(JSON.stringify(gmeta));
+  statusText.textContent = "indeling naar klembord gekopieerd";
+});
+document.getElementById("gImportBtn").addEventListener("click", async () => {
+  try {
+    const d = JSON.parse(AndroidBridge.readClipboard());
+    if (!d || !Array.isArray(d.groups) || typeof d.bytes !== "object") throw new Error("vorm");
+    if (!await ask("Indeling van het klembord overnemen?\n\n"
+        + d.groups.length + " menu's en " + Object.keys(d.bytes).length + " benoemde instellingen."
+        + "\n\nDit vervangt je huidige indeling.")) return;
+    gmeta = d;
+    saveMeta();
+    renderGlobals();
+    statusText.textContent = "indeling overgenomen";
+  } catch { tell("Geen geldige indeling op het klembord gevonden."); }
+});
 document.getElementById("gHelpBtn").addEventListener("click", () => {
   tell("De synth stuurt zijn globale instellingen als één blok van 45 bytes. "
     + "De handleiding noemt wél welke instellingen erin zitten, maar niet op welke plek. "
     + "Daarom: lees uit, verander één ding op de synth (GLOBAL-menu), lees opnieuw — "
     + "de byte die veranderde licht oranje op. Geef hem een naam door erop te tikken, "
     + "en daarna kun je hem vanuit de app zetten.\n\n"
+    + "Tik op ‘Labels’ om de waardes namen te geven (bijvoorbeeld 0=Rx, 1=Tx, 2=Both); "
+    + "daarna kies je ze uit een lijst in plaats van een getal. Met ‘Nieuw menu’ maak je "
+    + "eigen menu's en submenu's, net als op de synth, en met het keuzelijstje achter elke "
+    + "instelling zet je hem in het juiste menu. Exporteer je indeling af en toe: het is "
+    + "handwerk dat je niet nog eens wilt doen.\n\n"
     + "Instellingen volgens de handleiding: " + GLOBAL_DOC.join(", ") + ".\n\n"
     + "De WiFi-controlemodus (CC of NRPN) staat niet in de handleiding van 2016 en is "
     + "dus een van de overige bytes — precies iets om zo te vinden.");
