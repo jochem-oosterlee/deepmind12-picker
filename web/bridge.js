@@ -144,6 +144,11 @@
     S.paramRev++;
     S.rxPar++;
     S.rxLast = "par " + p + " = " + v;
+    // onthouden welke parameter net veranderde: zo kan de app leren welk
+    // NRPN-nummer bij welke globale instelling hoort
+    S.lpN = p;
+    S.lpV = v;
+    S.lpMs = Date.now();
     // een draaiende fader levert tientallen berichten: die op één regel houden
     const now = Date.now();
     if (lastParamLog.p === p && now - lastParamLog.ms < 800 && S.log.length) {
@@ -420,6 +425,8 @@
       curBank: S.curBank, curProg: S.curProg, iface: S.iface, dev: S.dev,
       editBuffer: !!S.editBuffer, paramRev: S.paramRev, globalRev: S.globalRev,
       rxCC: S.rxCC, rxPar: S.rxPar, rxLast: S.rxLast, info: S.info,
+      lpN: S.lpN === undefined ? -1 : S.lpN, lpV: S.lpV === undefined ? -1 : S.lpV,
+      lpMs: S.lpMs || 0,
       pkts: S.pkts, sysex: S.sysex, sysexLen: S.sysexLen, segs: S.sysex, framing: 0,
     }),
 

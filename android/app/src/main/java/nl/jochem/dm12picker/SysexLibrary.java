@@ -55,6 +55,9 @@ public class SysexLibrary {
     public volatile int paramRev = 0;
     /** Wat de synth ons stuurt: bewijs dat de andere richting werkt. */
     public volatile int rxCCs = 0, rxParams = 0;
+    /** Laatst ontvangen parameter, om NRPN-nummers aan instellingen te koppelen. */
+    public volatile int lastParamNum = -1, lastParamVal = -1;
+    public volatile long lastParamMs = 0;
     public volatile String lastMidiIn = "";
     public volatile String lastInfo = "";
 
@@ -393,6 +396,9 @@ public class SysexLibrary {
         paramRev++;
         rxParams++;
         lastMidiIn = "par " + param + " = " + value;
+        lastParamNum = param;
+        lastParamVal = value;
+        lastParamMs = System.currentTimeMillis();
         // een draaiende fader levert tientallen berichten: die op één regel houden
         long now = System.currentTimeMillis();
         synchronized (log) {
@@ -559,6 +565,8 @@ public class SysexLibrary {
                     + ",\"editBuffer\":" + (editBuffer != null) + ",\"paramRev\":" + paramRev
                     + ",\"globalRev\":" + globalRev
                     + ",\"rxCC\":" + rxCCs + ",\"rxPar\":" + rxParams
+                    + ",\"lpN\":" + lastParamNum + ",\"lpV\":" + lastParamVal
+                    + ",\"lpMs\":" + lastParamMs
                     + ",\"rxLast\":\"" + esc(lastMidiIn) + "\""
                     + ",\"info\":\"" + esc(lastInfo) + "\"}";
         }

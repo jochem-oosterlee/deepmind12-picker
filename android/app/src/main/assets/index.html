@@ -1435,6 +1435,19 @@ function showValue(i, v) {
 
 function isRange(i) { return (gmeta.bytes[i] || {}).type === "range"; }
 
+/**
+ * Globale instellingen zijn te zetten via NRPN, en het nummer is gewoon
+ * 300 + de bytepositie. Gemeten op een DeepMind 12 met de bytes 33, 36, 46 en
+ * 51: alle vier namen de waarde over via NRPN, terwijl het terugschrijven van
+ * het instellingenblok bij sommige juist geweigerd werd. Een afwijkend nummer
+ * dat de app zag langskomen krijgt voorrang.
+ */
+const GLOBAL_NRPN_BASE = 300;
+function globalNrpn(i) {
+  const m = gmeta.bytes[i] || {};
+  return m.nrpn !== undefined ? m.nrpn : GLOBAL_NRPN_BASE + i;
+}
+
 /** Bytewaarde naar het getal dat de synth toont. */
 function rawToShown(i, v) {
   const m = gmeta.bytes[i] || {};
@@ -1753,7 +1766,9 @@ function writeByte(i, nv, btn, oldVal) {
   const m = gmeta.bytes[i] || {};
   const naam = m.name ? `“${m.name}”` : `#${i}`;
   const wordt = m.labels && m.labels[nv] ? `${m.labels[nv]} (${nv})` : nv;
-  const done = AndroidBridge.writeGlobal(i, nv, devId);
+  // Altijd via NRPN: dat neemt de synth aan, ook bij instellingen die een
+  // terugschrijving van het hele blok weigeren.
+  const done = AndroidBridge.sendNRPN(globalNrpn(i), nv, channel);
   flash(btn, done);
   if (done) {
     gUndo = {i: i, old: oldVal, name: naam};
@@ -1772,7 +1787,7 @@ function undoWrite() {
   if (!gUndo) return;
   const u = gUndo;
   gUndo = null;
-  const done = AndroidBridge.writeGlobal(u.i, u.old, devId);
+  const done = AndroidBridge.sendNRPN(globalNrpn(u.i), u.old, channel);
   statusText.textContent = done ? u.name + " back to " + u.old : "undo failed";
   if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
   renderGlobals();
@@ -1962,6 +1977,23 @@ function updateGStat() {
   }
   for (const i of changed) {
     if (!gJustSet[i] || now - gJustSet[i] > 2000) gRecent[i] = now;   // niet onze eigen actie
+  }
+
+  // Leren welk NRPN-nummer bij een instelling hoort. Verzet je iets op de synth,
+  // dan stuurt die eerst de parameter en verandert daarna de byte in het blok.
+  // Bij precies één veranderde byte met dezelfde waarde is de koppeling zeker.
+  if (changed.length === 1 && libState && libState.lpN >= 0
+      && libState.lpV === gData.bytes[changed[0]]
+      && now - libState.lpMs < 4000) {
+    const i = changed[0];
+    const m = bmeta(i);
+    if (m.nrpn !== libState.lpN) {
+      m.nrpn = libState.lpN;
+      delete m.refused;                 // hiermee is hij alsnog te zetten
+      saveMeta();
+      statusText.textContent = "learned: setting #" + i + " is NRPN " + libState.lpN
+        + " — the app can set it now";
+    }
   }
   if (changed.length) {
     gLastChanged = changed.map(i => {
@@ -2188,13 +2220,21 @@ document.getElementById("gSnapRestore").addEventListener("click", async () => {
   const diff = gData ? s.bytes.filter((v, i) => v !== gData.bytes[i]).length : 0;
   if (!await ask("Restore snapshot “" + s.name + "”?\n\n"
       + diff + " of " + s.bytes.length + " settings differ from what the synth has now."
-      + "\n\nThe whole block is sent at once. Settings the synth refuses stay as they are."))
+      + "\n\nOnly those are sent. Note that this includes settings like the MIDI channel."))
     return;
-  const ok = AndroidBridge.writeGlobalBlock(JSON.stringify(s.bytes), devId);
-  statusText.textContent = ok ? "snapshot sent, reading back…" : "not sent (no connection)";
-  if (ok) {
+  // per instelling via NRPN, en alleen wat afwijkt: dat neemt de synth aan
+  let sent = 0, ok = true;
+  s.bytes.forEach((v, i) => {
+    if (!gData || gData.bytes[i] === v) return;
+    if (AndroidBridge.sendNRPN(globalNrpn(i), v, channel) === false) ok = false;
+    sent++;
+  });
+  statusText.textContent = ok
+    ? "snapshot sent (" + sent + " settings), reading back…"
+    : "not sent (no connection)";
+  if (ok && sent) {
     gSnapCheck = {bytes: s.bytes, ms: Date.now(), name: s.name};
-    setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
+    setTimeout(() => AndroidBridge.requestGlobals(devId), 500);
   }
 });
 
@@ -2238,10 +2278,14 @@ document.getElementById("gHelpBtn").addEventListener("click", () => {
     + "Drag settings onto a menu header to file them, or onto another setting to place them "
     + "in order; menus can be nested three levels deep. Export your layout now and then — "
     + "it is handwork you would rather not repeat.\n\n"
-    + "Setting a value sends it straight to the synth, and the app reads back to "
-    + "check whether it was taken. Most settings are accepted; a few are refused "
-    + "over MIDI and get a * next to their number — change those on the instrument. "
-    + "Measured on a DeepMind 12: the block is 56 bytes, not the 45 the manual lists.\n\n"
+    + "Setting a value goes out as NRPN " + GLOBAL_NRPN_BASE + " + the byte number, "
+    + "which is how the synth itself reports these changes. Measured on a DeepMind 12 "
+    + "with bytes 33, 36, 46 and 51: all four accept that, while writing the settings "
+    + "block back was refused for some. The app reads back afterwards and says whether "
+    + "the change was taken.\n\n"
+    + "Names and value labels cannot be read from the synth — MIDI only carries "
+    + "numbers — so that part stays handwork. Export it once and you never have to "
+    + "do it again. The block is 56 bytes here, not the 45 the manual lists.\n\n"
     + "Settings according to the manual: " + GLOBAL_DOC.join(", ") + ".\n\n"
     + "The WiFi control mode (CC or NRPN) is not in the 2016 manual, so it is one of the "
     + "remaining bytes — exactly the kind of thing to find this way.");
