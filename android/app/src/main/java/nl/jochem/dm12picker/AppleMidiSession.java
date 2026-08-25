@@ -42,6 +42,7 @@ public class AppleMidiSession {
     private long lastRxMs = 0;
     private long lastSyncMs = 0;
     private long lastInviteMs = 0;
+    private int inviteCount = 0;
 
     public AppleMidiSession(String ip, int port) {
         this.peerIp = ip;
@@ -88,7 +89,25 @@ public class AppleMidiSession {
             connected = false;
             phase = 0;
             lastInviteMs = 0;
+            inviteCount = 0;
             status = "wacht op verbinding";
+        }
+    }
+
+    /** Bind de bestaande sockets aan een specifiek netwerk (Android WiFi-fix). */
+    public void bindTo(android.net.Network network) {
+        synchronized (lock) {
+            try {
+                network.bindSocket(ctrl);
+                network.bindSocket(data);
+            } catch (Exception e) {
+                status = "WiFi-binding mislukt: " + e.getMessage();
+                return;
+            }
+            connected = false;
+            phase = 0;
+            lastInviteMs = 0;
+            inviteCount = 0;
         }
     }
 
@@ -109,7 +128,8 @@ public class AppleMidiSession {
     private void udpSend(DatagramSocket s, byte[] pkt, String ip, int port) {
         try {
             s.send(new DatagramPacket(pkt, pkt.length, InetAddress.getByName(ip), port));
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            status = "netwerkfout: " + e.getMessage();
         }
     }
 
@@ -121,10 +141,15 @@ public class AppleMidiSession {
             token = rnd.nextInt();
             phase = 1;
         }
+        inviteCount++;
         if (phase == 1) {
             udpSend(ctrl, cmdPacket('I', 'N', token), peerIp, peerPort);
         } else if (phase == 2) {
             udpSend(data, cmdPacket('I', 'N', token), peerIp, peerPort + 1);
+        }
+        if (!connected && !status.startsWith("netwerkfout")
+                && !status.startsWith("WiFi-binding")) {
+            status = "zoekt " + peerIp + " (poging " + inviteCount + ")";
         }
     }
 

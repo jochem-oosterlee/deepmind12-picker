@@ -4,9 +4,15 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
@@ -25,6 +31,11 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        // Het DeepMind-accesspoint heeft geen internet; Android stuurt verkeer dan
+        // standaard via een andere route (bijv. mobiele data). Bind het hele proces
+        // aan het WiFi-netwerk zodat de UDP-pakketten echt via WiFi gaan.
+        bindToWifi();
+
         session = new AppleMidiSession(guessDeepMindIp(), AppleMidiSession.APPLEMIDI_PORT);
 
         web = new WebView(this);
@@ -41,6 +52,32 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (session != null) session.close();
+    }
+
+    private void bindToWifi() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager)
+                    getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkRequest req = new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .build();
+            // callback op de main-thread, zodat `session` dan zeker bestaat
+            cm.requestNetwork(req, new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(Network network) {
+                    cm.bindProcessToNetwork(network);
+                    if (session != null) session.bindTo(network);
+                }
+
+                @Override
+                public void onLost(Network network) {
+                    cm.bindProcessToNetwork(null);
+                }
+            }, new Handler(Looper.getMainLooper()));
+        } catch (Exception e) {
+            Toast.makeText(this, "WiFi-binding mislukt: " + e.getMessage(),
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     /** Het accesspoint (de DeepMind) is normaal de gateway van het WiFi-netwerk. */
