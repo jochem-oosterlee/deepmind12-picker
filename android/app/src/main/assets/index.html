@@ -34,7 +34,7 @@
   /* knippert kort na een actie, zodat je ziet dat er iets verstuurd is */
   button.flash { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
   button.mini { padding:6px 8px; font-size:12px; }
-  #autoBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
+  #autoBtn.on, #gWatchBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
   #settings input { flex:1; min-width:70px; }
   #tabs { display:flex; gap:5px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none; }
   #tabs::-webkit-scrollbar { display:none; }
@@ -89,13 +89,33 @@
   .grow { flex:1; }
   .gchanged { border-color:var(--active); background:#2c2415; }
   .gname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ghead { display:flex; align-items:center; gap:6px; margin:12px 0 4px; font-size:12px;
+  .ghead { display:flex; align-items:center; gap:6px; margin:10px 0 4px; font-size:12px;
     font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; }
-  .ghead .gtitle { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ghead .gtitle { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; cursor:grab; }
   .ghead input { text-transform:none; font-weight:400; flex:1; }
-  .p.changed { border-color:var(--active); background:#2c2415; }
-  .p select, .p input[type=number] { width:auto; flex:1; min-width:70px; margin:0; }
-  .p .row { margin:6px 0 0; }
+  .ghead button { padding:3px 7px; font-size:11px; }
+  .ghead.drop { background:#1b2a3a; border-radius:6px; }
+
+  /* compacte kaartjes, meerdere naast elkaar op een breed scherm */
+  .ggrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:6px; }
+  .gcard { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    padding:6px 8px; }
+  .gcard.changed { border-color:var(--active); background:#2c2415; }
+  .gcard.drop { border-color:var(--accent); }
+  .gcard .top { display:flex; align-items:center; gap:6px; font-size:13px; }
+  .gcard .idx { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
+    cursor:grab; }
+  .gcard .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .gcard .val { color:var(--accent); font-variant-numeric:tabular-nums; }
+  .gcard .ctl { display:flex; align-items:center; gap:4px; margin-top:4px; }
+  .gcard .ctl > input[type=number] { width:58px; padding:4px 6px; }
+  .gcard .ctl > select { flex:1; min-width:0; padding:4px 6px; font-size:12px; }
+  .gcard button { padding:3px 6px; font-size:11px; }
+  .gcard .extra { margin-top:6px; border-top:1px solid var(--border); padding-top:6px; }
+  .labrow { display:flex; gap:4px; margin-bottom:4px; }
+  .labrow input.v { width:58px; padding:4px 6px; }
+  .labrow input.l { flex:1; min-width:0; padding:4px 6px; }
   .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
   .lrow input[type=number] { width:64px; padding:6px; }
   .warn { color:var(--active); }
@@ -157,6 +177,7 @@
 <div id="page-global" style="display:none">
   <div class="row" style="flex-wrap:wrap">
     <button class="mini" id="gReadBtn">Lees uit synth</button>
+    <button class="mini" id="gWatchBtn" title="blijf uitlezen en toon wat verandert">Volgen</button>
     <button class="mini" id="gNewMenu">Nieuw menu</button>
     <button class="mini" id="gExportBtn">Exporteer indeling</button>
     <button class="mini" id="gImportBtn">Importeer</button>
@@ -1038,9 +1059,33 @@ if (!gmeta) {
 }
 let gData = null;
 
+const MAX_DEPTH = 2;          // drie niveaus: 0, 1 en 2
+let gWatch = false;           // blijft de instellingen opnieuw uitlezen
+let gWatchTimer = null;
+let gOpen = {};               // welke kaartjes hun labels/menu open hebben staan
+let gDrag = null;             // wat er versleept wordt
+let gLastChanged = "";        // welke bytes het laatst veranderden
+
 function saveMeta() { store.save("dm12.gmeta", gmeta); }
 function bmeta(i) { return gmeta.bytes[i] || (gmeta.bytes[i] = {}); }
 function groupExists(id) { return gmeta.groups.some(g => g.id === id); }
+function groupById(id) { return gmeta.groups.find(g => g.id === id); }
+function depthOf(id) {
+  let d = 0, g = groupById(id);
+  while (g && g.parent) { d++; g = groupById(g.parent); }
+  return d;
+}
+function subtreeDepth(id) {
+  const kids = gmeta.groups.filter(g => g.parent === id);
+  return kids.length ? 1 + Math.max(...kids.map(k => subtreeDepth(k.id))) : 0;
+}
+function nextOrder(list) {
+  return list.reduce((m, x) => Math.max(m, x.order || 0), 0) + 1;
+}
+function byteOrder(i) {
+  const o = (gmeta.bytes[i] || {}).order;
+  return o === undefined ? i : o;
+}
 function groupOf(i) {
   const g = (gmeta.bytes[i] || {}).group;
   return g && groupExists(g) ? g : null;
@@ -1065,7 +1110,73 @@ function groupOptions() {
 async function addGroup(parent) {
   const s = await askText(parent ? "Naam van het nieuwe submenu" : "Naam van het nieuwe menu", "");
   if (s === null || !s.trim()) return;
-  gmeta.groups.push({id: newGroupId(), name: s.trim(), parent: parent || undefined, open: true});
+  gmeta.groups.push({id: newGroupId(), name: s.trim(), parent: parent || undefined,
+                     open: true, order: nextOrder(gmeta.groups)});
+  saveMeta();
+  renderGlobals();
+}
+
+// ---------- slepen en neerzetten ----------
+
+function allowDrop(el, handler) {
+  el.addEventListener("dragover", e => {
+    if (e.preventDefault) e.preventDefault();
+    el.classList.add("drop");
+  });
+  el.addEventListener("dragleave", () => el.classList.remove("drop"));
+  el.addEventListener("drop", e => {
+    if (e.preventDefault) e.preventDefault();
+    el.classList.remove("drop");
+    handler();
+  });
+}
+
+function membersOf(gid) {
+  if (!gData) return [];
+  const out = [];
+  gData.bytes.forEach((_, i) => { if ((groupOf(i) || null) === (gid || null)) out.push(i); });
+  return out.sort((a, b) => byteOrder(a) - byteOrder(b));
+}
+
+function normalizeGroup(gid) {
+  membersOf(gid).forEach((i, n) => { bmeta(i).order = n; });
+}
+
+function dropOnGroup(gid) {
+  if (!gDrag) return;
+  if (gDrag.kind === "byte") {
+    const m = bmeta(gDrag.i);
+    if (gid) m.group = gid; else delete m.group;
+    m.order = 1e6;                       // achteraan in het nieuwe menu
+    normalizeGroup(gid);
+  } else if (gDrag.kind === "group" && gDrag.id !== gid) {
+    const g = groupById(gDrag.id);
+    if (!g) return;
+    for (let p = gid; p; p = (groupById(p) || {}).parent) {
+      if (p === g.id) return;            // niet in zijn eigen submenu laten vallen
+    }
+    if (gid && depthOf(gid) + 1 + subtreeDepth(g.id) > MAX_DEPTH) {
+      statusText.textContent = "maximaal drie niveaus diep";
+      gDrag = null;
+      return;
+    }
+    g.parent = gid || undefined;
+    g.order = nextOrder(gmeta.groups);
+  }
+  gDrag = null;
+  saveMeta();
+  renderGlobals();
+}
+
+/** Een instelling vóór een andere neerzetten, binnen hetzelfde menu. */
+function dropOnByte(target) {
+  if (!gDrag || gDrag.kind !== "byte" || gDrag.i === target) { gDrag = null; return; }
+  const m = bmeta(gDrag.i);
+  const g = groupOf(target);
+  if (g) m.group = g; else delete m.group;
+  m.order = byteOrder(target) - 0.5;
+  gDrag = null;
+  normalizeGroup(g);
   saveMeta();
   renderGlobals();
 }
@@ -1078,25 +1189,92 @@ async function renameByte(i) {
   renderGlobals();
 }
 
-/** Betekenis van de waardes, zoals de synth ze in zijn menu's toont. */
-async function editLabels(i) {
+/**
+ * Labels voor de waardes: links de waarde, rechts de naam die de synth
+ * ervoor toont, met een plusje om er meer bij te maken.
+ */
+function labelEditor(i) {
   const m = bmeta(i);
-  const cur = Object.keys(m.labels || {}).map(Number).sort((a, b) => a - b)
-    .map(k => k + "=" + m.labels[k]).join(", ");
-  const t = await askText("Waardes van #" + i + " een naam geven.\n\n"
-    + "Schrijf als:  0=Rx, 1=Tx, 2=Both\nLeeg laten wist de labels.", cur);
-  if (t === null) return;
-  const labels = {};
-  for (const part of t.split(",")) {
-    const eq = part.indexOf("=");
-    if (eq < 0) continue;
-    const k = parseInt(part.slice(0, eq).trim(), 10);
-    const v = part.slice(eq + 1).trim();
-    if (!isNaN(k) && k >= 0 && k <= 255 && v) labels[k] = v;
+  const box = document.createElement("div");
+  box.className = "extra";
+  const rows = document.createElement("div");
+  box.appendChild(rows);
+
+  const addRow = (val, lab) => {
+    const r = document.createElement("div");
+    r.className = "labrow";
+    const v = document.createElement("input");
+    v.type = "number"; v.min = 0; v.max = 255; v.className = "v"; v.value = val;
+    const l = document.createElement("input");
+    l.type = "text"; l.className = "l"; l.placeholder = "naam van deze waarde"; l.value = lab;
+    const x = document.createElement("button");
+    x.className = "mini"; x.textContent = "×"; x.title = "regel weghalen";
+    x.addEventListener("click", () => rows.removeChild(r));
+    r.appendChild(v); r.appendChild(l); r.appendChild(x);
+    rows.appendChild(r);
+    return r;
+  };
+
+  const entries = Object.keys(m.labels || {}).map(Number).sort((a, b) => a - b);
+  if (entries.length) entries.forEach(k => addRow(k, m.labels[k]));
+  else addRow(gData.bytes[i], "");
+
+  const bar = document.createElement("div");
+  bar.className = "labrow";
+  const plus = document.createElement("button");
+  plus.className = "mini"; plus.textContent = "+ waarde";
+  plus.addEventListener("click", () => {
+    // children is geen echte lijst in de browser, dus eerst omzetten
+    const used = Array.from(rows.children).map(r => +r.children[0].value);
+    let n = 0;
+    while (used.includes(n) && n < 255) n++;
+    addRow(n, "");
+  });
+  const save = document.createElement("button");
+  save.className = "mini"; save.textContent = "Opslaan";
+  save.addEventListener("click", () => {
+    const labels = {};
+    for (const r of Array.from(rows.children)) {
+      const k = parseInt(r.children[0].value, 10);
+      const t = (r.children[1].value || "").trim();
+      if (!isNaN(k) && k >= 0 && k <= 255 && t) labels[k] = t;
+    }
+    if (Object.keys(labels).length) m.labels = labels; else delete m.labels;
+    saveMeta();
+    gOpen[i] = null;
+    renderGlobals();
+  });
+  const close = document.createElement("button");
+  close.className = "mini"; close.textContent = "Sluiten";
+  close.addEventListener("click", () => { gOpen[i] = null; renderGlobals(); });
+  bar.appendChild(plus); bar.appendChild(save); bar.appendChild(close);
+  box.appendChild(bar);
+  return box;
+}
+
+/** Keuzelijst om de instelling in een menu te zetten (naast slepen). */
+function menuPicker(i) {
+  const box = document.createElement("div");
+  box.className = "extra";
+  const sel = document.createElement("select");
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "— geen menu —";
+  sel.appendChild(none);
+  for (const [id, label] of groupOptions()) {
+    const o = document.createElement("option");
+    o.value = id; o.textContent = label;
+    sel.appendChild(o);
   }
-  if (Object.keys(labels).length) m.labels = labels; else delete m.labels;
-  saveMeta();
-  renderGlobals();
+  sel.value = groupOf(i) || "";
+  sel.addEventListener("change", () => {
+    if (sel.value) bmeta(i).group = sel.value; else delete bmeta(i).group;
+    normalizeGroup(sel.value);
+    saveMeta();
+    gOpen[i] = null;
+    renderGlobals();
+  });
+  box.appendChild(sel);
+  return box;
 }
 
 async function writeByte(i, nv, btn, oldVal) {
@@ -1120,6 +1298,9 @@ function groupHeader(g, depth) {
   const h = document.createElement("div");
   h.className = "ghead";
   h.style.marginLeft = (depth * 12) + "px";
+  h.draggable = true;
+  h.addEventListener("dragstart", () => { gDrag = {kind: "group", id: g.id}; });
+  allowDrop(h, () => dropOnGroup(g.id));
 
   const tog = document.createElement("button");
   tog.className = "mini";
@@ -1143,11 +1324,13 @@ function groupHeader(g, depth) {
   });
   h.appendChild(t);
 
-  const sub = document.createElement("button");
-  sub.className = "mini"; sub.textContent = "+";
-  sub.title = "submenu toevoegen";
-  sub.addEventListener("click", () => addGroup(g.id));
-  h.appendChild(sub);
+  if (depth < MAX_DEPTH) {
+    const sub = document.createElement("button");
+    sub.className = "mini"; sub.textContent = "+";
+    sub.title = "submenu toevoegen";
+    sub.addEventListener("click", () => addGroup(g.id));
+    h.appendChild(sub);
+  }
 
   const del = document.createElement("button");
   del.className = "mini"; del.textContent = "×";
@@ -1164,30 +1347,36 @@ function groupHeader(g, depth) {
   return h;
 }
 
-function byteCard(i, depth, changed) {
+function byteCard(i, changed) {
   const m = gmeta.bytes[i] || {};
   const v = gData.bytes[i];
-  const box = document.createElement("div");
-  box.className = "p" + (changed.has(i) ? " changed" : "");
-  box.style.marginLeft = (depth * 12) + "px";
-  box.dataset.byte = i;
+  const card = document.createElement("div");
+  card.className = "gcard" + (changed.has(i) ? " changed" : "");
+  card.dataset.byte = i;
+  card.draggable = true;
+  card.addEventListener("dragstart", () => { gDrag = {kind: "byte", i}; });
+  allowDrop(card, () => dropOnByte(i));
 
-  const lab = document.createElement("div");
-  lab.className = "plab";
-  const ls = document.createElement("span");
-  ls.textContent = "#" + String(i).padStart(2, "0") + " · "
-    + (m.name || (changed.has(i) ? "net veranderd — geef een naam" : "onbekend"));
-  if (!m.name) ls.style.color = "var(--muted)";
-  ls.addEventListener("click", () => renameByte(i));
-  const vs = document.createElement("span");
-  vs.className = "pval";
-  vs.textContent = m.labels && m.labels[v] ? m.labels[v] : String(v);
-  lab.appendChild(ls);
-  lab.appendChild(vs);
-  box.appendChild(lab);
+  const top = document.createElement("div");
+  top.className = "top";
+  const idx = document.createElement("span");
+  idx.className = "idx";
+  idx.textContent = "#" + String(i).padStart(2, "0");
+  idx.title = "sleep naar een menu of tussen andere instellingen";
+  const nm = document.createElement("span");
+  nm.className = "nm";
+  nm.textContent = m.name || (changed.has(i) ? "net veranderd" : "onbekend");
+  if (!m.name) nm.style.color = "var(--muted)";
+  nm.title = "tik om een naam te geven";
+  nm.addEventListener("click", () => renameByte(i));
+  const val = document.createElement("span");
+  val.className = "val";
+  val.textContent = m.labels && m.labels[v] ? m.labels[v] + " · " + v : String(v);
+  top.appendChild(idx); top.appendChild(nm); top.appendChild(val);
+  card.appendChild(top);
 
-  const row = document.createElement("div");
-  row.className = "row";
+  const ctl = document.createElement("div");
+  ctl.className = "ctl";
 
   if (m.labels && Object.keys(m.labels).length) {
     const sel = document.createElement("select");
@@ -1196,48 +1385,56 @@ function byteCard(i, depth, changed) {
     vals.sort((a, b) => a - b).forEach(n => {
       const o = document.createElement("option");
       o.value = n;
-      o.textContent = (m.labels[n] || "onbekend") + " (" + n + ")";
+      o.textContent = (m.labels[n] || "onbekend") + " · " + n;
       sel.appendChild(o);
     });
     sel.value = v;
     sel.addEventListener("change", () => writeByte(i, +sel.value, sel, v));
-    row.appendChild(sel);
+    ctl.appendChild(sel);
   } else {
     const inp = document.createElement("input");
     inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
     const set = document.createElement("button");
     set.className = "mini"; set.textContent = "Zet";
+    set.title = "deze waarde naar de synth sturen";
     set.addEventListener("click", () =>
       writeByte(i, Math.max(0, Math.min(255, parseInt(inp.value, 10))), set, v));
-    row.appendChild(inp);
-    row.appendChild(set);
+    ctl.appendChild(inp);
+    ctl.appendChild(set);
   }
+
+  const read = document.createElement("button");
+  read.className = "mini"; read.textContent = "⟳";
+  read.title = "opnieuw uitlezen bij de synth";
+  read.addEventListener("click", () => {
+    const ok = AndroidBridge.requestGlobals(devId);
+    flash(read, ok);
+    statusText.textContent = ok ? "opnieuw uitlezen…" : "niet verbonden";
+  });
+  ctl.appendChild(read);
 
   const lb = document.createElement("button");
-  lb.className = "mini"; lb.textContent = "Labels";
+  lb.className = "mini"; lb.textContent = "abc";
   lb.title = "namen voor de waardes";
-  lb.addEventListener("click", () => editLabels(i));
-  row.appendChild(lb);
-
-  const gsel = document.createElement("select");
-  const none = document.createElement("option");
-  none.value = ""; none.textContent = "— geen menu —";
-  gsel.appendChild(none);
-  for (const [id, label] of groupOptions()) {
-    const o = document.createElement("option");
-    o.value = id; o.textContent = label;
-    gsel.appendChild(o);
-  }
-  gsel.value = groupOf(i) || "";
-  gsel.addEventListener("change", () => {
-    if (gsel.value) bmeta(i).group = gsel.value; else delete bmeta(i).group;
-    saveMeta();
+  lb.addEventListener("click", () => {
+    gOpen[i] = gOpen[i] === "labels" ? null : "labels";
     renderGlobals();
   });
-  row.appendChild(gsel);
+  ctl.appendChild(lb);
 
-  box.appendChild(row);
-  return box;
+  const mn = document.createElement("button");
+  mn.className = "mini"; mn.textContent = "≡";
+  mn.title = "in een menu zetten";
+  mn.addEventListener("click", () => {
+    gOpen[i] = gOpen[i] === "menu" ? null : "menu";
+    renderGlobals();
+  });
+  ctl.appendChild(mn);
+
+  card.appendChild(ctl);
+  if (gOpen[i] === "labels") card.appendChild(labelEditor(i));
+  if (gOpen[i] === "menu") card.appendChild(menuPicker(i));
+  return card;
 }
 
 function renderGlobals() {
@@ -1246,37 +1443,51 @@ function renderGlobals() {
   list.innerHTML = "";
 
   const changed = new Set(gData ? gData.changed || [] : []);
+  if (changed.size) {
+    gLastChanged = [...changed].map(i => "#" + String(i).padStart(2, "0")).join(", ");
+  }
   stat.textContent = !gData
     ? "Nog niet uitgelezen — tik op ‘Lees uit synth’. Menu's aanmaken kan al wel."
     : `${gData.bytes.length} instellingen · lezing ${gData.rev}`
       + (gData.hadPrevious
-          ? (changed.size ? ` · ${changed.size} veranderd sinds de vorige lezing`
+          ? (changed.size ? ` · nu veranderd: ${gLastChanged}`
                           : " · niets veranderd sinds de vorige lezing")
-          : " · verander iets op de synth en lees opnieuw om ze te herkennen");
+          : " · verander iets op de synth en lees opnieuw om ze te herkennen")
+      + (gLastChanged && !changed.size ? ` · laatst veranderd: ${gLastChanged}` : "")
+      + (gWatch ? " · volgen aan" : "");
+
+  const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
+  const grid = (members, depth) => {
+    if (!members.length) return;
+    const g = document.createElement("div");
+    g.className = "ggrid";
+    g.style.marginLeft = (depth * 12) + "px";
+    members.forEach(i => g.appendChild(byteCard(i, changed)));
+    list.appendChild(g);
+  };
 
   const drawGroup = (g, depth) => {
     list.appendChild(groupHeader(g, depth));
     if (g.open === false) return;
-    if (gData) {
-      gData.bytes.forEach((_, i) => {
-        if (groupOf(i) === g.id) list.appendChild(byteCard(i, depth + 1, changed));
-      });
-    }
-    for (const c of gmeta.groups.filter(x => x.parent === g.id)) drawGroup(c, depth + 1);
+    grid(membersOf(g.id), depth + 1);
+    gmeta.groups.filter(x => x.parent === g.id).sort(byOrder)
+      .forEach(c => drawGroup(c, depth + 1));
   };
-  for (const g of gmeta.groups.filter(x => !x.parent)) drawGroup(g, 0);
+  gmeta.groups.filter(x => !x.parent).sort(byOrder).forEach(g => drawGroup(g, 0));
 
   if (!gData) return;
-  const rest = gData.bytes.map((_, i) => i).filter(i => !groupOf(i));
-  if (rest.length) {
-    if (gmeta.groups.length) {
-      const h = document.createElement("div");
-      h.className = "ghead";
-      h.textContent = "Niet ingedeeld";
-      list.appendChild(h);
-    }
-    for (const i of rest) list.appendChild(byteCard(i, 0, changed));
+  const rest = membersOf(null);
+  if (rest.length || gmeta.groups.length) {
+    const h = document.createElement("div");
+    h.className = "ghead";
+    const t = document.createElement("span");
+    t.className = "gtitle";
+    t.textContent = rest.length ? "Niet ingedeeld" : "Niet ingedeeld (leeg)";
+    h.appendChild(t);
+    allowDrop(h, () => dropOnGroup(null));   // hierheen slepen haalt uit een menu
+    list.appendChild(h);
   }
+  grid(rest, 0);
 }
 
 function loadGlobals() {
@@ -1297,6 +1508,23 @@ gReadBtn.addEventListener("click", () => {
   flash(gReadBtn, ok);
   statusText.textContent = ok ? "globale instellingen opgevraagd…" : "niet verbonden";
 });
+// Volgen: blijft uitlezen, zodat je op de synth iets kunt verzetten en direct
+// ziet welke byte daarbij hoort. Dat is de snelste manier om ze te herkennen.
+const gWatchBtn = document.getElementById("gWatchBtn");
+gWatchBtn.addEventListener("click", () => {
+  gWatch = !gWatch;
+  gWatchBtn.classList.toggle("on", gWatch);
+  clearInterval(gWatchTimer);
+  gWatchTimer = null;
+  if (gWatch) {
+    AndroidBridge.requestGlobals(devId);
+    gWatchTimer = setInterval(() => AndroidBridge.requestGlobals(devId), 1500);
+    statusText.textContent = "volgen aan — verzet nu iets in het GLOBAL-menu van de synth";
+  } else {
+    statusText.textContent = "volgen uit";
+  }
+});
+
 document.getElementById("gNewMenu").addEventListener("click", () => addGroup(null));
 document.getElementById("gExportBtn").addEventListener("click", () => {
   AndroidBridge.copyToClipboard(JSON.stringify(gmeta));

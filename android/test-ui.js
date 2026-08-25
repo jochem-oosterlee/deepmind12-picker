@@ -38,8 +38,9 @@ function makeEl(id) {
     },
     addEventListener(ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); },
     removeEventListener() {},
-    appendChild(c) { this.children.push(c); return c; },
-    removeChild() {},
+    appendChild(c) { this.children.push(c); c.parentEl = this; return c; },
+    removeChild(c) { this.children = this.children.filter(x => x !== c); },
+    remove() { if (this.parentEl) this.parentEl.removeChild(this); },
     querySelector() { return makeEl("sub"); },
     querySelectorAll() { return []; },
     focus() {}, select() {}, click() { this.fire("click"); },
@@ -139,6 +140,13 @@ if (!tabs.children.some(t => t.textContent === "Global")) {
 }
 if (grid.children.length !== 128) { console.error("FOUT: presetraster niet opgebouwd"); process.exit(1); }
 
+// kaartjes zitten nu in rasters per menu, dus recursief tellen
+function countCards(el) {
+  let n = String(el.className || "").includes("gcard") ? 1 : 0;
+  for (const c of el.children || []) n += countCards(c);
+  return n;
+}
+
 // elke tab openen en de inhoud renderen
 let failures = 0;
 for (const t of [...tabs.children]) {
@@ -147,10 +155,11 @@ for (const t of [...tabs.children]) {
     t.fire("click");
     const list = document.getElementById("paramList");
     const glist = document.getElementById("gList");
+    const cards = countCards(glist);
     console.log("tab", JSON.stringify(t.textContent), "-> parameters:", list.children.length,
-                t.textContent === "Global" ? "| globale bytes: " + glist.children.length : "");
-    if (t.textContent === "Global" && glist.children.length !== 45) {
-      console.error("FOUT: globale instellingen niet gerenderd");
+                t.textContent === "Global" ? "| globale instellingen: " + cards : "");
+    if (t.textContent === "Global" && cards !== 45) {
+      console.error("FOUT: globale instellingen niet gerenderd (" + cards + ")");
       failures++;
     }
   } catch (e) {
@@ -171,7 +180,7 @@ try {
 for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
                   "libExportBtn","readBtn","pushBtn","autoBtn","gReadBtn","gHelpBtn",
-                  "findBtn"]) {
+                  "findBtn","gWatchBtn","gExportBtn"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");
@@ -206,6 +215,10 @@ setTimeout(() => {
   const gAfter = document.getElementById("gList").children.length;
   console.log("menu aanmaken:", gBefore, "->", gAfter, "elementen in de lijst");
   if (gAfter <= gBefore) { console.error("FOUT: menu niet toegevoegd"); failures++; }
+  if (countCards(document.getElementById("gList")) !== 45) {
+    console.error("FOUT: instellingen kwijt na het aanmaken van een menu");
+    failures++;
+  }
 
   if (global.__onerror && errors.length) console.log("meldingen:", errors);
   console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
