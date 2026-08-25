@@ -90,9 +90,20 @@ public class MainActivity extends Activity {
 
     /** Verbind (app-gebonden) met het accesspoint van de DeepMind. Android 10+. */
     private void connectSpecifier(String ssid, String password) {
+        Toast.makeText(this, "WiFi-verzoek: " + ssid, Toast.LENGTH_SHORT).show();
         if (Build.VERSION.SDK_INT < 29) {
             wifiState = "vereist Android 10+; verbind handmatig via instellingen";
             return;
+        }
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wm != null && !wm.isWifiEnabled()) {
+                wifiState = "WiFi staat uit — zet WiFi aan in Android";
+                Toast.makeText(this, wifiState, Toast.LENGTH_LONG).show();
+                return;
+            }
+        } catch (Exception ignored) {
         }
         disconnectSpecifier();
         wifiState = "verbinden met " + ssid + "…";
@@ -131,7 +142,12 @@ public class MainActivity extends Activity {
                 wifiState = "WiFi-verbinding verbroken";
             }
         };
-        cm.requestNetwork(req, specCallback, new Handler(Looper.getMainLooper()));
+        try {
+            cm.requestNetwork(req, specCallback, new Handler(Looper.getMainLooper()));
+        } catch (Exception e) {
+            wifiState = "WiFi-verzoek mislukt: " + e.getMessage();
+            specCallback = null;
+        }
     }
 
     private void disconnectSpecifier() {

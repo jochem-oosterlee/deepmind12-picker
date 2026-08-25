@@ -87,11 +87,15 @@
 <footer>
   <b>Tik</b> = preset laden · <b>lang indrukken</b> = hernoemen · <b>★</b> = favoriet (eigen tabblad) ·
   Back-up kopieert je namen als tekst naar het klembord.<br>
-  Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i> of <i>Both</i>.
+  Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i> of <i>Both</i>. · v1.4
 </footer>
 
 <script>
 "use strict";
+window.onerror = (msg) => {
+  const el = document.getElementById("statusText");
+  if (el) el.textContent = "JS-fout: " + msg;
+};
 const BANKS = ["A","B","C","D","E","F","G","H"];
 const PROGS = 128;
 
