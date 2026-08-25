@@ -47,8 +47,29 @@ Two details cost real debugging time and are worth knowing:
   segment **ends with `F0`** and a continuation **starts with `F7`**. Treating that
   trailing `F0` as data shifts everything after it — which shows up as unreadable
   preset names from the fourteenth name onwards.
-- On connecting, the app sends an **App Notify** SysEx. The synth then enables NRPN
-  and SysEx on that interface and reports its device ID and current program.
+- On connecting, the app sends an **App Notify** SysEx. The synth replies with its
+  device ID, MIDI channel and current program. The manual claims this also switches
+  the interface to NRPN automatically; measured on a DeepMind 12 it does **not** —
+  set the control mode for the interface you use to NrPr yourself.
+
+### Global settings (measured, not in the manual)
+
+The manual documents 24 global settings and a 45-byte block. Neither still holds:
+
+- The block is **56 bytes**. A DeepMind 12 answers a Global Parameter Dump Request
+  with 64 packed bytes, so cutting off at 45 loses eleven settings — among them the
+  three WiFi interface settings the 2016 manual does not mention at all.
+- Global settings are ordinary **NRPN parameters at 300 + the byte position**.
+  Verified on bytes 33, 36, 46 and 51. This is how the synth reports them too:
+  change one on the panel and it sends that NRPN number.
+- Writing the settings block back (a Global Parameter Dump Response) is accepted
+  for some bytes and silently refused for others — byte 46 refused every value
+  while byte 33 took them. NRPN is accepted for all of them, so that is what this
+  app uses.
+- SysEx command `0x17` (11 bytes) is sent when a setting is changed on the panel;
+  it does not appear for changes made over MIDI. Undocumented, and not needed.
+- Parameter names and value labels cannot be read from the synth — MIDI carries
+  numbers only. The Global tab lets you name them once and export the result.
 
 ## Android app
 
