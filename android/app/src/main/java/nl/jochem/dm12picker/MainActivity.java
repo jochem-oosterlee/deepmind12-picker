@@ -139,30 +139,30 @@ public class MainActivity extends Activity {
                 }
             }, new Handler(Looper.getMainLooper()));
         } catch (Exception e) {
-            Toast.makeText(this, "WiFi-binding mislukt: " + e.getMessage(),
+            Toast.makeText(this, "WiFi binding failed: " + e.getMessage(),
                     Toast.LENGTH_LONG).show();
         }
     }
 
     /** Verbind (app-gebonden) met het accesspoint van de DeepMind. Android 10+. */
     private void connectSpecifier(String ssid, String password) {
-        Toast.makeText(this, "WiFi-verzoek: " + ssid, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "WiFi request: " + ssid, Toast.LENGTH_SHORT).show();
         if (Build.VERSION.SDK_INT < 29) {
-            wifiState = "vereist Android 10+; verbind handmatig via instellingen";
+            wifiState = "needs Android 10+; connect manually in settings";
             return;
         }
         try {
             WifiManager wm = (WifiManager) getApplicationContext()
                     .getSystemService(Context.WIFI_SERVICE);
             if (wm != null && !wm.isWifiEnabled()) {
-                wifiState = "WiFi staat uit — zet WiFi aan in Android";
+                wifiState = "WiFi is off - turn WiFi on in Android";
                 Toast.makeText(this, wifiState, Toast.LENGTH_LONG).show();
                 return;
             }
         } catch (Exception ignored) {
         }
         disconnectSpecifier();
-        wifiState = "verbinden met " + ssid + "…";
+        wifiState = "connecting to " + ssid + "...";
         WifiNetworkSpecifier.Builder spec = new WifiNetworkSpecifier.Builder()
                 .setSsid(ssid);
         if (password != null && !password.isEmpty()) {
@@ -179,7 +179,7 @@ public class MainActivity extends Activity {
                 specActive = true;
                 cm.bindProcessToNetwork(network);
                 if (session != null) session.bindTo(network);
-                wifiState = "WiFi verbonden: " + ssid;
+                wifiState = "WiFi connected: " + ssid;
                 // de synth is de gateway van zijn eigen accesspoint
                 retargetToGateway();
             }
@@ -187,7 +187,7 @@ public class MainActivity extends Activity {
             @Override
             public void onUnavailable() {
                 specActive = false;
-                wifiState = "WiFi-verbinding mislukt of geannuleerd";
+                wifiState = "WiFi connection failed or cancelled";
                 specCallback = null;
             }
 
@@ -195,13 +195,13 @@ public class MainActivity extends Activity {
             public void onLost(Network network) {
                 specActive = false;
                 cm.bindProcessToNetwork(null);
-                wifiState = "WiFi-verbinding verbroken";
+                wifiState = "WiFi disconnected";
             }
         };
         try {
             cm.requestNetwork(req, specCallback, new Handler(Looper.getMainLooper()));
         } catch (Exception e) {
-            wifiState = "WiFi-verzoek mislukt: " + e.getMessage();
+            wifiState = "WiFi request failed: " + e.getMessage();
             specCallback = null;
         }
     }
@@ -217,7 +217,7 @@ public class MainActivity extends Activity {
         if (specActive) {
             specActive = false;
             cm.bindProcessToNetwork(null);
-            wifiState = "WiFi losgekoppeld";
+            wifiState = "WiFi released";
         }
     }
 
@@ -440,7 +440,7 @@ public class MainActivity extends Activity {
                 ClipboardManager cmgr = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 cmgr.setPrimaryClip(ClipData.newPlainText("dm12-presets", text));
                 Toast.makeText(MainActivity.this,
-                        "Back-up naar klembord gekopieerd", Toast.LENGTH_SHORT).show();
+                        "Backup copied to the clipboard", Toast.LENGTH_SHORT).show();
             });
         }
 

@@ -32,7 +32,7 @@ public class AppleMidiSession {
     private volatile boolean stop = false;
 
     volatile boolean connected = false;
-    volatile String status = "wacht op verbinding";
+    volatile String status = "waiting for a connection";
     volatile String lastEvent = "";
 
     /** Meldingen over binnenkomende MIDI van de synth. */
@@ -108,13 +108,13 @@ public class AppleMidiSession {
         if (discovering) return;
         discovering = true;
         discovered.clear();
-        discoverStatus = "zoeken…";
+        discoverStatus = "searching...";
         new Thread(() -> {
             DatagramSocket s = null;
             try {
                 String own = localIpv4();
                 if (own == null) {
-                    discoverStatus = "geen netwerkverbinding";
+                    discoverStatus = "no network connection";
                     return;
                 }
                 String base = own.substring(0, own.lastIndexOf('.') + 1);
@@ -156,10 +156,10 @@ public class AppleMidiSession {
                     }
                 }
                 discoverStatus = discovered.isEmpty()
-                        ? "niets gevonden op " + base + "x"
-                        : discovered.size() + " apparaat/apparaten gevonden";
+                        ? "nothing found on " + base + "x"
+                        : discovered.size() + " device(s) found";
             } catch (Exception e) {
-                discoverStatus = "zoeken mislukt: " + e.getMessage();
+                discoverStatus = "search failed: " + e.getMessage();
             } finally {
                 if (s != null) s.close();
                 discovering = false;
@@ -215,7 +215,7 @@ public class AppleMidiSession {
                 // volgende poortpaar proberen
             }
         }
-        throw new RuntimeException("geen vrije UDP-poorten");
+        throw new RuntimeException("no free UDP ports");
     }
 
     public void retarget(String ip) {
@@ -226,7 +226,7 @@ public class AppleMidiSession {
             phase = 0;
             lastInviteMs = 0;
             inviteCount = 0;
-            status = "wacht op verbinding";
+            status = "waiting for a connection";
         }
     }
 
@@ -237,7 +237,7 @@ public class AppleMidiSession {
                 network.bindSocket(ctrl);
                 network.bindSocket(data);
             } catch (Exception e) {
-                status = "WiFi-binding mislukt: " + e.getMessage();
+                status = "WiFi binding failed: " + e.getMessage();
                 return;
             }
             connected = false;
@@ -265,7 +265,7 @@ public class AppleMidiSession {
         try {
             s.send(new DatagramPacket(pkt, pkt.length, InetAddress.getByName(ip), port));
         } catch (Exception e) {
-            status = "netwerkfout: " + e.getMessage();
+            status = "network error: " + e.getMessage();
         }
     }
 
@@ -285,7 +285,7 @@ public class AppleMidiSession {
         }
         if (!connected && !status.startsWith("netwerkfout")
                 && !status.startsWith("WiFi-binding")) {
-            status = "zoekt " + peerIp + " (poging " + inviteCount + ")";
+            status = "looking for " + peerIp + " (attempt " + inviteCount + ")";
         }
     }
 
@@ -320,7 +320,7 @@ public class AppleMidiSession {
                         connected = false;
                         phase = 0;
                         lastInviteMs = 0;
-                        status = "verbinding verloren, opnieuw verbinden";
+                        status = "connection lost, reconnecting";
                     }
                 }
             }
@@ -353,9 +353,9 @@ public class AppleMidiSession {
         boolean isCommand = pkt.length >= 4
                 && pkt[0] == (byte) 0xFF && pkt[1] == (byte) 0xFF;
         lastEvent = isCommand
-                ? "ontving " + (char) (pkt[2] & 0xFF) + (char) (pkt[3] & 0xFF)
-                        + " van " + from.getHostAddress()
-                : "ontving MIDI-data van " + from.getHostAddress();
+                ? "received " + (char) (pkt[2] & 0xFF) + (char) (pkt[3] & 0xFF)
+                        + " from " + from.getHostAddress()
+                : "received MIDI data from " + from.getHostAddress();
         if (isCommand) {
             ByteBuffer b = ByteBuffer.wrap(pkt);
             char c1 = (char) (pkt[2] & 0xFF);
@@ -371,14 +371,14 @@ public class AppleMidiSession {
                         } else if (phase == 2 && sock == data) {
                             connected = true;
                             String peerName = extractName(pkt, 16);
-                            status = "verbonden met " + (peerName.isEmpty() ? peerIp : peerName);
+                            status = "connected to " + (peerName.isEmpty() ? peerIp : peerName);
                             lastSyncMs = System.currentTimeMillis();
                             sendCk(0, tsNow(), 0, 0);
                         }
                     }
                     break;
                 case "NO":
-                    status = "verbinding geweigerd door apparaat";
+                    status = "connection refused by the device";
                     phase = 0;
                     break;
                 case "IN":
@@ -407,7 +407,7 @@ public class AppleMidiSession {
                     connected = false;
                     phase = 0;
                     lastInviteMs = 0;
-                    status = "apparaat verbrak de verbinding";
+                    status = "the device closed the connection";
                     break;
                 default:
                     break;

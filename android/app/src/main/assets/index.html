@@ -848,7 +848,7 @@ function pval(p) {
 }
 function fmt(p, v) {
   if (p.k === "e") return p.o[v] !== undefined ? p.o[v] : v;
-  if (p.k === "t") return v ? "aan" : "uit";
+  if (p.k === "t") return v ? "on" : "off";
   if (p.k === "b") return (v - 128 > 0 ? "+" : "") + (v - 128);
   return String(v);
 }
@@ -905,11 +905,11 @@ function renderParams() {
     } else if (p.k === "t") {
       const btn = document.createElement("button");
       btn.className = "tog" + (v ? " on" : "");
-      btn.textContent = v ? "aan" : "uit";
+      btn.textContent = v ? "on" : "off";
       btn.addEventListener("click", () => {
         const nv = btn.classList.contains("on") ? 0 : 1;
         btn.classList.toggle("on", !!nv);
-        btn.textContent = nv ? "aan" : "uit";
+        btn.textContent = nv ? "on" : "off";
         vs.textContent = fmt(p, nv);
         sendParam(p, nv);
       });
@@ -1593,7 +1593,7 @@ function byteCard(i) {
   idx.title = "drag onto a menu, or between other settings";
   const nm = document.createElement("span");
   nm.className = "nm";
-  nm.textContent = m.name || (isRecent(i) ? "net veranderd" : "onbekend");
+  nm.textContent = m.name || (isRecent(i) ? "just changed" : "unknown");
   if (!m.name) nm.style.color = "var(--muted)";
   nm.title = "click to name it";
   nm.addEventListener("click", () => renameByte(i));
@@ -1614,7 +1614,7 @@ function byteCard(i) {
     vals.sort((a, b) => a - b).forEach(n => {
       const o = document.createElement("option");
       o.value = n;
-      o.textContent = (m.labels[n] || "onbekend") + " · " + n;
+      o.textContent = (m.labels[n] || "unnamed") + " · " + n;
       sel.appendChild(o);
     });
     sel.value = v;

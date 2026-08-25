@@ -103,7 +103,7 @@ class AppleMIDISession:
             except OSError:
                 c.close()
                 d.close()
-        raise RuntimeError("geen vrije UDP-poorten gevonden")
+        raise RuntimeError("no free UDP ports found")
 
     def retarget(self, ip, port=APPLEMIDI_PORT):
         with self.lock:

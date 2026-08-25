@@ -219,8 +219,8 @@ public class SysexLibrary {
                 }
                 nameDumps++;
                 badNames += bad;
-                lastInfo = "bank " + (char) ('A' + bank) + ": " + good + " namen"
-                        + (bad > 0 ? ", " + bad + " onleesbaar" : "");
+                lastInfo = "bank " + (char) ('A' + bank) + ": " + good + " names"
+                        + (bad > 0 ? ", " + bad + " unreadable" : "");
                 break;
             }
             case 0x02: { // Program Dump Response
@@ -238,7 +238,7 @@ public class SysexLibrary {
                     }
                 }
                 patchDumps++;
-                lastInfo = "patch " + (char) ('A' + bank) + (prog + 1) + " ontvangen";
+                lastInfo = "patch " + (char) ('A' + bank) + (prog + 1) + " received";
                 break;
             }
             case 0x04: { // Edit Buffer Dump Response
@@ -248,7 +248,7 @@ public class SysexLibrary {
                     editBuffer = data;
                 }
                 paramRev++;
-                lastInfo = "edit buffer ontvangen (" + data.length + " bytes)";
+                lastInfo = "edit buffer received (" + data.length + " bytes)";
                 break;
             }
             case 0x06: { // Global Parameter Dump Response
@@ -262,7 +262,7 @@ public class SysexLibrary {
                     globalsPacked = packed;
                 }
                 globalRev++;
-                lastInfo = "globale instellingen ontvangen (" + data.length + " bytes)";
+                lastInfo = "global settings received (" + data.length + " bytes)";
                 break;
             }
             case 0x10: { // Control App Notify Response
@@ -271,12 +271,12 @@ public class SysexLibrary {
                 ifaceId = m[9] & 0x7F;
                 curBank = m[10] & 0x07;
                 curProg = m[11] & 0x7F;
-                lastInfo = "synth meldt zich: bank " + (char) ('A' + curBank)
+                lastInfo = "synth reports: bank " + (char) ('A' + curBank)
                         + (curProg + 1);
                 break;
             }
             default:
-                lastInfo = "SysEx 0x" + Integer.toHexString(cmd) + " ontvangen";
+                lastInfo = "SysEx 0x" + Integer.toHexString(cmd) + " received";
                 break;
         }
     }
@@ -487,7 +487,7 @@ public class SysexLibrary {
                 }
             }
         } catch (Exception e) {
-            lastInfo = "opslaan mislukt: " + e.getMessage();
+            lastInfo = "saving failed: " + e.getMessage();
         }
     }
 
@@ -511,7 +511,7 @@ public class SysexLibrary {
                 }
             }
         } catch (Exception e) {
-            lastInfo = "laden mislukt: " + e.getMessage();
+            lastInfo = "loading failed: " + e.getMessage();
         }
     }
 }
