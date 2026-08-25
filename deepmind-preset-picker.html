@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepMind 12 — Program Picker</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel2: #23272e;
+    --border: #32363e;
+    --text: #e8eaed;
+    --muted: #8a919c;
+    --accent: #4da3ff;
+    --accent-dim: #2a5a8f;
+    --active: #ffb547;
+    --star: #ffd24d;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-right: auto;
+    white-space: nowrap;
+  }
+  h1 span { color: var(--accent); }
+  select, input[type="text"], button {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    font-size: 13px;
+    outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  #status {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  #status.ok { color: #6fd487; border-color: #2c5237; }
+  #status.err { color: #ff7b72; border-color: #6b2f2c; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  #search { flex: 1; min-width: 180px; }
+
+  .banks {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .bank-btn {
+    padding: 8px 0;
+    width: 52px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .bank-btn.selected {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .bank-btn.fav-tab.selected {
+    background: #5c4a15;
+    border-color: var(--star);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+  }
+  .prog {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 10px 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.1s, background 0.1s;
+    min-height: 58px;
+  }
+  .prog:hover { border-color: var(--accent); background: var(--panel2); }
+  .prog.current {
+    border-color: var(--active);
+    background: #2c2415;
+  }
+  .prog .num {
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .prog.current .num { color: var(--active); }
+  .prog .name {
+    font-size: 13px;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .prog .name input {
+    width: 100%;
+    padding: 2px 4px;
+    font-size: 13px;
+    border-radius: 4px;
+  }
+  .prog .star {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 13px;
+    color: var(--border);
+    cursor: pointer;
+  }
+  .prog .star:hover { color: var(--star); }
+  .prog .star.on { color: var(--star); }
+
+  footer {
+    margin-top: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  footer kbd {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: inherit;
+  }
+  .empty {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    padding: 30px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DeepMind <span>12</span> — Program Picker</h1>
+  <label style="font-size:12px;color:var(--muted)">MIDI-uitgang</label>
+  <select id="midiOut"><option>MIDI wordt geladen…</option></select>
+  <label style="font-size:12px;color:var(--muted)">Kanaal</label>
+  <select id="midiCh"></select>
+  <div id="status">initialiseren…</div>
+</header>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Zoek preset op naam of nummer (in alle banken)…">
+  <button id="exportBtn" title="Namen en favorieten opslaan als JSON-bestand">Exporteren</button>
+  <button id="importBtn" title="Eerder geëxporteerd JSON-bestand inladen">Importeren</button>
+  <input type="file" id="importFile" accept=".json" style="display:none">
+</div>
+
+<div class="banks" id="bankTabs"></div>
+<div class="grid" id="grid"></div>
+
+<footer>
+  <b>Klik</b> op een preset om hem te laden op de DeepMind 12 &nbsp;·&nbsp;
+  <b>Dubbelklik</b> om te hernoemen (wordt lokaal bewaard) &nbsp;·&nbsp;
+  <b>★</b> markeert favorieten (zie tabblad ★) &nbsp;·&nbsp;
+  <kbd>←</kbd><kbd>→</kbd> vorige/volgende preset<br>
+  Zorg dat op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i> of <i>Both</i> staat en dat het MIDI-kanaal overeenkomt.<br>
+  Werkt via USB, DIN-MIDI-interface of WiFi: verbind de DeepMind via <i>GLOBAL → CONNECTIVITY → NETWORK SETTINGS</i> en koppel hem op de pc met
+  <a href="https://www.tobias-erichsen.de/software/rtpmidi.html" style="color:var(--accent)">rtpMIDI</a> — de rtpMIDI-poort verschijnt dan vanzelf in de lijst hierboven.
+</footer>
+
+<script>
+"use strict";
+
+const BANKS = ["A","B","C","D","E","F","G","H"];
+const PROGS_PER_BANK = 128;
+
+// ---------- opslag ----------
+const store = {
+  load(key, fallback) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+    catch { return fallback; }
+  },
+  save(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  }
+};
+
+let names = store.load("dm12.names", {});      // {"A-0": "Naam", ...}
+let favs = new Set(store.load("dm12.favs", [])); // ["A-0", ...]
+let channel = store.load("dm12.channel", 0);   // 0-based
+let currentBank = store.load("dm12.bank", "A"); // "A".."H" of "FAV"
+let current = store.load("dm12.current", null); // "A-0"
+let preferredOut = store.load("dm12.out", null);
+
+// ---------- MIDI ----------
+let midi = null;
+let output = null;
+const statusEl = document.getElementById("status");
+const outSel = document.getElementById("midiOut");
+const chSel = document.getElementById("midiCh");
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls || "";
+}
+
+function refreshOutputs() {
+  const outputs = [...midi.outputs.values()];
+  outSel.innerHTML = "";
+  if (outputs.length === 0) {
+    outSel.innerHTML = "<option>geen MIDI-uitgangen gevonden</option>";
+    output = null;
+    setStatus("geen MIDI-apparaat — sluit de DeepMind 12 aan via USB", "err");
+    return;
+  }
+  for (const o of outputs) {
+    const opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.name;
+    outSel.appendChild(opt);
+  }
+  // voorkeur: eerder gekozen poort, anders iets met "deepmind" in de naam
+  let pick = outputs.find(o => o.id === preferredOut)
+          || outputs.find(o => /deepmind/i.test(o.name))
+          || outputs[0];
+  outSel.value = pick.id;
+  output = pick;
+  setStatus("verbonden: " + pick.name, "ok");
+}
+
+outSel.addEventListener("change", () => {
+  output = midi.outputs.get(outSel.value) || null;
+  if (output) {
+    preferredOut = output.id;
+    store.save("dm12.out", preferredOut);
+    setStatus("verbonden: " + output.name, "ok");
+  }
+});
+
+for (let i = 0; i < 16; i++) {
+  const opt = document.createElement("option");
+  opt.value = i;
+  opt.textContent = i + 1;
+  chSel.appendChild(opt);
+}
+chSel.value = channel;
+chSel.addEventListener("change", () => {
+  channel = parseInt(chSel.value, 10);
+  store.save("dm12.channel", channel);
+});
+
+function sendProgram(bank, prog) {
+  if (!output) { setStatus("geen MIDI-uitgang geselecteerd", "err"); return; }
+  const bankIdx = BANKS.indexOf(bank);
+  // DeepMind 12: bank A-H = Bank Select LSB (CC32) 0-7, MSB (CC0) blijft 0
+  output.send([0xB0 | channel, 0x00, 0x00]);
+  output.send([0xB0 | channel, 0x20, bankIdx]);
+  output.send([0xC0 | channel, prog]);
+  current = bank + "-" + prog;
+  store.save("dm12.current", current);
+  setStatus(`verstuurd: bank ${bank}, programma ${prog + 1} (${output.name})`, "ok");
+  updateCurrent();
+}
+
+// markeer de actieve preset zonder het grid te herbouwen
+// (een volledige rebuild zou de dubbelklik voor hernoemen breken)
+function updateCurrent() {
+  for (const el of document.querySelectorAll(".prog")) {
+    el.classList.toggle("current", el.dataset.key === current);
+  }
+}
+
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess({ sysex: false }).then(access => {
+    midi = access;
+    refreshOutputs();
+    midi.onstatechange = refreshOutputs;
+  }, () => setStatus("MIDI-toegang geweigerd — sta MIDI toe in de browser", "err"));
+} else {
+  setStatus("deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge", "err");
+}
+
+// ---------- UI ----------
+const grid = document.getElementById("grid");
+const bankTabs = document.getElementById("bankTabs");
+const search = document.getElementById("search");
+
+function progName(key) {
+  return names[key] || "";
+}
+
+function progLabel(bank, prog) {
+  const key = bank + "-" + prog;
+  return names[key] || `Preset ${bank}${prog + 1}`;
+}
+
+function buildTabs() {
+  bankTabs.innerHTML = "";
+  for (const b of BANKS) {
+    const btn = document.createElement("button");
+    btn.className = "bank-btn" + (currentBank === b ? " selected" : "");
+    btn.textContent = b;
+    btn.addEventListener("click", () => {
+      currentBank = b;
+      store.save("dm12.bank", b);
+      search.value = "";
+      render();
+    });
+    bankTabs.appendChild(btn);
+  }
+  const fav = document.createElement("button");
+  fav.className = "bank-btn fav-tab" + (currentBank === "FAV" ? " selected" : "");
+  fav.textContent = "★";
+  fav.title = "Favorieten";
+  fav.addEventListener("click", () => {
+    currentBank = "FAV";
+    store.save("dm12.bank", "FAV");
+    search.value = "";
+    render();
+  });
+  bankTabs.appendChild(fav);
+}
+
+function visibleProgs() {
+  const q = search.value.trim().toLowerCase();
+  const list = [];
+  if (q) {
+    // zoeken over alle banken
+    for (const b of BANKS) {
+      for (let p = 0; p < PROGS_PER_BANK; p++) {
+        const key = b + "-" + p;
+        const label = (progName(key) || `preset ${b}${p + 1}`).toLowerCase();
+        const numStr = (b + (p + 1)).toLowerCase();
+        if (label.includes(q) || numStr === q || String(p + 1) === q) {
+          list.push([b, p]);
+        }
+      }
+    }
+    return list;
+  }
+  if (currentBank === "FAV") {
+    for (const key of favs) {
+      const [b, p] = key.split("-");
+      list.push([b, parseInt(p, 10)]);
+    }
+    list.sort((x, y) => x[0] === y[0] ? x[1] - y[1] : BANKS.indexOf(x[0]) - BANKS.indexOf(y[0]));
+    return list;
+  }
+  for (let p = 0; p < PROGS_PER_BANK; p++) list.push([currentBank, p]);
+  return list;
+}
+
+function render() {
+  buildTabs();
+  grid.innerHTML = "";
+  const progs = visibleProgs();
+  if (progs.length === 0) {
+    const div = document.createElement("div");
+    div.className = "empty";
+    div.textContent = currentBank === "FAV" && !search.value
+      ? "Nog geen favorieten — klik op de ★ van een preset."
+      : "Geen presets gevonden.";
+    grid.appendChild(div);
+    return;
+  }
+  for (const [bank, prog] of progs) {
+    const key = bank + "-" + prog;
+    const div = document.createElement("div");
+    div.className = "prog" + (current === key ? " current" : "");
+    div.dataset.key = key;
+
+    const num = document.createElement("div");
+    num.className = "num";
+    num.textContent = bank + String(prog + 1).padStart(3, "0");
+    div.appendChild(num);
+
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = progLabel(bank, prog);
+    if (!progName(key)) name.style.color = "var(--muted)";
+    div.appendChild(name);
+
+    const star = document.createElement("span");
+    star.className = "star" + (favs.has(key) ? " on" : "");
+    star.textContent = "★";
+    star.title = "Favoriet";
+    star.addEventListener("click", e => {
+      e.stopPropagation();
+      if (favs.has(key)) favs.delete(key); else favs.add(key);
+      store.save("dm12.favs", [...favs]);
+      render();
+    });
+    div.appendChild(star);
+
+    div.addEventListener("click", () => sendProgram(bank, prog));
+    div.addEventListener("dblclick", e => {
+      e.stopPropagation();
+      startRename(div, key, bank, prog);
+    });
+    grid.appendChild(div);
+  }
+}
+
+function startRename(div, key, bank, prog) {
+  const nameEl = div.querySelector(".name");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = progName(key);
+  input.placeholder = `Preset ${bank}${prog + 1}`;
+  nameEl.innerHTML = "";
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+  const finish = save => {
+    if (save) {
+      const v = input.value.trim();
+      if (v) names[key] = v; else delete names[key];
+      store.save("dm12.names", names);
+    }
+    render();
+  };
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("click", e => e.stopPropagation());
+}
+
+search.addEventListener("input", render);
+
+// pijltjestoetsen: vorige/volgende preset
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  let bank = "A", prog = 0;
+  if (current) {
+    const [b, p] = current.split("-");
+    bank = b; prog = parseInt(p, 10);
+  }
+  let idx = BANKS.indexOf(bank) * PROGS_PER_BANK + prog + (e.key === "ArrowRight" ? 1 : -1);
+  idx = Math.max(0, Math.min(BANKS.length * PROGS_PER_BANK - 1, idx));
+  sendProgram(BANKS[Math.floor(idx / PROGS_PER_BANK)], idx % PROGS_PER_BANK);
+});
+
+// ---------- import / export ----------
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const data = { names, favs: [...favs] };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "deepmind12-presets.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+const importFile = document.getElementById("importFile");
+document.getElementById("importBtn").addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", () => {
+  const file = importFile.files[0];
+  if (!file) return;
+  file.text().then(text => {
+    try {
+      const data = JSON.parse(text);
+      if (data.names && typeof data.names === "object") names = data.names;
+      if (Array.isArray(data.favs)) favs = new Set(data.favs);
+      store.save("dm12.names", names);
+      store.save("dm12.favs", [...favs]);
+      render();
+      setStatus("import gelukt", "ok");
+    } catch {
+      setStatus("import mislukt: geen geldig JSON-bestand", "err");
+    }
+  });
+  importFile.value = "";
+});
+
+render();
+</script>
+</body>
+</html>

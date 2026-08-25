@@ -1,0 +1,16 @@
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+
+# Gebouwde APK: zie GitHub Releases
+DM12-Picker.apk
+*.apk
+
+# Handleiding (copyright Behringer/Music Tribe)
+*.pdf
+
+__pycache__/

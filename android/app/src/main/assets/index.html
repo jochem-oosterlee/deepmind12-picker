@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepMind 12 — Program Picker</title>
+<style>
+  :root {
+    --bg:#14161a; --panel:#1d2026; --panel2:#23272e; --border:#32363e;
+    --text:#e8eaed; --muted:#8a919c; --accent:#4da3ff; --accent-dim:#2a5a8f;
+    --active:#ffb547; --star:#ffd24d; --radius:10px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; padding:12px; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; }
+  h1 { font-size:17px; font-weight:600; margin-right:auto; white-space:nowrap; }
+  h1 span { color:var(--accent); }
+  select, input[type="text"], button {
+    background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    border-radius:var(--radius); padding:10px 12px; font-size:14px; outline:none;
+  }
+  select:focus, input:focus { border-color:var(--accent); }
+  button { cursor:pointer; }
+  #status { display:flex; align-items:center; gap:8px; font-size:13px; padding:8px 12px;
+    border-radius:var(--radius); background:var(--panel); border:1px solid var(--border); color:var(--muted); }
+  #dot { width:10px; height:10px; border-radius:50%; background:#ff7b72; flex:none; }
+  #dot.ok { background:#6fd487; }
+  #ipInput { width:130px; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  #search { flex:1; min-width:150px; }
+  .banks { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .bank-btn { flex:1; min-width:44px; padding:12px 0; text-align:center; font-weight:600; font-size:15px; }
+  .bank-btn.selected { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+  .bank-btn.fav-tab.selected { background:#5c4a15; border-color:var(--star); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .prog { position:relative; background:var(--panel); border:1px solid var(--border);
+    border-radius:var(--radius); padding:12px 12px 10px; cursor:pointer; user-select:none; min-height:64px; }
+  .prog:active { background:var(--panel2); border-color:var(--accent); }
+  .prog.current { border-color:var(--active); background:#2c2415; }
+  .prog .num { font-size:11px; color:var(--muted); }
+  .prog.current .num { color:var(--active); }
+  .prog .name { font-size:14px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prog .name input { width:100%; padding:4px; font-size:14px; border-radius:6px; }
+  .prog .star { position:absolute; top:4px; right:4px; font-size:16px; padding:6px; color:var(--border); }
+  .prog .star.on { color:var(--star); }
+  footer { margin-top:16px; font-size:12px; color:var(--muted); line-height:1.7; }
+  .empty { grid-column:1/-1; color:var(--muted); padding:30px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DeepMind <span>12</span> — Picker</h1>
+  <div id="status"><span id="dot"></span><span id="statusText">verbinden…</span></div>
+  <input type="text" id="ipInput" placeholder="IP DeepMind" title="IP van de DeepMind (GLOBAL → CONNECTIVITY → NETWORK SETTINGS)">
+  <button id="ipBtn">Verbind</button>
+  <label style="font-size:12px;color:var(--muted)">Kanaal</label>
+  <select id="midiCh"></select>
+</header>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Zoek preset…">
+  <button id="exportBtn" title="Namen + favorieten naar klembord">Back-up</button>
+  <button id="importBtn" title="Back-up van klembord terugzetten">Herstel</button>
+</div>
+
+<div class="banks" id="bankTabs"></div>
+<div class="grid" id="grid"></div>
+
+<footer>
+  <b>Tik</b> = preset laden · <b>lang indrukken</b> = hernoemen · <b>★</b> = favoriet (eigen tabblad) ·
+  Back-up kopieert je namen als tekst naar het klembord.<br>
+  Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i> of <i>Both</i>.
+</footer>
+
+<script>
+"use strict";
+const BANKS = ["A","B","C","D","E","F","G","H"];
+const PROGS = 128;
+
+const store = {
+  load(k, f) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch { return f; } },
+  save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+let names = store.load("dm12.names", {});
+let favs = new Set(store.load("dm12.favs", []));
+let channel = store.load("dm12.channel", 0);
+let currentBank = store.load("dm12.bank", "A");
+let current = store.load("dm12.current", null);
+
+// ---------- status & instellingen ----------
+const dot = document.getElementById("dot");
+const statusText = document.getElementById("statusText");
+const ipInput = document.getElementById("ipInput");
+
+function poll() {
+  try {
+    const s = JSON.parse(AndroidBridge.getStatus());
+    dot.className = s.connected ? "ok" : "";
+    statusText.textContent = s.status;
+    if (document.activeElement !== ipInput) ipInput.value = s.ip;
+  } catch {
+    dot.className = "";
+    statusText.textContent = "bridge-fout";
+  }
+}
+setInterval(poll, 2000); poll();
+
+document.getElementById("ipBtn").addEventListener("click", () => {
+  AndroidBridge.setIp(ipInput.value.trim());
+  setTimeout(poll, 300);
+});
+
+const chSel = document.getElementById("midiCh");
+for (let i = 0; i < 16; i++) {
+  const o = document.createElement("option");
+  o.value = i; o.textContent = i + 1; chSel.appendChild(o);
+}
+chSel.value = channel;
+chSel.addEventListener("change", () => { channel = +chSel.value; store.save("dm12.channel", channel); });
+
+// ---------- versturen ----------
+function sendProgram(bank, prog) {
+  const ok = AndroidBridge.send(BANKS.indexOf(bank), prog, channel);
+  if (ok) {
+    current = bank + "-" + prog;
+    store.save("dm12.current", current);
+    statusText.textContent = `verstuurd: ${bank}${prog + 1}`;
+    dot.className = "ok";
+  } else {
+    statusText.textContent = "niet verbonden met DeepMind";
+    dot.className = "";
+  }
+  updateCurrent();
+}
+
+// actieve preset markeren zonder het grid te herbouwen
+function updateCurrent() {
+  for (const el of document.querySelectorAll(".prog")) {
+    el.classList.toggle("current", el.dataset.key === current);
+  }
+}
+
+// ---------- UI ----------
+const grid = document.getElementById("grid");
+const bankTabs = document.getElementById("bankTabs");
+const search = document.getElementById("search");
+
+function progName(key) { return names[key] || ""; }
+function progLabel(b, p) { return names[b + "-" + p] || `Preset ${b}${p + 1}`; }
+
+function buildTabs() {
+  bankTabs.innerHTML = "";
+  for (const b of BANKS.concat(["FAV"])) {
+    const btn = document.createElement("button");
+    const isFav = b === "FAV";
+    btn.className = "bank-btn" + (isFav ? " fav-tab" : "") + (currentBank === b ? " selected" : "");
+    btn.textContent = isFav ? "★" : b;
+    btn.addEventListener("click", () => {
+      currentBank = b; store.save("dm12.bank", b); search.value = ""; render();
+    });
+    bankTabs.appendChild(btn);
+  }
+}
+
+function visibleProgs() {
+  const q = search.value.trim().toLowerCase();
+  const list = [];
+  if (q) {
+    for (const b of BANKS) for (let p = 0; p < PROGS; p++) {
+      const label = (progName(b + "-" + p) || `preset ${b}${p + 1}`).toLowerCase();
+      if (label.includes(q) || (b + (p + 1)).toLowerCase() === q || String(p + 1) === q) list.push([b, p]);
+    }
+    return list;
+  }
+  if (currentBank === "FAV") {
+    for (const key of favs) { const [b, p] = key.split("-"); list.push([b, +p]); }
+    list.sort((x, y) => x[0] === y[0] ? x[1] - y[1] : BANKS.indexOf(x[0]) - BANKS.indexOf(y[0]));
+    return list;
+  }
+  for (let p = 0; p < PROGS; p++) list.push([currentBank, p]);
+  return list;
+}
+
+let pressTimer = null, longPressed = false;
+
+function render() {
+  buildTabs();
+  grid.innerHTML = "";
+  const progs = visibleProgs();
+  if (!progs.length) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.textContent = currentBank === "FAV" && !search.value
+      ? "Nog geen favorieten — tik op de ★ van een preset." : "Geen presets gevonden.";
+    grid.appendChild(d);
+    return;
+  }
+  for (const [bank, prog] of progs) {
+    const key = bank + "-" + prog;
+    const div = document.createElement("div");
+    div.className = "prog" + (current === key ? " current" : "");
+    div.dataset.key = key;
+
+    const num = document.createElement("div");
+    num.className = "num";
+    num.textContent = bank + String(prog + 1).padStart(3, "0");
+    div.appendChild(num);
+
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = progLabel(bank, prog);
+    if (!progName(key)) name.style.color = "var(--muted)";
+    div.appendChild(name);
+
+    const star = document.createElement("span");
+    star.className = "star" + (favs.has(key) ? " on" : "");
+    star.textContent = "★";
+    star.addEventListener("click", e => {
+      e.stopPropagation();
+      if (favs.has(key)) favs.delete(key); else favs.add(key);
+      store.save("dm12.favs", [...favs]);
+      render();
+    });
+    div.appendChild(star);
+
+    // tik = versturen, lang indrukken = hernoemen
+    const startPress = () => {
+      longPressed = false;
+      pressTimer = setTimeout(() => { longPressed = true; startRename(div, key, bank, prog); }, 550);
+    };
+    const endPress = () => clearTimeout(pressTimer);
+    div.addEventListener("touchstart", startPress, { passive: true });
+    div.addEventListener("touchend", endPress);
+    div.addEventListener("touchmove", endPress, { passive: true });
+    div.addEventListener("mousedown", startPress);
+    div.addEventListener("mouseup", endPress);
+    div.addEventListener("mouseleave", endPress);
+    div.addEventListener("click", () => { if (!longPressed) sendProgram(bank, prog); });
+    div.addEventListener("contextmenu", e => e.preventDefault());
+    grid.appendChild(div);
+  }
+}
+
+function startRename(div, key, bank, prog) {
+  const nameEl = div.querySelector(".name");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = progName(key);
+  input.placeholder = `Preset ${bank}${prog + 1}`;
+  nameEl.innerHTML = "";
+  nameEl.appendChild(input);
+  input.focus();
+  const finish = save => {
+    if (save) {
+      const v = input.value.trim();
+      if (v) names[key] = v; else delete names[key];
+      store.save("dm12.names", names);
+    }
+    render();
+  };
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("click", e => e.stopPropagation());
+}
+
+search.addEventListener("input", render);
+
+// ---------- back-up via klembord ----------
+document.getElementById("exportBtn").addEventListener("click", () => {
+  AndroidBridge.copyToClipboard(JSON.stringify({ names, favs: [...favs] }));
+});
+document.getElementById("importBtn").addEventListener("click", () => {
+  try {
+    const d = JSON.parse(AndroidBridge.readClipboard());
+    if (d.names && typeof d.names === "object") names = d.names;
+    if (Array.isArray(d.favs)) favs = new Set(d.favs);
+    store.save("dm12.names", names);
+    store.save("dm12.favs", [...favs]);
+    render();
+    statusText.textContent = "back-up hersteld";
+  } catch { alert("Geen geldige back-up op het klembord"); }
+});
+
+render();
+</script>
+</body>
+</html>
