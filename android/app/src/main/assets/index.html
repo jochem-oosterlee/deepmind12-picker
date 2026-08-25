@@ -1222,6 +1222,7 @@ let gFocusEl = null;
 // open keuzelijst zijn focus kwijt bij iedere lezing.
 let gCards = {};
 let gEditors = {};
+let gBuilt = false, gBuiltLen = -1;
 const HILITE_MS = 8000;
 
 // Bij elke wijziging blijft de vorige versie bewaard, zodat handwerk niet
@@ -1995,6 +1996,7 @@ function renderGlobals() {
   gFocusEl = null;
   gCards = {};
   gEditors = {};
+  gBuilt = false;
   updateGStat();
 
   const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
@@ -2030,7 +2032,11 @@ function renderGlobals() {
   }
   grid(rest, 0);
 
-  // cursor terugzetten waar hij stond: het volgen bouwt de kaartjes opnieuw op
+  // vanaf nu alleen bijwerken; herbouwen gebeurt pas bij een structuurwijziging
+  gBuilt = Object.keys(gCards).length > 0;
+  gBuiltLen = gData ? gData.bytes.length : -1;
+
+  // cursor terugzetten waar hij stond, voor het geval er wel herbouwd is
   if (gFocusEl && gFocusEl.focus) {
     gFocusEl.focus();
     try {
@@ -2046,8 +2052,10 @@ function loadGlobals() {
     if (g && Array.isArray(g.bytes)) {
       gData = g;
       if (tab !== "global") return true;
-      // staan de kaartjes er al? Dan alleen bijwerken, niet herbouwen.
-      if (Object.keys(gCards).length === g.bytes.length) updateGlobalsInPlace();
+      // Staan de kaartjes er al? Dan alleen bijwerken, niet herbouwen. Niet
+      // tellen hoeveel kaartjes er zijn: bij een ingeklapt menu zijn dat er
+      // minder, en dan zou elke lezing alles herbouwen — met verlies van focus.
+      if (gBuilt && gBuiltLen === g.bytes.length) updateGlobalsInPlace();
       else renderGlobals();
       return true;
     }

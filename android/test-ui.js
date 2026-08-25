@@ -128,9 +128,14 @@ global.AndroidBridge = {
 };
 
 // één instelling voorzien van een bereik, om de weergave daarvan te controleren
+// Ook een ingeklapt menu met een instelling erin: dan zijn er minder kaartjes
+// gebouwd dan er instellingen zijn, wat het bijwerken niet mag verstoren.
 global.localStorage.setItem("dm12.gmeta", JSON.stringify({
-  groups: [], sets: [],
-  bytes: {"3": {name: "Transpose", type: "range", from: -48, unit: "semitones"}},
+  groups: [{id: "g1", name: "MIDI", open: false, order: 1}], sets: [],
+  bytes: {
+    "3": {name: "Transpose", type: "range", from: -48, unit: "semitones"},
+    "7": {name: "Hidden one", group: "g1"},
+  },
 }));
 
 // script uitvoeren
@@ -176,7 +181,8 @@ for (const t of [...tabs.children]) {
     const cards = countCards(glist);
     console.log("tab", JSON.stringify(t.textContent), "-> parameters:", list.children.length,
                 t.textContent === "Global" ? "| globale instellingen: " + cards : "");
-    if (t.textContent === "Global" && cards !== 45) {
+    // één instelling zit in een ingeklapt menu, dus 44 van de 45 zichtbaar
+    if (t.textContent === "Global" && cards !== 44) {
       console.error("FOUT: globale instellingen niet gerenderd (" + cards + ")");
       failures++;
     }
@@ -275,7 +281,7 @@ setTimeout(() => {
   const gAfter = document.getElementById("gList").children.length;
   console.log("menu aanmaken:", gBefore, "->", gAfter, "elementen in de lijst");
   if (gAfter <= gBefore) { console.error("FOUT: menu niet toegevoegd"); failures++; }
-  if (countCards(document.getElementById("gList")) !== 45) {
+  if (countCards(document.getElementById("gList")) !== 44) {
     console.error("FOUT: instellingen kwijt na het aanmaken van een menu");
     failures++;
   }
