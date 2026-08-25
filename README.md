@@ -70,9 +70,24 @@ gradle assembleDebug   # of open de map in Android Studio
 De APK verschijnt in `android/app/build/outputs/apk/debug/`; een gebouwde versie
 staat onder [Releases](../../releases).
 
-Voer voor het bouwen `node android/test-ui.js android/app/src/main/assets/index.html`
-uit: dat draait de interface-code met een nagebootste DOM en native laag, klikt
-elke tab en knop aan en controleert dat de juiste MIDI-berichten eruit komen. De app detecteert de DeepMind automatisch
+Twee testsuites, beide zonder emulator of apparaat:
+
+```
+node android/test-ui.js android/app/src/main/assets/index.html
+```
+draait de interface-code met een nagebootste DOM en native laag, klikt elke tab
+en knop aan en controleert de MIDI-berichten die eruit komen.
+
+```
+javac -d out android/app/src/main/java/nl/jochem/dm12picker/RtpMidiParser.java \
+      android/app/src/main/java/nl/jochem/dm12picker/SysexLibrary.java \
+      android/test/RtpMidiParserTest.java
+java -cp out nl.jochem.dm12picker.RtpMidiParserTest
+```
+test de RTP-MIDI-ontleding en de bibliotheek: een complete banknamen-dump wordt
+ingepakt, in stukken geknipt zoals RFC 6295 dat doet en er weer uitgehaald,
+inclusief namen, categorie en patchdata. `RtpMidiParser` en `SysexLibrary` zijn
+daarom vrij van Android-afhankelijkheden. De app detecteert de DeepMind automatisch
 als WiFi-gateway. Tik = preset laden, lang indrukken = hernoemen.
 
 ## Licentie

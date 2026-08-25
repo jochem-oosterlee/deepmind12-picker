@@ -362,11 +362,11 @@ public class MainActivity extends Activity {
             String s = lib.statusJson();
             // diagnose van de ontvangstkant erbij, zodat de UI kan tonen wat er aankomt
             return s.substring(0, s.length() - 1)
-                    + ",\"pkts\":" + session.midiPackets
-                    + ",\"sysex\":" + session.sysexCount
-                    + ",\"sysexLen\":" + session.lastSysexLen
-                    + ",\"segs\":" + session.sysexSegments
-                    + ",\"framing\":" + session.framingErrors + "}";
+                    + ",\"pkts\":" + session.parser.packets
+                    + ",\"sysex\":" + session.parser.sysexCount
+                    + ",\"sysexLen\":" + session.parser.lastSysexLen
+                    + ",\"segs\":" + session.parser.segments
+                    + ",\"framing\":" + session.parser.framingErrors + "}";
         }
 
         @JavascriptInterface
