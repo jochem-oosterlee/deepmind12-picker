@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        web.setBackgroundColor(0xFF14161A);
+        web.setBackgroundColor(0xFFF3F5F9);   // zelfde grondtoon als de pagina
         web.addJavascriptInterface(new Bridge(), "AndroidBridge");
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);

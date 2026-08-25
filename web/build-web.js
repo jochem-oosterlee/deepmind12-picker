@@ -15,8 +15,9 @@ const appHtml = path.join(root, "android/app/src/main/assets/index.html");
 const bridgeJs = path.join(__dirname, "bridge.js");
 const outFile = path.join(root, "dm12-web.html");
 
-let html = fs.readFileSync(appHtml, "utf8");
-const bridge = fs.readFileSync(bridgeJs, "utf8");
+// regeleindes gelijktrekken, zodat het ankerpunt hieronder altijd past
+let html = fs.readFileSync(appHtml, "utf8").replace(/\r\n/g, "\n");
+const bridge = fs.readFileSync(bridgeJs, "utf8").replace(/\r\n/g, "\n");
 
 // de verbindingslaag moet klaarstaan voordat de interface begint
 const marker = '<script>\n"use strict";';

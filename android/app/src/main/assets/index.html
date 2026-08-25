@@ -6,188 +6,213 @@
 <title>DeepMind 12 — Controller</title>
 <style>
   :root {
-    --bg:#14161a; --panel:#1d2026; --panel2:#23272e; --border:#32363e;
-    --text:#e8eaed; --muted:#8a919c; --accent:#4da3ff; --accent-dim:#2a5a8f;
-    --active:#ffb547; --star:#ffd24d; --ok:#6fd487; --bad:#ff7b72; --radius:10px;
+    /* licht thema met indigo als accent */
+    --bg:#f3f5f9; --panel:#ffffff; --panel2:#f7f9fc; --border:#dde2ec;
+    --text:#1e2748; --muted:#7c869c; --accent:#2f3d7c; --accent-soft:#eef1f9;
+    --active:#a2571a; --active-soft:#fdf3e7; --star:#c9930b;
+    --ok:#256b47; --ok-soft:#eaf4ee; --bad:#a6301f;
+    --wave-bg:#fdfdff; --wave-grid:#eceff6; --wave-axis:#dde2ec;
+    --shadow:0 1px 2px rgba(20,30,60,.05), 0 1px 3px rgba(20,30,60,.06);
+    --radius:9px;
   }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif;
-    padding:0 10px 24px; font-size:14px; }
+  body { background:var(--bg); color:var(--text); font-size:13px;
+    font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;
+    padding:0 10px 20px; -webkit-font-smoothing:antialiased; }
 
   /* ---- kop ---- */
-  #topbar { position:sticky; top:0; z-index:20; background:var(--bg); padding:8px 0 0;
+  #topbar { position:sticky; top:0; z-index:20; background:var(--bg); padding:7px 0 0;
     border-bottom:1px solid var(--border); }
-  .row { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
-  #led { width:14px; height:14px; border-radius:50%; background:var(--bad); flex:none;
-    box-shadow:0 0 6px rgba(255,123,114,.6); }
-  #led.wifi { background:var(--active); box-shadow:0 0 6px rgba(255,181,71,.6); }
-  #led.ok { background:var(--ok); box-shadow:0 0 8px rgba(111,212,135,.7); }
-  #statusText { flex:1; min-width:0; font-size:12px; color:var(--muted);
+  .row { display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+  #led { width:11px; height:11px; border-radius:50%; background:var(--bad); flex:none; }
+  #led.wifi { background:var(--active); }
+  #led.ok { background:var(--ok); }
+  #statusText { flex:1; min-width:0; font-size:11px; color:var(--muted);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  select, input[type="text"], button {
-    background:var(--panel2); color:var(--text); border:1px solid var(--border);
-    border-radius:var(--radius); padding:8px 10px; font-size:13px; outline:none; }
+  select, input[type="text"], input[type="number"], button {
+    background:var(--panel); color:var(--text); border:1px solid var(--border);
+    border-radius:var(--radius); padding:6px 9px; font-size:12px; outline:none;
+    font-family:inherit; }
   select:focus, input:focus { border-color:var(--accent); }
-  button { cursor:pointer; transition:background .08s, border-color .08s, transform .08s; }
-  button:active { background:var(--accent-dim); border-color:var(--accent); color:#fff;
-    transform:scale(.96); }
-  /* knippert kort na een actie, zodat je ziet dat er iets verstuurd is */
-  button.flash { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
-  button.mini { padding:6px 8px; font-size:12px; }
-  #autoBtn.on, #gWatchBtn.on, #logBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
+  button { cursor:pointer; color:var(--muted);
+    transition:color .08s, border-color .08s, background .08s, transform .08s; }
+  button:hover { color:var(--text); }
+  button:active { border-color:var(--accent); color:var(--accent);
+    background:var(--accent-soft); transform:scale(.97); }
+  /* aan-stand: omlijnd in het accent, zoals op het paneel van de synth */
+  button.on, button.flash { color:var(--accent); border-color:var(--accent);
+    background:var(--panel); box-shadow:inset 0 0 0 1px var(--accent); }
+  button.mini { padding:5px 8px; font-size:11px; }
+  #autoBtn.on, #gWatchBtn.on, #logBtn.on { color:var(--ok); border-color:var(--ok);
+    background:var(--ok-soft); box-shadow:none; }
   #settings input { flex:1; min-width:70px; }
-  #tabs { display:flex; gap:5px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none; }
+  #tabs { display:flex; gap:4px; overflow-x:auto; padding-bottom:7px; scrollbar-width:none; }
   #tabs::-webkit-scrollbar { display:none; }
-  .tab { flex:none; padding:8px 12px; font-size:13px; white-space:nowrap; }
-  .tab.sel { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+  .tab { flex:none; padding:6px 11px; font-size:12px; white-space:nowrap; }
+  .tab.sel { color:var(--accent); border-color:var(--accent); background:var(--accent-soft);
+    box-shadow:inset 0 0 0 1px var(--accent); font-weight:600; }
+
+  /* ---- dunne fader met ronde knop ---- */
+  input[type=range] { -webkit-appearance:none; appearance:none; background:transparent; }
+  input[type=range]::-webkit-slider-runnable-track { height:3px; border-radius:3px;
+    background:var(--border); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px;
+    margin-top:-5px; border-radius:50%; background:var(--accent); border:none; }
+  input[type=range]::-moz-range-track { height:3px; border-radius:3px; background:var(--border); }
+  input[type=range]::-moz-range-thumb { width:13px; height:13px; border:none;
+    border-radius:50%; background:var(--accent); }
 
   /* ---- presets ---- */
-  .banks { display:flex; gap:5px; margin:10px 0; flex-wrap:wrap; }
-  .bank-btn { flex:1; min-width:38px; padding:10px 0; text-align:center; font-weight:600; }
-  .bank-btn.sel { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
-  .bank-btn.fav.sel { background:#5c4a15; border-color:var(--star); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:8px; }
+  .banks { display:flex; gap:4px; margin:8px 0; flex-wrap:wrap; }
+  .bank-btn { flex:1; min-width:34px; padding:8px 0; text-align:center; font-weight:600; }
+  .bank-btn.sel { color:var(--accent); border-color:var(--accent);
+    background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent); }
+  .bank-btn.fav.sel { color:var(--star); border-color:var(--star);
+    box-shadow:inset 0 0 0 1px var(--star); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:6px; }
   .prog { position:relative; background:var(--panel); border:1px solid var(--border);
-    border-radius:var(--radius); padding:10px 10px 8px; cursor:pointer; user-select:none; min-height:60px; }
-  .prog:active { background:var(--panel2); border-color:var(--accent); }
-  .prog.current { border-color:var(--active); background:#2c2415; }
-  .prog .num { font-size:11px; color:var(--muted); }
-  .prog.current .num { color:var(--active); }
-  .prog .name { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .prog .name input { width:100%; padding:3px; font-size:13px; border-radius:6px; }
-  .prog .star { position:absolute; top:2px; right:2px; font-size:15px; padding:6px; color:var(--border); }
+    border-radius:var(--radius); padding:7px 8px; cursor:pointer; user-select:none;
+    min-height:50px; box-shadow:var(--shadow); }
+  .prog:active { border-color:var(--accent); }
+  .prog.current { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+  .prog .num { font-size:10px; color:var(--muted); }
+  .prog.current .num { color:var(--accent); }
+  .prog .name { margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prog .name input { width:100%; padding:2px 3px; font-size:12px; border-radius:5px; }
+  .prog .star { position:absolute; top:1px; right:1px; font-size:13px; padding:5px;
+    color:var(--border); }
   .prog .star.on { color:var(--star); }
-  .prog .cat { font-size:10px; color:var(--accent); text-transform:uppercase; }
+  .prog .cat { font-size:9px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.4px; }
 
   /* ---- parameters ---- */
-  .phead { margin:14px 0 6px; font-size:12px; font-weight:600; color:var(--accent);
-    text-transform:uppercase; letter-spacing:.5px; }
+  .phead { margin:12px 0 5px; font-size:11px; font-weight:600; color:var(--accent);
+    text-transform:uppercase; letter-spacing:.7px; }
   .p { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
-    padding:8px 10px; margin-bottom:6px; }
-  .p .plab { display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-bottom:2px; }
-  .p .pval { color:var(--accent); font-variant-numeric:tabular-nums; }
-  .p input[type=range] { width:100%; height:26px; accent-color:var(--accent); background:transparent; }
-  .p select { width:100%; margin-top:4px; }
-  .p .tog { width:100%; margin-top:4px; }
-  .p.changed { border-color:var(--active); background:#2c2415; }
-  .p .tog.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+    padding:6px 9px; margin-bottom:5px; box-shadow:var(--shadow); }
+  .p .plab { display:flex; justify-content:space-between; gap:8px; font-size:12px; }
+  .p .pval { color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600; }
+  .p input[type=range] { width:100%; height:20px; }
+  .p select { width:100%; margin-top:3px; }
+  .p .tog { width:100%; margin-top:3px; }
+  .p.changed { border-color:var(--active); background:var(--active-soft); }
+  .p .tog.on { color:var(--accent); border-color:var(--accent); }
 
   /* ---- bibliotheek ---- */
-  .lrow { display:flex; align-items:center; gap:6px; background:var(--panel);
-    border:1px solid var(--border); border-radius:var(--radius); padding:8px 10px; margin-bottom:5px; }
-  .lrow .lnum { font-size:11px; color:var(--muted); width:38px; flex:none; }
+  .lrow { display:flex; align-items:center; gap:5px; background:var(--panel);
+    border:1px solid var(--border); border-radius:var(--radius); padding:6px 9px;
+    margin-bottom:4px; box-shadow:var(--shadow); }
+  .lrow .lnum { font-size:10px; color:var(--muted); width:36px; flex:none; }
   .lrow .lname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .lrow .lcat { font-size:10px; color:var(--accent); text-transform:uppercase; flex:none; }
-  .lrow .dotp { width:7px; height:7px; border-radius:50%; background:var(--border); flex:none; }
+  .lrow .lcat { font-size:9px; color:var(--muted); text-transform:uppercase; flex:none; }
+  .lrow .dotp { width:6px; height:6px; border-radius:50%; background:var(--border); flex:none; }
   .lrow .dotp.has { background:var(--ok); }
-  .note { font-size:12px; color:var(--muted); line-height:1.6; margin:8px 0; }
-  /* eigen dialoog: een WebView negeert confirm() en alert() */
-  #modal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50;
+  .note { font-size:11px; color:var(--muted); line-height:1.55; margin:6px 0; }
+
+  /* ---- eigen dialoog: een WebView negeert confirm() en alert() ---- */
+  #modal { position:fixed; inset:0; background:rgba(30,39,72,.35); z-index:50;
     display:flex; align-items:center; justify-content:center; padding:20px; }
   #modal .box { background:var(--panel); border:1px solid var(--border);
-    border-radius:14px; padding:16px; max-width:420px; width:100%; }
-  #modalText { font-size:14px; line-height:1.5; margin-bottom:14px; white-space:pre-line; }
+    border-radius:14px; padding:16px; max-width:420px; width:100%;
+    box-shadow:0 10px 30px rgba(20,30,60,.18); }
+  #modalText { font-size:13px; line-height:1.5; margin-bottom:12px; white-space:pre-line; }
+  #modalYes { color:var(--accent); border-color:var(--accent); }
   .grow { flex:1; }
-  .gchanged { border-color:var(--active); background:#2c2415; }
+
+  /* ---- globale instellingen ---- */
   .gname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ghead { display:flex; align-items:center; gap:6px; margin:10px 0 4px; font-size:12px;
-    font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; }
+  .ghead { display:flex; align-items:center; gap:5px; margin:9px 0 4px; font-size:11px;
+    font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.7px; }
   .ghead .gtitle { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; cursor:grab; }
   .ghead input { text-transform:none; font-weight:400; flex:1; }
-  .ghead button { padding:3px 7px; font-size:11px; }
-  .ghead.drop { background:#1b2a3a; border-radius:6px; }
-
-  /* compacte kaartjes, meerdere naast elkaar op een breed scherm */
-  .ggrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:6px; }
+  .ghead button { padding:2px 6px; font-size:10px; }
+  .ggrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:5px; }
   .gcard { background:var(--panel); border:1px solid var(--border); border-radius:8px;
-    padding:6px 8px; }
-  .gcard.changed { border-color:var(--active); background:#2c2415; }
-  .gcard.justset { border-color:var(--ok); background:#16281c; }
+    padding:5px 8px; box-shadow:var(--shadow); }
+  .gcard.changed { border-color:var(--active); background:var(--active-soft); }
+  .gcard.justset { border-color:var(--ok); background:var(--ok-soft); }
   /* lijn die laat zien waar het gesleepte terechtkomt */
-  .gcard.dropbefore { box-shadow:inset 4px 0 0 0 var(--accent); }
-  .gcard.dropafter { box-shadow:inset -4px 0 0 0 var(--accent); }
-  .ghead.dropinto { background:#1b2a3a; border-radius:6px;
-    box-shadow:inset 0 -3px 0 0 var(--accent); }
-  .labnum { width:26px; color:var(--muted); font-size:11px; text-align:right;
-    font-variant-numeric:tabular-nums; flex:none; align-self:center; }
-  /* de stand waar de synth nu op staat */
-  .labrow.now .labnum { color:var(--active); font-weight:600; }
-  .labrow.now input.l { border-color:var(--active); }
-  .gcard .top { display:flex; align-items:center; gap:6px; font-size:13px; }
-  .gcard .idx { color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;
+  .gcard.dropbefore { box-shadow:inset 3px 0 0 0 var(--accent); }
+  .gcard.dropafter { box-shadow:inset -3px 0 0 0 var(--accent); }
+  .ghead.dropinto { background:var(--accent-soft); border-radius:6px;
+    box-shadow:inset 0 -2px 0 0 var(--accent); }
+  .gcard .top { display:flex; align-items:center; gap:5px; font-size:12px; }
+  .gcard .idx { color:var(--muted); font-size:10px; font-variant-numeric:tabular-nums;
     cursor:grab; }
   .gcard .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .gcard .val { color:var(--accent); font-variant-numeric:tabular-nums; }
-  .gcard .ctl { display:flex; align-items:center; gap:4px; margin-top:4px; }
-  .gcard .ctl > input[type=number] { width:58px; padding:4px 6px; }
-  .gcard .ctl > select { flex:1; min-width:0; padding:4px 6px; font-size:12px; }
-  .gcard button { padding:3px 6px; font-size:11px; }
-  .gcard .extra { margin-top:6px; border-top:1px solid var(--border); padding-top:6px; }
-  .labrow { display:flex; gap:4px; margin-bottom:4px; }
-  .labrow input.v { width:58px; padding:4px 6px; }
+  .gcard .val { color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600; }
+  .gcard .ctl { display:flex; align-items:center; gap:3px; margin-top:3px; }
+  .gcard .ctl > input[type=number], .gcard .ctl > input[type=text] { width:54px; padding:3px 5px; }
+  .gcard .ctl > select { flex:1; min-width:0; padding:3px 5px; font-size:11px; }
+  .gcard button { padding:2px 6px; font-size:10px; }
+  .gcard .extra { margin-top:5px; border-top:1px solid var(--border); padding-top:5px; }
+  .labrow { display:flex; gap:4px; margin-bottom:3px; }
+  .labrow input.v { width:54px; padding:3px 5px; }
+  .labrow input.l { flex:1; min-width:0; padding:3px 5px; }
+  .labnum { width:24px; color:var(--muted); font-size:10px; text-align:right;
+    font-variant-numeric:tabular-nums; flex:none; align-self:center; }
+  /* de stand waar de synth nu op staat */
+  .labrow.now .labnum { color:var(--active); font-weight:700; }
+  .labrow.now input.l { border-color:var(--active); }
+  .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:32px; text-align:right; }
+  .lrow input[type=number] { width:60px; padding:5px; }
 
-  /* logboek */
-  #logPanel { border:1px solid var(--border); border-radius:8px; background:#0f1115;
-    padding:6px 8px; margin-bottom:8px; max-height:230px; overflow-y:auto; }
-  .logline { display:flex; gap:6px; font-size:11px; line-height:1.55; cursor:pointer;
+  /* ---- logboek ---- */
+  #logPanel { border:1px solid var(--border); border-radius:8px; background:var(--panel2);
+    padding:5px 8px; margin-bottom:7px; max-height:210px; overflow-y:auto; }
+  .logline { display:flex; gap:6px; font-size:11px; line-height:1.5; cursor:pointer;
     font-family:ui-monospace,Consolas,"Courier New",monospace; }
-  .logline:hover { background:#171a20; }
-  .logline .t { color:#5f6672; flex:none; }
-  .logline .d { flex:none; width:12px; text-align:center; color:var(--muted); }
+  .logline:hover { background:var(--accent-soft); }
+  .logline .t { color:var(--muted); flex:none; }
+  .logline .d { flex:none; width:11px; text-align:center; color:var(--muted); }
   .logline.out .d { color:var(--accent); }
   .logline.in .d { color:var(--ok); }
   .logline .m { flex:1; min-width:0; word-break:break-word; color:var(--text); }
   .logline.change .m, .logline.write .m { color:var(--active); }
   .logline.odd .m { color:var(--bad); }
   .logline.param .m { color:var(--muted); }
-  .loghex { font-size:10px; color:#6b7280; word-break:break-all; padding:1px 0 4px 20px;
+  .loghex { font-size:10px; color:var(--muted); word-break:break-all; padding:1px 0 3px 18px;
     font-family:ui-monospace,Consolas,"Courier New",monospace; }
 
-  /* LFO-paneel */
+  /* ---- LFO-paneel ---- */
   .lfo { background:var(--panel); border:1px solid var(--border); border-radius:12px;
-    padding:10px 12px 12px; margin-bottom:10px; }
-  .lfo .head { display:flex; align-items:center; gap:8px; margin-bottom:8px;
-    font-size:12px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+    padding:8px 10px 10px; margin-bottom:8px; box-shadow:var(--shadow); }
+  .lfo .head { display:flex; align-items:center; gap:8px; margin-bottom:6px;
+    font-size:11px; font-weight:700; letter-spacing:1.1px; text-transform:uppercase;
     color:var(--accent); }
   .lfo .head .now { margin-left:auto; color:var(--muted); font-weight:400;
-    letter-spacing:0; text-transform:none; font-size:11px; }
-  .lfo .wave { display:block; width:100%; height:92px; background:#0f1115;
+    letter-spacing:0; text-transform:none; font-size:10px; }
+  .lfo .wave { display:block; width:100%; height:84px; background:var(--wave-bg);
     border:1px solid var(--border); border-radius:8px; }
   .lfobody { display:flex; gap:8px; align-items:flex-start; }
   .lfomid { flex:1; min-width:0; }
-  .vfgroup { display:flex; gap:6px; }
+  .vfgroup { display:flex; gap:5px; }
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
-  .vf { display:flex; flex-direction:column; align-items:center; gap:4px; width:44px; }
-  .vnum { font-size:11px; color:var(--accent); border:1px solid var(--border);
-    border-radius:6px; padding:2px 0; width:100%; text-align:center;
-    background:var(--panel2); font-variant-numeric:tabular-nums; }
-  .vtrack { position:relative; width:32px; height:104px; }
-  .vtrack input { position:absolute; width:104px; height:32px; left:-36px; top:36px;
-    transform:rotate(-90deg); accent-color:var(--accent); background:transparent;
-    margin:0; padding:0; }
-  .vcap { font-size:10px; color:var(--muted); text-transform:uppercase;
-    letter-spacing:.5px; }
+  .vf { display:flex; flex-direction:column; align-items:center; gap:3px; width:40px; }
+  .vnum { font-size:10px; color:var(--accent); border:1px solid var(--border);
+    border-radius:5px; padding:2px 0; width:100%; text-align:center; font-weight:600;
+    background:var(--panel); font-variant-numeric:tabular-nums; }
+  .vtrack { position:relative; width:28px; height:96px; }
+  .vtrack input { position:absolute; width:96px; height:28px; left:-34px; top:34px;
+    transform:rotate(-90deg); margin:0; padding:0; }
+  .vcap { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
 
-  .shapes { display:flex; gap:4px; margin:6px 0 0; flex-wrap:wrap; }
-  .shapes button { padding:2px 5px; line-height:0; }
-  .shapes button.on { background:var(--accent-dim); border-color:var(--accent); }
+  .shapes { display:flex; gap:3px; margin:5px 0 0; flex-wrap:wrap; }
+  .shapes button { padding:2px 4px; line-height:0; }
   .shapes svg { display:block; }
-  .pills { display:flex; gap:5px; margin-top:6px; flex-wrap:wrap; align-items:center; }
-  .pills button { padding:5px 10px; font-size:12px; }
-  .pills button.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+  .pills { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; align-items:center; }
+  .pills button { padding:4px 9px; font-size:11px; }
   .pills .seg { display:flex; gap:0; }
   .pills .seg button { border-radius:0; }
   .pills .seg button:first-child { border-radius:var(--radius) 0 0 var(--radius); }
   .pills .seg button:last-child { border-radius:0 var(--radius) var(--radius) 0; }
   .pills .seg button + button { border-left:none; }
-  .labrow input.l { flex:1; min-width:0; padding:4px 6px; }
-  .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
-  .lrow input[type=number] { width:64px; padding:6px; }
+
   .warn { color:var(--active); }
-  .empty { color:var(--muted); padding:26px; text-align:center; }
-  footer { margin-top:18px; font-size:11px; color:var(--muted); line-height:1.6; }
+  .empty { color:var(--muted); padding:22px; text-align:center; }
+  footer { margin-top:14px; font-size:10px; color:var(--muted); line-height:1.6; }
 </style>
 </head>
 <body>
@@ -1077,19 +1102,21 @@ function lfoWaveSvg(shape, rate, delay, slew, mono) {
     const env = fade > 0.01 ? Math.min(1, (i / n) / fade) : 1;
     pts.push((i / n * w).toFixed(1) + "," + (mid - prev * amp * env).toFixed(1));
   }
+  // kleuren uit het thema, zodat de tekening meegaat met de stijl
   const grid = [0.25, 0.5, 0.75].map(f =>
     '<line x1="' + (w * f) + '" y1="6" x2="' + (w * f) + '" y2="' + (h - 6)
-    + '" stroke="#22262e"/>').join("");
+    + '" stroke="var(--wave-grid)"/>').join("");
   const fadeMark = fade > 0.02
     ? '<rect x="0" y="0" width="' + (w * fade) + '" height="' + h
-      + '" fill="#4da3ff" opacity="0.06"/>'
+      + '" fill="var(--accent)" opacity="0.06"/>'
       + '<line x1="' + (w * fade) + '" y1="0" x2="' + (w * fade) + '" y2="' + h
-      + '" stroke="#4da3ff" opacity="0.35" stroke-dasharray="3 3"/>' : "";
+      + '" stroke="var(--accent)" opacity="0.35" stroke-dasharray="3 3"/>' : "";
   return '<svg class="wave" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
     + grid + fadeMark
-    + '<line x1="0" y1="' + mid + '" x2="' + w + '" y2="' + mid + '" stroke="#2c313a"/>'
+    + '<line x1="0" y1="' + mid + '" x2="' + w + '" y2="' + mid
+    + '" stroke="var(--wave-axis)"/>'
     + '<polyline points="' + pts.join(" ") + '" fill="none" stroke="'
-    + (mono > 0 ? "#ffb547" : "#4da3ff") + '" stroke-width="2.2"'
+    + (mono > 0 ? "var(--active)" : "var(--accent)") + '" stroke-width="2"'
     + ' stroke-linejoin="round" stroke-linecap="round"/></svg>';
 }
 
@@ -1174,7 +1201,7 @@ function renderLfo(base, title) {
     for (const b of Array.from(shapes.children)) {
       b.classList.toggle("on", +b.dataset.shape === shape);
       b.innerHTML = lfoGlyph(+b.dataset.shape,
-        +b.dataset.shape === shape ? "#ffffff" : "#8a919c");
+        +b.dataset.shape === shape ? "var(--accent)" : "var(--muted)");
     }
   };
 

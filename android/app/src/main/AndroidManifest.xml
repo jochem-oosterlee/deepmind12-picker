@@ -9,7 +9,7 @@
     <application
         android:label="DM12 Picker"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@android:style/Theme.Black.NoTitleBar">
+        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
             android:exported="true"
