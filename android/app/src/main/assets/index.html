@@ -139,7 +139,7 @@
   <div id="paramList"></div>
 </div>
 
-<footer id="foot">v1.6 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
+<footer id="foot">v1.7 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
 
 <script>
 "use strict";
@@ -168,6 +168,18 @@ let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, wasConnected = false;
 let dragging = false;
+
+// wachtrij voor SysEx-verzoeken: de synth niet overladen.
+// Moet boven poll() staan, want poll() leest queue.length.
+let queue = [], queueTimer = null;
+function enqueue(fn) {
+  queue.push(fn);
+  if (!queueTimer) queueTimer = setInterval(() => {
+    const f = queue.shift();
+    if (!f) { clearInterval(queueTimer); queueTimer = null; return; }
+    f();
+  }, 160);
+}
 
 // ================== parameterdefinities ==================
 const S = (n, l, max) => ({k:"s", n, l, max: max || 255});
@@ -283,7 +295,13 @@ const led = document.getElementById("led");
 const statusText = document.getElementById("statusText");
 const ipInput = document.getElementById("ipInput");
 
+// De interface mag nooit sneuvelen door een statusupdate.
 function poll() {
+  try { pollNow(); }
+  catch (e) { statusText.textContent = "statusfout: " + e.message; }
+}
+
+function pollNow() {
   let s;
   try { s = JSON.parse(AndroidBridge.getStatus()); }
   catch { led.className = ""; statusText.textContent = "bridge-fout"; return; }
@@ -319,7 +337,6 @@ function poll() {
   }
   statusText.textContent = txt;
 }
-setInterval(poll, 1500); poll();
 
 function loadDevNames() {
   try { devNames = JSON.parse(AndroidBridge.libNames()) || {}; } catch { devNames = {}; }
@@ -367,17 +384,6 @@ document.getElementById("notifyBtn").addEventListener("click", () => {
   statusText.textContent = "aanmelding verstuurd";
 });
 document.getElementById("panicBtn").addEventListener("click", () => AndroidBridge.panic(channel));
-
-// ================== wachtrij voor SysEx-verzoeken ==================
-let queue = [], queueTimer = null;
-function enqueue(fn) {
-  queue.push(fn);
-  if (!queueTimer) queueTimer = setInterval(() => {
-    const f = queue.shift();
-    if (!f) { clearInterval(queueTimer); queueTimer = null; return; }
-    f();
-  }, 160);
-}
 
 // ================== tabs ==================
 function buildTabs() {
@@ -774,7 +780,10 @@ document.getElementById("libExportBtn").addEventListener("click", () => {
   statusText.textContent = "namen naar klembord gekopieerd";
 });
 
+// eerst de interface opbouwen, daarna pas verbinding en status
 showTab();
+poll();
+setInterval(poll, 1500);
 </script>
 </body>
 </html>

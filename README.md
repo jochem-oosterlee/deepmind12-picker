@@ -68,7 +68,11 @@ gradle assembleDebug   # of open de map in Android Studio
 ```
 
 De APK verschijnt in `android/app/build/outputs/apk/debug/`; een gebouwde versie
-staat onder [Releases](../../releases). De app detecteert de DeepMind automatisch
+staat onder [Releases](../../releases).
+
+Voer voor het bouwen `node android/test-ui.js android/app/src/main/assets/index.html`
+uit: dat draait de interface-code met een nagebootste DOM en native laag, klikt
+elke tab en knop aan en controleert dat de juiste MIDI-berichten eruit komen. De app detecteert de DeepMind automatisch
 als WiFi-gateway. Tik = preset laden, lang indrukken = hernoemen.
 
 ## Licentie
