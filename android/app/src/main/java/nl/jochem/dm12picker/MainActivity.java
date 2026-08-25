@@ -395,6 +395,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String log() {
+            return lib.logJson(60);
+        }
+
+        @JavascriptInterface
         public String libStatus() {
             String s = lib.statusJson();
             // diagnose van de ontvangstkant erbij, zodat de UI kan tonen wat er aankomt

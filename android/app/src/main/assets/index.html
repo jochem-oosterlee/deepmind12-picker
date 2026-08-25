@@ -34,7 +34,7 @@
   /* knippert kort na een actie, zodat je ziet dat er iets verstuurd is */
   button.flash { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
   button.mini { padding:6px 8px; font-size:12px; }
-  #autoBtn.on, #gWatchBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
+  #autoBtn.on, #gWatchBtn.on, #logBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
   #settings input { flex:1; min-width:70px; }
   #tabs { display:flex; gap:5px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none; }
   #tabs::-webkit-scrollbar { display:none; }
@@ -126,6 +126,23 @@
   .gcard .extra { margin-top:6px; border-top:1px solid var(--border); padding-top:6px; }
   .labrow { display:flex; gap:4px; margin-bottom:4px; }
   .labrow input.v { width:58px; padding:4px 6px; }
+
+  /* logboek */
+  #logPanel { border:1px solid var(--border); border-radius:8px; background:#0f1115;
+    padding:6px 8px; margin-bottom:8px; max-height:230px; overflow-y:auto; }
+  .logline { display:flex; gap:6px; font-size:11px; line-height:1.55; cursor:pointer;
+    font-family:ui-monospace,Consolas,"Courier New",monospace; }
+  .logline:hover { background:#171a20; }
+  .logline .t { color:#5f6672; flex:none; }
+  .logline .d { flex:none; width:12px; text-align:center; color:var(--muted); }
+  .logline.out .d { color:var(--accent); }
+  .logline.in .d { color:var(--ok); }
+  .logline .m { flex:1; min-width:0; word-break:break-word; color:var(--text); }
+  .logline.change .m, .logline.write .m { color:var(--active); }
+  .logline.odd .m { color:var(--bad); }
+  .logline.param .m { color:var(--muted); }
+  .loghex { font-size:10px; color:#6b7280; word-break:break-all; padding:1px 0 4px 20px;
+    font-family:ui-monospace,Consolas,"Courier New",monospace; }
   .labrow input.l { flex:1; min-width:0; padding:4px 6px; }
   .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
   .lrow input[type=number] { width:64px; padding:6px; }
@@ -140,7 +157,16 @@
   <div class="row">
     <span id="led" title="connection status"></span>
     <span id="statusText">connecting…</span>
+    <button class="mini" id="logBtn" title="show what comes in and goes out">log</button>
     <button class="mini" id="gearBtn" title="settings">⚙</button>
+  </div>
+  <div id="logPanel" style="display:none">
+    <div class="row" style="margin-bottom:4px">
+      <span id="logInfo" style="font-size:11px;color:var(--muted);flex:1"></span>
+      <button class="mini" id="logCopy">Copy</button>
+      <button class="mini" id="logClear">Clear</button>
+    </div>
+    <div id="logList"></div>
   </div>
   <div id="settings" style="display:none">
     <div class="row">
@@ -505,6 +531,80 @@ function loadSynthParams() {
   } catch {}
 }
 
+// ================== logboek ==================
+// Toont in gewone taal wat er langskomt: elk SysEx-bericht ontleed, plus de
+// parameters die de synth stuurt. Tik een regel aan voor de ruwe bytes.
+let logRev = -1, logOpen = false, logTimer = null, logHexOpen = {}, logHideBefore = 0;
+
+function fmtTime(ms) {
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, "0");
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+
+function renderLog(force) {
+  if (!logOpen) return;
+  let d;
+  try { d = JSON.parse(AndroidBridge.log()); } catch { return; }
+  if (!force && d.rev === logRev) return;
+  logRev = d.rev;
+  const lines = (d.lines || []).filter(L => L.ms >= logHideBefore);
+  const list = document.getElementById("logList");
+  list.innerHTML = "";
+  document.getElementById("logInfo").textContent = lines.length
+    ? lines.length + " messages, newest first — tap a line for the raw bytes"
+    : "nothing yet";
+  for (const L of lines) {
+    const row = document.createElement("div");
+    row.className = "logline " + (L.dir || "in") + " " + (L.tag || "");
+    const t = document.createElement("span");
+    t.className = "t"; t.textContent = fmtTime(L.ms);
+    const dir = document.createElement("span");
+    dir.className = "d"; dir.textContent = L.dir === "out" ? "→" : "←";
+    const msg = document.createElement("span");
+    msg.className = "m"; msg.textContent = L.text;
+    row.appendChild(t); row.appendChild(dir); row.appendChild(msg);
+    row.addEventListener("click", () => {
+      logHexOpen[L.ms] = !logHexOpen[L.ms];
+      renderLog(true);
+    });
+    list.appendChild(row);
+    if (L.hex && logHexOpen[L.ms]) {
+      const h = document.createElement("div");
+      h.className = "loghex";
+      h.textContent = L.hex;
+      list.appendChild(h);
+    }
+  }
+}
+
+document.getElementById("logBtn").addEventListener("click", () => {
+  logOpen = !logOpen;
+  document.getElementById("logPanel").style.display = logOpen ? "block" : "none";
+  document.getElementById("logBtn").classList.toggle("on", logOpen);
+  clearInterval(logTimer);
+  logTimer = null;
+  if (logOpen) {
+    renderLog(true);
+    logTimer = setInterval(() => renderLog(false), 600);
+  }
+});
+
+document.getElementById("logCopy").addEventListener("click", () => {
+  let d;
+  try { d = JSON.parse(AndroidBridge.log()); } catch { return; }
+  const text = (d.lines || []).filter(L => L.ms >= logHideBefore)
+    .map(L => fmtTime(L.ms) + " " + (L.dir === "out" ? "->" : "<-") + " " + L.text
+              + (L.hex ? "\n    " + L.hex : "")).join("\n");
+  AndroidBridge.copyToClipboard(text);
+  statusText.textContent = "log copied";
+});
+
+document.getElementById("logClear").addEventListener("click", () => {
+  logHideBefore = Date.now();
+  renderLog(true);
+});
+
 document.getElementById("gearBtn").addEventListener("click", () => {
   const s = document.getElementById("settings");
   s.style.display = s.style.display === "none" ? "block" : "none";
@@ -577,13 +677,25 @@ document.getElementById("panicBtn").addEventListener("click", () => AndroidBridg
 
 // ================== eigen dialoog ==================
 // Een WebView negeert confirm() en alert(), dus die deden stilletjes niets.
+// Enter is doorgaan, Escape is annuleren — in beide dialogen.
+function modalKeys(onYes, onNo) {
+  const handler = e => {
+    if (e.key === "Enter") { if (e.preventDefault) e.preventDefault(); onYes(); }
+    else if (e.key === "Escape") { if (e.preventDefault) e.preventDefault(); onNo(); }
+  };
+  document.addEventListener("keydown", handler);
+  return () => document.removeEventListener("keydown", handler);
+}
+
 function ask(msg) {
   return new Promise(res => {
     const m = document.getElementById("modal");
     document.getElementById("modalText").textContent = msg;
     document.getElementById("modalInput").style.display = "none";
     m.style.display = "flex";
-    const done = v => { m.style.display = "none"; res(v); };
+    let off = null;
+    const done = v => { if (off) off(); m.style.display = "none"; res(v); };
+    off = modalKeys(() => done(true), () => done(false));
     document.getElementById("modalYes").onclick = () => done(true);
     document.getElementById("modalNo").onclick = () => done(false);
   });
@@ -599,7 +711,15 @@ function askText(msg, initial) {
     inp.value = initial || "";
     m.style.display = "flex";
     inp.focus();
-    const done = v => { m.style.display = "none"; inp.style.display = "none"; res(v); };
+    if (inp.select) inp.select();
+    let off = null;
+    const done = v => {
+      if (off) off();
+      m.style.display = "none";
+      inp.style.display = "none";
+      res(v);
+    };
+    off = modalKeys(() => done(inp.value), () => done(null));
     document.getElementById("modalYes").onclick = () => done(inp.value);
     document.getElementById("modalNo").onclick = () => done(null);
   });
@@ -1287,6 +1407,26 @@ function listToLabels(list) {
   return labels;
 }
 
+/**
+ * Hoe een waarde eruit hoort te zien. Een instelling is of een keuzelijst met
+ * benoemde standen, of een bereik: dan is de waarde gewoon een getal, eventueel
+ * met een verschuiving (byte 0 betekent bijvoorbeeld -48) en een eenheid.
+ * Losse labels blijven werken, zodat 0 = "off" bij een bereik ook kan.
+ */
+function showValue(i, v) {
+  const m = gmeta.bytes[i] || {};
+  if (m.labels && m.labels[v]) return m.labels[v];
+  if (m.type === "range") {
+    const from = m.from || 0;
+    const d = v + from;
+    return (from < 0 && d > 0 ? "+" : "") + d + (m.unit ? " " + m.unit : "");
+  }
+  return String(v);
+}
+
+function isRange(i) { return (gmeta.bytes[i] || {}).type === "range"; }
+function rangeFrom(i) { return (gmeta.bytes[i] || {}).from || 0; }
+
 /** Alle labelsets die al ergens gebruikt worden, plus de bewaarde sets. */
 function knownSets() {
   const out = [], seen = new Set();
@@ -1312,9 +1452,71 @@ function labelEditor(i) {
   const m = bmeta(i);
   const box = document.createElement("div");
   box.className = "extra";
+  const cur = gData ? gData.bytes[i] : 0;
+
+  // keuze tussen benoemde standen en een bereik. Bij een instelling die al hoge
+  // waardes liet zien is een lijst zinloos, dus dan staat bereik voor.
+  const modeRow = document.createElement("div");
+  modeRow.className = "labrow";
+  const mkMode = (label, range) => {
+    const b = document.createElement("button");
+    b.className = "mini" + ((m.type === "range") === range ? " on" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      if (range) {
+        m.type = "range";
+        if (m.from === undefined) m.from = 0;
+      } else {
+        delete m.type;
+        delete m.from;
+        delete m.unit;
+      }
+      saveMeta();
+      renderGlobals();
+    });
+    return b;
+  };
+  modeRow.appendChild(mkMode("named steps", false));
+  modeRow.appendChild(mkMode("number range", true));
+  box.appendChild(modeRow);
+
+  if (m.type === "range") {
+    const r1 = document.createElement("div");
+    r1.className = "labrow";
+    const fromLab = document.createElement("span");
+    fromLab.className = "labnum"; fromLab.textContent = "0 =";
+    fromLab.title = "what the synth shows when this byte is 0";
+    const from = document.createElement("input");
+    from.type = "number"; from.className = "v"; from.value = m.from || 0;
+    const unit = document.createElement("input");
+    unit.type = "text"; unit.className = "l"; unit.placeholder = "unit (cents, semitones, %)";
+    unit.value = m.unit || "";
+    const save = document.createElement("button");
+    save.className = "mini"; save.textContent = "Save";
+    save.addEventListener("click", () => {
+      m.from = parseInt(from.value, 10) || 0;
+      const u = unit.value.trim();
+      if (u) m.unit = u; else delete m.unit;
+      saveMeta();
+      gOpen[i] = null;
+      renderGlobals();
+    });
+    const close = document.createElement("button");
+    close.className = "mini"; close.textContent = "Close";
+    close.addEventListener("click", () => { gOpen[i] = null; renderGlobals(); });
+    r1.appendChild(fromLab); r1.appendChild(from); r1.appendChild(unit);
+    r1.appendChild(save); r1.appendChild(close);
+    box.appendChild(r1);
+    const hint = document.createElement("div");
+    hint.style.cssText = "font-size:11px;color:var(--muted);padding:2px 0";
+    hint.textContent = "The synth now shows " + showValue(i, cur) + " for byte value " + cur
+      + ". Exceptions like 0 = off can still be named under ‘named steps’.";
+    box.appendChild(hint);
+    return box;
+  }
+
   const rows = document.createElement("div");
   box.appendChild(rows);
-  const cur = gData ? gData.bytes[i] : 0;
 
   // Aantal standen: de hoogste waarde die de synth ooit liet zien betekent dat
   // er minstens zoveel standen zijn. Draai de instelling rond op de synth en de
@@ -1599,7 +1801,8 @@ function byteCard(i) {
   nm.addEventListener("click", () => renameByte(i));
   const val = document.createElement("span");
   val.className = "val";
-  val.textContent = m.labels && m.labels[v] ? m.labels[v] + " · " + v : String(v);
+  val.textContent = showValue(i, v);
+  val.title = "raw byte value " + v;
   top.appendChild(idx); top.appendChild(nm); top.appendChild(val);
   card.appendChild(top);
 
@@ -1623,13 +1826,18 @@ function byteCard(i) {
     ctl.appendChild(sel);
     ctlInput = sel;
   } else {
+    // bij een bereik tikt de gebruiker het getal dat de synth toont
+    const from = isRange(i) ? rangeFrom(i) : 0;
     const inp = document.createElement("input");
-    inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
+    inp.type = "number"; inp.min = from; inp.max = 255 + from; inp.value = v + from;
+    if (m.unit) inp.title = m.unit;
     const set = document.createElement("button");
     set.className = "mini"; set.textContent = "Set";
     set.title = "send this value to the synth";
-    set.addEventListener("click", () =>
-      writeByte(i, Math.max(0, Math.min(255, parseInt(inp.value, 10))), set, gData.bytes[i]));
+    set.addEventListener("click", () => {
+      const typed = parseInt(inp.value, 10);
+      writeByte(i, Math.max(0, Math.min(255, typed - from)), set, gData.bytes[i]);
+    });
     ctl.appendChild(inp);
     ctl.appendChild(set);
     ctlInput = inp;
@@ -1668,7 +1876,8 @@ function byteCard(i) {
   if (gOpen[i] === "menu") card.appendChild(menuPicker(i));
   // onthouden welke elementen bij deze instelling horen, zodat het volgen
   // ze kan bijwerken zonder de kaart opnieuw te bouwen
-  gCards[i] = {card: card, valEl: val, nmEl: nm, ctlEl: ctlInput};
+  gCards[i] = {card: card, valEl: val, nmEl: nm, ctlEl: ctlInput,
+               isSelect: !!(m.labels && Object.keys(m.labels).length)};
   return card;
 }
 
@@ -1718,14 +1927,16 @@ function updateGlobalsInPlace() {
     if (!c || !c.card) continue;
     const v = gData.bytes[i];
     const m = gmeta.bytes[i] || {};
-    c.valEl.textContent = m.labels && m.labels[v] ? m.labels[v] + " · " + v : String(v);
+    c.valEl.textContent = showValue(i, v);
+    c.valEl.title = "raw byte value " + v;
     const mine = gJustSet[i] && now - gJustSet[i] < HILITE_MS;
     c.card.className = "gcard" + (mine ? " justset" : (isRecent(i) ? " changed" : ""));
     if (!m.name && c.nmEl) c.nmEl.textContent = isRecent(i) ? "just changed" : "unknown";
     // een regelaar niet bijwerken terwijl de gebruiker er in bezig is
+    const shown = c.isSelect ? v : v + (isRange(i) ? rangeFrom(i) : 0);
     if (c.ctlEl && document.activeElement !== c.ctlEl
-        && String(c.ctlEl.value) !== String(v)) {
-      c.ctlEl.value = v;
+        && String(c.ctlEl.value) !== String(shown)) {
+      c.ctlEl.value = shown;
     }
     if (gEditors[i]) gEditors[i]();   // open labeleditor bijwerken
   }

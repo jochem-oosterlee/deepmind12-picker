@@ -64,6 +64,7 @@ global.document = {
   createElement(tag) { const e = makeEl("new-" + tag); e.tagName = tag.toUpperCase(); return e; },
   querySelectorAll() { return []; },
   addEventListener() {},
+  removeEventListener() {},
   activeElement: null,
   body: makeEl("body"),
 };
@@ -96,6 +97,12 @@ global.AndroidBridge = {
     bytes: globalBytes}),
   requestGlobals: d => { sent.push(["reqGlobals", d]); return true; },
   discover: () => sent.push(["discover"]),
+  log: () => JSON.stringify({rev: 3, lines: [
+    {ms: 1756000000000, dir: "in", tag: "change", hex: "f00020322000060601",
+     text: "global settings, 56 bytes — changed #06: 3 → 2"},
+    {ms: 1756000001000, dir: "out", tag: "req", hex: "f0002032200005f7",
+     text: "request global settings"},
+  ]}),
   discovered: () => JSON.stringify({running: false, status: "1 apparaat gevonden",
     found: ["192.168.0.227 (DeepMind12)"]}),
   writeGlobal: (i, v, d) => { sent.push(["writeGlobal", i, v, d]); return true; },
@@ -119,6 +126,12 @@ global.AndroidBridge = {
   copyToClipboard: t => sent.push(["clip", t.length]),
   readClipboard: () => JSON.stringify({names: {"A-0": "Eigen naam"}, favs: ["A-2"], vals: {}}),
 };
+
+// één instelling voorzien van een bereik, om de weergave daarvan te controleren
+global.localStorage.setItem("dm12.gmeta", JSON.stringify({
+  groups: [], sets: [],
+  bytes: {"3": {name: "Transpose", type: "range", from: -48, unit: "semitones"}},
+}));
 
 // script uitvoeren
 try {
@@ -265,6 +278,31 @@ setTimeout(() => {
     failures++;
   }
   testLabels();
+
+  // bereik-instelling: byte 3 is 9, met verschuiving -48 en eenheid
+  const rangeCard = findIn(document.getElementById("gList"),
+    e => e.dataset && String(e.dataset.byte) === "3");
+  if (!rangeCard) { console.error("FOUT: kaartje #03 niet gevonden"); failures++; }
+  else {
+    const rv = findIn(rangeCard, e => e.className === "val");
+    console.log("bereik-weergave #03:", JSON.stringify(rv.textContent));
+    if (rv.textContent !== "-39 semitones") {
+      console.error("FOUT: bereik niet als getal met eenheid weergegeven");
+      failures++;
+    }
+  }
+
+  // logboek openen en een regel uitklappen
+  document.getElementById("logBtn").fire("click");
+  const logList = document.getElementById("logList");
+  console.log("logboek:", logList.children.length, "regels");
+  if (logList.children.length !== 2) { console.error("FOUT: logregels ontbreken"); failures++; }
+  else {
+    logList.children[0].fire("click");
+    const after = document.getElementById("logList").children.length;
+    console.log("regel uitgeklapt -> " + after + " elementen (met ruwe bytes)");
+    if (after !== 3) { console.error("FOUT: ruwe bytes niet uitgeklapt"); failures++; }
+  }
 
   // Volgen mag de kaartjes niet herbouwen: dan raakt elk invoerveld en elke
   // open keuzelijst zijn focus kwijt bij iedere lezing.

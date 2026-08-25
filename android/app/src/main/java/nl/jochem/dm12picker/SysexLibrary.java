@@ -24,8 +24,12 @@ public class SysexLibrary {
             "SEQ", "PERC", "AMBIENT", "MODULAR", "USER-1", "USER-2", "USER-3", "USER-4"};
 
     public static final int PROGRAM_BYTES = 242;
-    /** Globale instellingen: 45 bytes (handleiding 19.2.4). */
-    public static final int GLOBAL_BYTES = 45;
+    /**
+     * Globale instellingen. De handleiding van 2016 noemt 45 bytes, maar de
+     * firmware stuurt er meer (gemeten: 64 ingepakte bytes = 56 waarden), dus
+     * we pakken uit wat er werkelijk in het bericht zit en knippen niets af.
+     */
+    public static final int GLOBAL_BYTES_MAX = 256;
     private static final int NAME_OFFSET = 223;
     private static final int NAME_LEN = 16;
     private static final int CATEGORY_OFFSET = 240;
@@ -53,6 +57,78 @@ public class SysexLibrary {
     public volatile int rxCCs = 0, rxParams = 0;
     public volatile String lastMidiIn = "";
     public volatile String lastInfo = "";
+
+    /** Leesbaar logboek van wat er langskomt, nieuwste eerst. */
+    private final java.util.List<String> log =
+            java.util.Collections.synchronizedList(new java.util.LinkedList<String>());
+    public volatile int logRev = 0;
+    private static final int LOG_MAX = 200;
+    private int lastLogParam = -1;
+    private long lastLogParamMs = 0;
+
+    private void logAdd(String dir, String text, String tag, byte[] raw) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(System.currentTimeMillis()).append("\t").append(dir).append("\t")
+          .append(tag).append("\t").append(text).append("\t");
+        if (raw != null) {
+            int n = Math.min(raw.length, 64);
+            for (int i = 0; i < n; i++) {
+                sb.append(Character.forDigit((raw[i] >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(raw[i] & 0xF, 16));
+            }
+            if (raw.length > n) sb.append(" … (").append(raw.length).append(" bytes)");
+        }
+        synchronized (log) {
+            log.add(0, sb.toString());
+            while (log.size() > LOG_MAX) log.remove(log.size() - 1);
+        }
+        logRev++;
+    }
+
+    /** Logboek als JSON voor de interface. */
+    public String logJson(int max) {
+        StringBuilder sb = new StringBuilder("{\"rev\":").append(logRev).append(",\"lines\":[");
+        synchronized (log) {
+            int n = Math.min(max, log.size());
+            for (int i = 0; i < n; i++) {
+                String[] f = log.get(i).split("\t", 5);
+                if (f.length < 5) continue;
+                if (i > 0) sb.append(",");
+                sb.append("{\"ms\":").append(f[0])
+                  .append(",\"dir\":\"").append(esc(f[1]))
+                  .append("\",\"tag\":\"").append(esc(f[2]))
+                  .append("\",\"text\":\"").append(esc(f[3]))
+                  .append("\",\"hex\":\"").append(esc(f[4])).append("\"}");
+            }
+        }
+        return sb.append("]}").toString();
+    }
+
+    /** Beschrijft een uitgaand SysEx-bericht in gewone taal. */
+    public static String describeOut(byte[] d) {
+        if (d.length < 8 || (d[0] & 0xFF) != 0xF0 || d[1] != 0x00 || d[2] != 0x20
+                || d[3] != 0x32) return null;
+        int cmd = d[6] & 0xFF;
+        switch (cmd) {
+            case 0x00: return "app notify (device " + (d[5] & 0x0F) + ")";
+            case 0x01: return "request program " + (char) ('A' + (d[7] & 7)) + ((d[8] & 0x7F) + 1);
+            case 0x02: return "WRITE program " + (char) ('A' + (d[8] & 7)) + ((d[9] & 0x7F) + 1)
+                    + " (" + (d.length - 11) + " packed bytes)";
+            case 0x03: return "request edit buffer";
+            case 0x04: return "load into edit buffer (" + (d.length - 9) + " packed bytes)";
+            case 0x05: return "request global settings";
+            case 0x06: return "WRITE global settings (" + (d.length - 9) + " packed bytes)";
+            case 0x0A: return "request names of bank " + (char) ('A' + (d[7] & 7));
+            default: return "sysex command 0x" + Integer.toHexString(cmd);
+        }
+    }
+
+    public void logOut(byte[] msg) {
+        String d = describeOut(msg);
+        if (d != null) {
+            logAdd("out", d, d.startsWith("WRITE") || d.startsWith("load") ? "write" : "req", msg);
+        }
+    }
 
     public SysexLibrary() {
         for (int b = 0; b < 8; b++) {
@@ -221,6 +297,8 @@ public class SysexLibrary {
                 badNames += bad;
                 lastInfo = "bank " + (char) ('A' + bank) + ": " + good + " names"
                         + (bad > 0 ? ", " + bad + " unreadable" : "");
+                logAdd("in", "names of bank " + (char) ('A' + bank) + ": " + good + " names"
+                        + (bad > 0 ? ", " + bad + " unreadable" : ""), "in", m);
                 break;
             }
             case 0x02: { // Program Dump Response
@@ -239,6 +317,9 @@ public class SysexLibrary {
                 }
                 patchDumps++;
                 lastInfo = "patch " + (char) ('A' + bank) + (prog + 1) + " received";
+                logAdd("in", "program " + (char) ('A' + bank) + (prog + 1)
+                        + " \u201c" + (names[bank][prog] == null ? "" : names[bank][prog])
+                        + "\u201d, " + data.length + " parameter bytes", "in", m);
                 break;
             }
             case 0x04: { // Edit Buffer Dump Response
@@ -249,13 +330,14 @@ public class SysexLibrary {
                 }
                 paramRev++;
                 lastInfo = "edit buffer received (" + data.length + " bytes)";
+                logAdd("in", "edit buffer, " + data.length + " parameters", "in", m);
                 break;
             }
             case 0x06: { // Global Parameter Dump Response
                 if (m.length < 9) return;
                 byte[] packed = new byte[end - 8];
                 System.arraycopy(m, 8, packed, 0, packed.length);
-                byte[] data = unpack7(m, 8, end, GLOBAL_BYTES);
+                byte[] data = unpack7(m, 8, end, GLOBAL_BYTES_MAX);
                 synchronized (lock) {
                     prevGlobals = globals;
                     globals = data;
@@ -263,6 +345,21 @@ public class SysexLibrary {
                 }
                 globalRev++;
                 lastInfo = "global settings received (" + data.length + " bytes)";
+                StringBuilder diff = new StringBuilder();
+                if (prevGlobals != null) {
+                    for (int i = 0; i < Math.min(data.length, prevGlobals.length); i++) {
+                        if (data[i] != prevGlobals[i]) {
+                            if (diff.length() > 0) diff.append(", ");
+                            diff.append("#").append(i).append(": ")
+                                .append(prevGlobals[i] & 0xFF).append(" \u2192 ")
+                                .append(data[i] & 0xFF);
+                        }
+                    }
+                }
+                logAdd("in", "global settings, " + data.length + " bytes"
+                        + (prevGlobals == null ? ""
+                           : (diff.length() > 0 ? " \u2014 changed " + diff : " \u2014 unchanged")),
+                        diff.length() > 0 ? "change" : "in", m);
                 break;
             }
             case 0x10: { // Control App Notify Response
@@ -273,10 +370,16 @@ public class SysexLibrary {
                 curProg = m[11] & 0x7F;
                 lastInfo = "synth reports: bank " + (char) ('A' + curBank)
                         + (curProg + 1);
+                String[] ifn = {"MIDI", "USB", "WiFi"};
+                logAdd("in", "app notify reply: device " + deviceId + ", rx channel " + deviceRxCh
+                        + ", interface " + (ifaceId >= 0 && ifaceId < 3 ? ifn[ifaceId] : ifaceId)
+                        + ", now on " + (char) ('A' + curBank) + (curProg + 1), "in", m);
                 break;
             }
             default:
                 lastInfo = "SysEx 0x" + Integer.toHexString(cmd) + " received";
+                logAdd("in", "unknown command 0x" + Integer.toHexString(cmd)
+                        + " (" + m.length + " bytes)", "odd", m);
                 break;
         }
     }
@@ -290,6 +393,18 @@ public class SysexLibrary {
         paramRev++;
         rxParams++;
         lastMidiIn = "par " + param + " = " + value;
+        // een draaiende fader levert tientallen berichten: die op één regel houden
+        long now = System.currentTimeMillis();
+        synchronized (log) {
+            if (param == lastLogParam && now - lastLogParamMs < 800 && !log.isEmpty()) {
+                log.set(0, now + "\tin\tparam\tparameter " + param + " = " + value + "\t");
+                logRev++;
+            } else {
+                logAdd("in", "parameter " + param + " = " + value, "param", null);
+            }
+        }
+        lastLogParam = param;
+        lastLogParamMs = now;
     }
 
     /** Elk binnenkomend CC meetellen, ook de plumbing van NRPN en wat we overslaan. */
@@ -401,7 +516,7 @@ public class SysexLibrary {
     /** Bericht om één globale instelling terug te schrijven, of null zonder lezing. */
     public byte[] globalWriteMsg(int dev, int index, int value) {
         synchronized (lock) {
-            if (globalsPacked == null || index < 0 || index >= GLOBAL_BYTES) return null;
+            if (globalsPacked == null || index < 0 || globals == null || index >= globals.length) return null;
             byte[] packed = globalsPacked.clone();
             setPackedByte(packed, index, value);
             byte[] m = new byte[8 + packed.length + 1];

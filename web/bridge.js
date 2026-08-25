@@ -15,7 +15,9 @@
 
   const BANKS = ["A", "B", "C", "D", "E", "F", "G", "H"];
   const PROGRAM_BYTES = 242;
-  const GLOBAL_BYTES = 45;
+  // De handleiding van 2016 noemt 45 globale bytes, maar de firmware stuurt er
+  // meer (gemeten: 56). We pakken uit wat er in het bericht zit.
+  const GLOBAL_BYTES = 256;
   const NAME_OFFSET = 223, NAME_LEN = 16, CATEGORY_OFFSET = 240;
 
   // CC's uit de implementatietabel naar parameternummers; alleen de doorlopende
@@ -39,6 +41,7 @@
     paramRev: 0, globalRev: 0, nameDumps: 0, patchDumps: 0, badNames: 0,
     rxCC: 0, rxPar: 0, rxLast: "", dev: -1, curBank: -1, curProg: -1, iface: -1,
     sysex: 0, sysexLen: 0, pkts: 0, info: "",
+    log: [], logRev: 0,
   };
 
   let midi = null, out = null, preferred = "";
@@ -93,7 +96,47 @@
     return s.trim();
   }
 
+  // ---------- logboek ----------
+
+  const LOG_MAX = 200;
+  const CATS = ["NONE", "BASS", "PAD", "LEAD", "MONO", "POLY", "STAB", "SFX", "ARP", "SEQ",
+    "PERC", "AMBIENT", "MODULAR", "USER-1", "USER-2", "USER-3", "USER-4"];
+
+  function logAdd(dir, text, bytes, tag) {
+    S.logRev++;
+    S.log.unshift({
+      ms: Date.now(), dir: dir, text: text, tag: tag || "",
+      hex: bytes ? hex(Array.from(bytes).slice(0, 64))
+                 + (bytes.length > 64 ? " … (" + bytes.length + " bytes)" : "") : "",
+    });
+    if (S.log.length > LOG_MAX) S.log.length = LOG_MAX;
+  }
+
+  /** Beschrijft een uitgaand SysEx-bericht in gewone taal. */
+  function describeOut(d) {
+    if (d[0] !== 0xF0 || d[1] !== 0x00 || d[2] !== 0x20 || d[3] !== 0x32) return null;
+    const cmd = d[6];
+    const b = n => BANKS[d[n] & 7];
+    switch (cmd) {
+      case 0x00: return ["app notify (device " + (d[5] & 0x0F) + ")", "req"];
+      case 0x01: return ["request program " + b(7) + ((d[8] & 0x7F) + 1), "req"];
+      case 0x02: return ["WRITE program " + b(8) + ((d[9] & 0x7F) + 1)
+                         + " (" + (d.length - 11) + " packed bytes)", "write"];
+      case 0x03: return ["request edit buffer", "req"];
+      case 0x04: return ["load into edit buffer (" + (d.length - 9) + " packed bytes)", "write"];
+      case 0x05: return ["request global settings", "req"];
+      case 0x06: return ["WRITE global settings (" + (d.length - 9) + " packed bytes)", "write"];
+      case 0x07: return ["request user pattern " + d[7], "req"];
+      case 0x09: return ["request bank dump " + b(7), "req"];
+      case 0x0A: return ["request names of bank " + b(7), "req"];
+      case 0x0C: return ["request name of " + b(7) + ((d[8] & 0x7F) + 1), "req"];
+      default: return ["sysex command 0x" + cmd.toString(16), "req"];
+    }
+  }
+
   // ---------- ontvangen ----------
+
+  let lastParamLog = {p: -1, ms: 0};
 
   function setParam(p, v) {
     if (!S.editBuffer) S.editBuffer = new Array(PROGRAM_BYTES).fill(0);
@@ -101,6 +144,16 @@
     S.paramRev++;
     S.rxPar++;
     S.rxLast = "par " + p + " = " + v;
+    // een draaiende fader levert tientallen berichten: die op één regel houden
+    const now = Date.now();
+    if (lastParamLog.p === p && now - lastParamLog.ms < 800 && S.log.length) {
+      S.log[0].text = "parameter " + p + " = " + v;
+      S.log[0].ms = now;
+      S.logRev++;
+    } else {
+      logAdd("in", "parameter " + p + " = " + v, null, "param");
+    }
+    lastParamLog = {p: p, ms: now};
   }
 
   function onCC(cc, v) {
@@ -116,53 +169,103 @@
   function handleSysEx(d) {
     S.sysex++;
     S.sysexLen = d.length;
-    if (d.length < 8 || d[0] !== 0xF0) return;
-    if (!(d[1] === 0x00 && d[2] === 0x20 && d[3] === 0x32 && d[4] === 0x20)) return;
+    if (d.length < 8 || d[0] !== 0xF0) {
+      logAdd("in", "sysex too short (" + d.length + " bytes)", d, "odd");
+      return;
+    }
+    if (!(d[1] === 0x00 && d[2] === 0x20 && d[3] === 0x32 && d[4] === 0x20)) {
+      logAdd("in", "sysex from another manufacturer", d, "odd");
+      return;
+    }
     S.dev = d[5] & 0x0F;
     const cmd = d[6], end = d.length - 1;
+    let desc = "", tag = "in";
 
     if (cmd === 0x0B) {                       // banknamen
       const bank = d[8] & 7;
       const data = unpack7(d, 9, end, 128 * NAME_LEN);
-      let good = 0, bad = 0;
+      let good = 0, bad = 0, first = "";
       for (let p = 0; p < 128 && (p + 1) * NAME_LEN <= data.length; p++) {
         const nm = text(data, p * NAME_LEN, NAME_LEN);
         if (nm === null) { bad++; continue; }
-        if (nm) { S.names[BANKS[bank] + "-" + p] = nm; good++; }
+        if (nm) {
+          S.names[BANKS[bank] + "-" + p] = nm;
+          good++;
+          if (!first) first = nm;
+        }
       }
       S.nameDumps++;
       S.badNames += bad;
       S.info = "bank " + BANKS[bank] + ": " + good + " names"
              + (bad ? ", " + bad + " unreadable" : "");
+      desc = "names of bank " + BANKS[bank] + ": " + good + " names"
+           + (bad ? ", " + bad + " unreadable" : "")
+           + (first ? " — first: “" + first + "”" : "");
     } else if (cmd === 0x02) {                // programma-dump
       const bank = d[8] & 7, prog = d[9] & 0x7F;
       S.patches[bank + "-" + prog] = Array.from(d.slice(10, end));
       const data = unpack7(d, 10, end, PROGRAM_BYTES);
+      let nm = "", cat = -1;
       if (data.length > CATEGORY_OFFSET) {
-        const nm = text(data, NAME_OFFSET, NAME_LEN);
+        nm = text(data, NAME_OFFSET, NAME_LEN) || "";
         if (nm) S.names[BANKS[bank] + "-" + prog] = nm;
-        S.cats[BANKS[bank] + "-" + prog] = data[CATEGORY_OFFSET];
+        cat = data[CATEGORY_OFFSET];
+        S.cats[BANKS[bank] + "-" + prog] = cat;
       }
       S.patchDumps++;
       S.info = "patch " + BANKS[bank] + (prog + 1) + " received";
+      desc = "program " + BANKS[bank] + (prog + 1) + " “" + nm + "”"
+           + (cat > 0 ? " [" + (CATS[cat] || cat) + "]" : "")
+           + ", " + data.length + " parameter bytes";
     } else if (cmd === 0x04) {                // edit buffer
+      const before = S.editBuffer;
       S.editBuffer = unpack7(d, 8, end, PROGRAM_BYTES);
       S.paramRev++;
       S.info = "edit buffer received (" + S.editBuffer.length + " bytes)";
+      let ch = 0;
+      if (before) {
+        for (let i = 0; i < S.editBuffer.length; i++) if (before[i] !== S.editBuffer[i]) ch++;
+      }
+      desc = "edit buffer, " + S.editBuffer.length + " parameters"
+           + (before ? (ch ? " — " + ch + " changed" : " — nothing changed") : "");
     } else if (cmd === 0x06) {                // globale instellingen
       S.prevGlobals = S.globals;
-      S.globals = unpack7(d, 8, end, GLOBAL_BYTES);
+      S.globals = unpack7(d, 8, end, GLOBAL_BYTES);   // niet afknippen
       S.globalsPacked = Array.from(d.slice(8, end));
       S.globalRev++;
       S.info = "global settings received (" + S.globals.length + " bytes)";
+      const diff = [];
+      if (S.prevGlobals) {
+        S.globals.forEach((v, i) => {
+          if (v !== S.prevGlobals[i]) diff.push("#" + i + ": " + S.prevGlobals[i] + " → " + v);
+        });
+      }
+      desc = "global settings, " + S.globals.length + " bytes"
+           + (S.prevGlobals ? (diff.length ? " — changed " + diff.join(", ") : " — unchanged") : "");
+      if (diff.length) tag = "change";
     } else if (cmd === 0x10) {                // aanmelding bevestigd
       S.iface = d[9] & 0x7F;
       S.curBank = d[10] & 7;
       S.curProg = d[11] & 0x7F;
       S.info = "synth reports: bank " + BANKS[S.curBank] + (S.curProg + 1);
+      const ifaces = ["MIDI", "USB", "WiFi"];
+      desc = "app notify reply: device " + S.dev + ", rx channel " + (d[7] & 0x7F)
+           + ", interface " + (ifaces[S.iface] || S.iface)
+           + ", now on " + BANKS[S.curBank] + (S.curProg + 1);
+    } else if (cmd === 0x08) {
+      desc = "user pattern dump (" + d.length + " bytes)";
+    } else if (cmd === 0x0D) {
+      desc = "single program name (" + d.length + " bytes)";
+    } else if (cmd === 0x12) {
+      desc = "calibration data (" + d.length + " bytes)";
+    } else if (cmd === 0x1C || cmd === 0x1E) {
+      desc = "chord memory (" + d.length + " bytes)";
     } else {
       S.info = "SysEx 0x" + cmd.toString(16) + " received";
+      desc = "unknown command 0x" + cmd.toString(16) + " (" + d.length + " bytes)";
+      tag = "odd";
     }
+    logAdd("in", desc, d, tag);
   }
 
   function handleBytes(d) {
@@ -261,6 +364,10 @@
   }
 
   function send(bytes) {
+    if (bytes[0] === 0xF0) {
+      const d = describeOut(bytes);
+      if (d) logAdd("out", d[0], bytes, d[1]);
+    }
     if (mode === "bridge") {
       pending.push(hex(bytes));
       if (!flushTimer) {
@@ -327,6 +434,7 @@
     },
 
     libParams: () => JSON.stringify(S.editBuffer),
+    log: () => JSON.stringify({rev: S.logRev, lines: S.log.slice(0, 60)}),
     globals: () => JSON.stringify(S.globals ? {
       rev: S.globalRev, bytes: S.globals, hadPrevious: !!S.prevGlobals,
       changed: S.prevGlobals
@@ -357,7 +465,7 @@
     requestGlobals: dev => send(sysexMsg(dev, 0x05, [])),
 
     writeGlobal: (index, value, dev) => {
-      if (!S.globalsPacked || index < 0 || index >= GLOBAL_BYTES) return false;
+      if (!S.globalsPacked || index < 0 || !S.globals || index >= S.globals.length) return false;
       const packed = S.globalsPacked.slice();
       setPackedByte(packed, index, value);
       return send([0xF0, 0x00, 0x20, 0x32, 0x20, dev & 0x0F, 0x06, 0x06]
