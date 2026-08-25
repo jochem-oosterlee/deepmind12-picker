@@ -50,6 +50,78 @@ public class SysexLibrary {
         }
     }
 
+    // ---------- CC -> parameternummer ----------
+
+    /**
+     * Omzetting van de CC's uit de implementatietabel (handleiding 16.2) naar
+     * NRPN-parameternummers. Alleen doorlopende 0-255 parameters staan hierin:
+     * bij keuzelijsten (FX-type, gain) is de schaling van een 7-bits CC naar het
+     * parameterbereik niet gedocumenteerd, dus die worden overgeslagen.
+     * Hiermee volgt de editor de synth ook als die op CC staat in plaats van NRPN.
+     */
+    private static final int[] CC_TO_PARAM = new int[128];
+
+    static {
+        for (int i = 0; i < 128; i++) CC_TO_PARAM[i] = -1;
+        CC_TO_PARAM[5] = 34;    // portamento-tijd
+        CC_TO_PARAM[12] = 157;  // arp-tempo
+        CC_TO_PARAM[13] = 160;  // arp gate-tijd
+        CC_TO_PARAM[16] = 0;    // LFO 1 rate
+        CC_TO_PARAM[17] = 1;    // LFO 1 delay
+        CC_TO_PARAM[18] = 7;    // LFO 2 rate
+        CC_TO_PARAM[19] = 8;    // LFO 2 delay
+        CC_TO_PARAM[20] = 21;   // OSC 1 pitch mod
+        CC_TO_PARAM[21] = 25;   // OSC 1 PWM
+        CC_TO_PARAM[23] = 29;   // OSC 2 pitch mod
+        CC_TO_PARAM[24] = 28;   // OSC 2 tone mod
+        CC_TO_PARAM[25] = 27;   // OSC 2 pitch
+        CC_TO_PARAM[26] = 26;   // OSC 2 level
+        CC_TO_PARAM[27] = 33;   // ruis
+        CC_TO_PARAM[28] = 87;   // unison detune
+        CC_TO_PARAM[29] = 39;   // VCF frequentie
+        CC_TO_PARAM[30] = 41;   // VCF resonantie
+        CC_TO_PARAM[31] = 42;   // VCF env-diepte
+        CC_TO_PARAM[33] = 45;   // VCF LFO-diepte
+        CC_TO_PARAM[34] = 49;   // VCF toetsvolging
+        CC_TO_PARAM[35] = 40;   // HPF
+        CC_TO_PARAM[36] = 80;   // VCA niveau
+        CC_TO_PARAM[37] = 53;   // VCA attack
+        CC_TO_PARAM[39] = 54;   // VCA decay
+        CC_TO_PARAM[40] = 55;   // VCA sustain
+        CC_TO_PARAM[41] = 56;   // VCA release
+        CC_TO_PARAM[42] = 62;   // VCF attack
+        CC_TO_PARAM[43] = 63;   // VCF decay
+        CC_TO_PARAM[44] = 64;   // VCF sustain
+        CC_TO_PARAM[45] = 65;   // VCF release
+        CC_TO_PARAM[46] = 71;   // MOD attack
+        CC_TO_PARAM[47] = 72;   // MOD decay
+        CC_TO_PARAM[48] = 73;   // MOD sustain
+        CC_TO_PARAM[49] = 74;   // MOD release
+        for (int i = 0; i < 4; i++) {
+            CC_TO_PARAM[50 + i] = 58 + i;  // VCA envelope-curves
+            CC_TO_PARAM[54 + i] = 67 + i;  // VCF envelope-curves
+            CC_TO_PARAM[58 + i] = 76 + i;  // MOD envelope-curves
+        }
+        // FX-slot 1: CC 62,63,65..74 -> parameters 167..178 (CC64 is sustainpedaal)
+        int[] fx1 = {62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74};
+        for (int i = 0; i < 12; i++) CC_TO_PARAM[fx1[i]] = 167 + i;
+        // FX-slot 2: CC 75..86 -> 180..191
+        for (int i = 0; i < 12; i++) CC_TO_PARAM[75 + i] = 180 + i;
+        // FX-slot 3: CC 87..95 en 102..104 -> 193..204
+        int[] fx3 = {87, 88, 89, 90, 91, 92, 93, 94, 95, 102, 103, 104};
+        for (int i = 0; i < 12; i++) CC_TO_PARAM[fx3[i]] = 193 + i;
+    }
+
+    /** Parameternummer voor een CC, of -1 als die niet eenduidig te vertalen is. */
+    public static int ccToParam(int cc) {
+        return cc >= 0 && cc < 128 ? CC_TO_PARAM[cc] : -1;
+    }
+
+    /** 7-bits CC-waarde naar het 0-255 bereik van een parameter. */
+    public static int ccToValue(int v) {
+        return (v * 255) / 127;
+    }
+
     // ---------- codering ----------
 
     /** Pakt "Packed MS bit"-data uit; stopt bij max databytes of einde bron. */

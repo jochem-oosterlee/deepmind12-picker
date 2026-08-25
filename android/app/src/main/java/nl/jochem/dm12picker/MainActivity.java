@@ -73,7 +73,12 @@ public class MainActivity extends Activity {
                         lib.handleParam((rxParamMsb << 7) | rxParamLsb,
                                 (rxDataMsb << 7) | value);
                         break;
-                    default: break;
+                    default: {
+                        // de synth kan ook gewone CC's sturen (WiFi-modus op CC)
+                        int p = SysexLibrary.ccToParam(cc);
+                        if (p >= 0) lib.handleParam(p, SysexLibrary.ccToValue(value));
+                        break;
+                    }
                 }
             }
 
