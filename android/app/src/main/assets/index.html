@@ -1097,6 +1097,11 @@ let pRecent = {};             // idem voor parameters uit de editor
 let gDraft = {};              // getypte labels die nog niet opgeslagen zijn
 let gFocus = null;            // waar de cursor stond, om hem terug te zetten
 let gFocusEl = null;
+// Verwijzingen naar de gebouwde kaartjes. Tijdens het volgen werken we die
+// bij in plaats van ze opnieuw te bouwen: anders raakt elk invoerveld en elke
+// open keuzelijst zijn focus kwijt bij iedere lezing.
+let gCards = {};
+let gEditors = {};
 const HILITE_MS = 8000;
 
 // Bij elke wijziging blijft de vorige versie bewaard, zodat handwerk niet
@@ -1365,6 +1370,23 @@ function labelEditor(i) {
   };
   rebuild();
 
+  // Meebewegen met de synth zonder de regels te herbouwen: nieuwe standen
+  // worden toegevoegd en de regel waar de synth op staat licht op.
+  gEditors[i] = () => {
+    const at = gData ? gData.bytes[i] : 0;
+    while (draft.length < at + 1) {
+      draft.push("");
+      rows.appendChild(makeRow("", draft.length - 1));
+    }
+    Array.from(rows.children).forEach((r, n) => {
+      r.className = "labrow" + (n === at ? " now" : "");
+      const inp = r.children[1];
+      if (inp) {
+        inp.placeholder = n === at ? "what does the synth show now?" : "name of this setting";
+      }
+    });
+  };
+
   // uit de invoervelden zelf, niet uit de kladversie: wat je ziet is wat er staat
   const collect = () => Array.from(rows.children)
     .map(r => ((r.children[1] && r.children[1].value) || "").trim());
@@ -1583,6 +1605,7 @@ function byteCard(i) {
 
   const ctl = document.createElement("div");
   ctl.className = "ctl";
+  let ctlInput = null;
 
   if (m.labels && Object.keys(m.labels).length) {
     const sel = document.createElement("select");
@@ -1595,8 +1618,10 @@ function byteCard(i) {
       sel.appendChild(o);
     });
     sel.value = v;
-    sel.addEventListener("change", () => writeByte(i, +sel.value, sel, v));
+    // de huidige waarde uit gData lezen: die kan inmiddels bijgewerkt zijn
+    sel.addEventListener("change", () => writeByte(i, +sel.value, sel, gData.bytes[i]));
     ctl.appendChild(sel);
+    ctlInput = sel;
   } else {
     const inp = document.createElement("input");
     inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
@@ -1604,9 +1629,10 @@ function byteCard(i) {
     set.className = "mini"; set.textContent = "Set";
     set.title = "send this value to the synth";
     set.addEventListener("click", () =>
-      writeByte(i, Math.max(0, Math.min(255, parseInt(inp.value, 10))), set, v));
+      writeByte(i, Math.max(0, Math.min(255, parseInt(inp.value, 10))), set, gData.bytes[i]));
     ctl.appendChild(inp);
     ctl.appendChild(set);
+    ctlInput = inp;
   }
 
   const read = document.createElement("button");
@@ -1640,15 +1666,15 @@ function byteCard(i) {
   card.appendChild(ctl);
   if (gOpen[i] === "labels") card.appendChild(labelEditor(i));
   if (gOpen[i] === "menu") card.appendChild(menuPicker(i));
+  // onthouden welke elementen bij deze instelling horen, zodat het volgen
+  // ze kan bijwerken zonder de kaart opnieuw te bouwen
+  gCards[i] = {card: card, valEl: val, nmEl: nm, ctlEl: ctlInput};
   return card;
 }
 
-function renderGlobals() {
-  const list = document.getElementById("gList");
+/** Statusregel, markeringen en het onthouden van de hoogste waarde. */
+function updateGStat() {
   const stat = document.getElementById("gStat");
-  list.innerHTML = "";
-
-  gFocusEl = null;
   const changed = gData ? (gData.changed || []) : [];
   const now = Date.now();
 
@@ -1676,6 +1702,42 @@ function renderGlobals() {
     : `${gData.bytes.length} settings`
       + (gWatch ? " · following the synth" : " · read " + gData.rev)
       + (gLastChanged ? " · last changed: " + gLastChanged : "");
+}
+
+/**
+ * Werkt de bestaande kaartjes bij zonder ze te herbouwen. Zo blijven focus,
+ * open keuzelijsten en half getypte tekst intact terwijl de app volgt.
+ */
+function updateGlobalsInPlace() {
+  if (!gData) return;
+  updateGStat();
+  const now = Date.now();
+  for (const key of Object.keys(gCards)) {
+    const i = +key;
+    const c = gCards[i];
+    if (!c || !c.card) continue;
+    const v = gData.bytes[i];
+    const m = gmeta.bytes[i] || {};
+    c.valEl.textContent = m.labels && m.labels[v] ? m.labels[v] + " · " + v : String(v);
+    const mine = gJustSet[i] && now - gJustSet[i] < HILITE_MS;
+    c.card.className = "gcard" + (mine ? " justset" : (isRecent(i) ? " changed" : ""));
+    if (!m.name && c.nmEl) c.nmEl.textContent = isRecent(i) ? "just changed" : "unknown";
+    // een regelaar niet bijwerken terwijl de gebruiker er in bezig is
+    if (c.ctlEl && document.activeElement !== c.ctlEl
+        && String(c.ctlEl.value) !== String(v)) {
+      c.ctlEl.value = v;
+    }
+    if (gEditors[i]) gEditors[i]();   // open labeleditor bijwerken
+  }
+}
+
+function renderGlobals() {
+  const list = document.getElementById("gList");
+  list.innerHTML = "";
+  gFocusEl = null;
+  gCards = {};
+  gEditors = {};
+  updateGStat();
 
   const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
   const grid = (members, depth) => {
@@ -1725,7 +1787,10 @@ function loadGlobals() {
     const g = JSON.parse(AndroidBridge.globals());
     if (g && Array.isArray(g.bytes)) {
       gData = g;
-      if (tab === "global") renderGlobals();
+      if (tab !== "global") return true;
+      // staan de kaartjes er al? Dan alleen bijwerken, niet herbouwen.
+      if (Object.keys(gCards).length === g.bytes.length) updateGlobalsInPlace();
+      else renderGlobals();
       return true;
     }
   } catch {}

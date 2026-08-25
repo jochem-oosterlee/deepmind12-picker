@@ -83,15 +83,17 @@ global.URL = {createObjectURL: () => "blob:x", revokeObjectURL() {}};
 
 // nagebootste native laag
 let sent = [];
+let globalRev = 1, globalChanged = [6];
+const globalBytes = Array.from({length: 45}, (_, i) => (i * 3) & 0xFF);
 global.AndroidBridge = {
   getStatus: () => JSON.stringify({connected: true, status: "verbonden met FakeDM12",
     event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
     badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: 7,
     info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0,
-    globalRev: 1, rxCC: 12, rxPar: 3, rxLast: "par 39 = 200"}),
-  globals: () => JSON.stringify({rev: 1, hadPrevious: true, changed: [6],
-    bytes: Array.from({length: 45}, (_, i) => (i * 3) & 0xFF)}),
+    globalRev: globalRev, rxCC: 12, rxPar: 3, rxLast: "par 39 = 200"}),
+  globals: () => JSON.stringify({rev: globalRev, hadPrevious: true, changed: globalChanged,
+    bytes: globalBytes}),
   requestGlobals: d => { sent.push(["reqGlobals", d]); return true; },
   discover: () => sent.push(["discover"]),
   discovered: () => JSON.stringify({running: false, status: "1 apparaat gevonden",
@@ -264,7 +266,28 @@ setTimeout(() => {
   }
   testLabels();
 
-  if (global.__onerror && errors.length) console.log("meldingen:", errors);
-  console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
-  process.exit(failures ? 1 : 0);
+  // Volgen mag de kaartjes niet herbouwen: dan raakt elk invoerveld en elke
+  // open keuzelijst zijn focus kwijt bij iedere lezing.
+  const glist = document.getElementById("gList");
+  const card = findIn(glist, e => String(e.className || "").includes("gcard"));
+  const valEl = findIn(card, e => e.className === "val");
+  const before = valEl.textContent;
+  globalBytes[0] = 99;
+  globalChanged = [0];
+  globalRev++;
+
+  setTimeout(() => {
+    const same = findIn(document.getElementById("gList"), e => e === card);
+    console.log("na een nieuwe lezing:", same ? "zelfde kaartje" : "HERBOUWD",
+                "| waarde", JSON.stringify(before), "->", JSON.stringify(valEl.textContent));
+    if (!same) { console.error("FOUT: kaartjes herbouwd tijdens het volgen"); failures++; }
+    if (valEl.textContent !== "99") {
+      console.error("FOUT: waarde niet bijgewerkt zonder herbouw");
+      failures++;
+    }
+
+    if (global.__onerror && errors.length) console.log("meldingen:", errors);
+    console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
+    process.exit(failures ? 1 : 0);
+  }, 1800);
 }, 20);
