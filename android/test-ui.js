@@ -106,6 +106,7 @@ global.AndroidBridge = {
   discovered: () => JSON.stringify({running: false, status: "1 apparaat gevonden",
     found: ["192.168.0.227 (DeepMind12)"]}),
   writeGlobal: (i, v, d) => { sent.push(["writeGlobal", i, v, d]); return true; },
+  writeGlobalBlock: (json, d) => { sent.push(["writeGlobalBlock", JSON.parse(json).length, d]); return true; },
   libNames: () => JSON.stringify({"A-0": ["Blue Dolphin", 2, 1], "A-1": ["Bass Pong", 1, 0]}),
   libParams: () => JSON.stringify(Array.from({length: 242}, (_, i) => (i * 7) & 0xFF)),
   getWifiCreds: () => JSON.stringify({ssid: "Deepmind12", pw: "Passphrase"}),
@@ -204,7 +205,7 @@ try {
 for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
                   "libExportBtn","readBtn","pushBtn","autoBtn","gReadBtn","gHelpBtn",
-                  "findBtn","gWatchBtn","gExportBtn"]) {
+                  "findBtn","gWatchBtn","gExportBtn","gSnapBtn","gSnapRestore"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");

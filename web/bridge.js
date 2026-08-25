@@ -472,6 +472,20 @@
         .concat(packed).concat([0xF7]));
     },
 
+    /** Schrijft een compleet blok globale instellingen in één bericht. */
+    writeGlobalBlock: (valuesJson, dev) => {
+      if (!S.globalsPacked) return false;
+      let vals;
+      try { vals = JSON.parse(valuesJson); } catch { return false; }
+      if (!Array.isArray(vals)) return false;
+      const packed = S.globalsPacked.slice();
+      vals.forEach((v, i) => {
+        if (typeof v === "number" && v >= 0 && v <= 255) setPackedByte(packed, i, v);
+      });
+      return send([0xF0, 0x00, 0x20, 0x32, 0x20, dev & 0x0F, 0x06, 0x06]
+        .concat(packed).concat([0xF7]));
+    },
+
     patchToEditBuffer: (bank, prog, dev) => {
       const p = S.patches[bank + "-" + prog];
       if (!p) return false;

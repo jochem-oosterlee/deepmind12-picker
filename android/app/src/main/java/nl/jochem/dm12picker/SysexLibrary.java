@@ -513,6 +513,25 @@ public class SysexLibrary {
         else packed[msbAt] &= (byte) ~(1 << pos);
     }
 
+    /** Bericht om een compleet blok globale instellingen te schrijven. */
+    public byte[] globalBlockMsg(int dev, int[] values) {
+        synchronized (lock) {
+            if (globalsPacked == null) return null;
+            byte[] packed = globalsPacked.clone();
+            for (int i = 0; i < values.length; i++) {
+                if (values[i] >= 0 && values[i] <= 255) setPackedByte(packed, i, values[i]);
+            }
+            byte[] m = new byte[8 + packed.length + 1];
+            System.arraycopy(HEADER, 0, m, 0, 5);
+            m[5] = (byte) (dev & 0x0F);
+            m[6] = 0x06;
+            m[7] = 0x06;
+            System.arraycopy(packed, 0, m, 8, packed.length);
+            m[m.length - 1] = (byte) 0xF7;
+            return m;
+        }
+    }
+
     /** Bericht om één globale instelling terug te schrijven, of null zonder lezing. */
     public byte[] globalWriteMsg(int dev, int index, int value) {
         synchronized (lock) {

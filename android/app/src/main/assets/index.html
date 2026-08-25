@@ -217,6 +217,10 @@
     <button class="mini" id="gWatchBtn" title="keep reading and show what changes">Follow</button>
     <button class="mini" id="gUndoBtn" style="display:none">↶ Undo</button>
     <button class="mini" id="gNewMenu">New menu</button>
+    <button class="mini" id="gSnapBtn" title="store all current settings under a name">Snapshot</button>
+    <select id="gSnapList" style="max-width:150px"></select>
+    <button class="mini" id="gSnapRestore">Restore</button>
+    <button class="mini" id="gSnapDel" title="delete this snapshot">×</button>
     <button class="mini" id="gExportBtn">Export layout</button>
     <button class="mini" id="gImportBtn">Import</button>
     <button class="mini" id="gHelpBtn">Help</button>
@@ -766,6 +770,7 @@ function showTab() {
   // De Global-tab volgt de synth vanzelf: dat maakt het herkennen van
   // instellingen snel. Buiten die tab hoeft er niet gepolst te worden.
   if (tab === "global") {
+    renderSnaps();
     if (!gWatch && store.load("dm12.gwatch", true)) setWatch(true);
     AndroidBridge.requestGlobals(devId);
   }
@@ -1212,6 +1217,7 @@ let gDrag = null;             // wat er versleept wordt
 let gLastChanged = "";        // welke bytes het laatst veranderden
 let gUndo = null;             // laatste wijziging, om terug te kunnen draaien
 let gPending = null;          // verstuurde wijziging waarvan we het resultaat nalezen
+let gSnapCheck = null;        // teruggezette momentopname die we nalezen
 let gWriteIgnored = false;    // heeft deze synth een wijziging genegeerd?
 let gRecent = {};             // wanneer een byte veranderde, voor de markering
 let gJustSet = {};            // wanneer wij een byte zetten
@@ -1981,6 +1987,21 @@ function updateGStat() {
     gPending = null;
   }
 
+  // idem voor een teruggezette momentopname: melden hoeveel er is overgenomen
+  if (gSnapCheck && gData && now - gSnapCheck.ms > 400) {
+    let same = 0, off = [];
+    gSnapCheck.bytes.forEach((v, i) => {
+      if (gData.bytes[i] === v) same++;
+      else off.push("#" + i);
+    });
+    statusText.textContent = "snapshot “" + gSnapCheck.name + "”: " + same + " of "
+      + gSnapCheck.bytes.length + " settings match"
+      + (off.length ? " · refused: " + off.slice(0, 8).join(", ")
+                    + (off.length > 8 ? " …" : "") : "");
+    if (off.length) gWriteIgnored = true;
+    gSnapCheck = null;
+  }
+
   document.getElementById("gUndoBtn").style.display = gUndo ? "inline-block" : "none";
   stat.textContent = !gData
     ? "Not read yet — tap ‘Read from synth’. You can already create menus."
@@ -2125,6 +2146,67 @@ gWatchBtn.addEventListener("click", () => {
 });
 
 document.getElementById("gUndoBtn").addEventListener("click", undoWrite);
+
+// ---------- momentopnames van alle globale instellingen ----------
+// Handig als back-up, en soms neemt de synth een enkele byte niet aan maar een
+// compleet blok wel: dan zet je een eerder bewaarde stand in één keer terug.
+let gSnaps = store.load("dm12.gsnaps", []);
+
+function renderSnaps() {
+  const sel = document.getElementById("gSnapList");
+  const keep = sel.value;
+  sel.innerHTML = "";
+  if (!gSnaps.length) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "no snapshots yet";
+    sel.appendChild(o);
+    return;
+  }
+  gSnaps.forEach((s, n) => {
+    const o = document.createElement("option");
+    o.value = n; o.textContent = s.name + " (" + s.bytes.length + ")";
+    sel.appendChild(o);
+  });
+  if (keep) sel.value = keep;
+}
+
+document.getElementById("gSnapBtn").addEventListener("click", async () => {
+  if (!gData) { statusText.textContent = "read the settings first"; return; }
+  const nm = await askText("Name for this snapshot of all "
+    + gData.bytes.length + " settings", "");
+  if (nm === null || !nm.trim()) return;
+  gSnaps.push({name: nm.trim(), bytes: gData.bytes.slice()});
+  store.save("dm12.gsnaps", gSnaps);
+  renderSnaps();
+  statusText.textContent = "snapshot “" + nm.trim() + "” saved on this device";
+});
+
+document.getElementById("gSnapRestore").addEventListener("click", async () => {
+  const n = +document.getElementById("gSnapList").value;
+  const s = gSnaps[n];
+  if (!s) return;
+  const diff = gData ? s.bytes.filter((v, i) => v !== gData.bytes[i]).length : 0;
+  if (!await ask("Restore snapshot “" + s.name + "”?\n\n"
+      + diff + " of " + s.bytes.length + " settings differ from what the synth has now."
+      + "\n\nThe whole block is sent at once. Settings the synth refuses stay as they are."))
+    return;
+  const ok = AndroidBridge.writeGlobalBlock(JSON.stringify(s.bytes), devId);
+  statusText.textContent = ok ? "snapshot sent, reading back…" : "not sent (no connection)";
+  if (ok) {
+    gSnapCheck = {bytes: s.bytes, ms: Date.now(), name: s.name};
+    setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
+  }
+});
+
+document.getElementById("gSnapDel").addEventListener("click", async () => {
+  const n = +document.getElementById("gSnapList").value;
+  const s = gSnaps[n];
+  if (!s) return;
+  if (!await ask("Delete snapshot “" + s.name + "”?")) return;
+  gSnaps.splice(n, 1);
+  store.save("dm12.gsnaps", gSnaps);
+  renderSnaps();
+});
 
 document.getElementById("gNewMenu").addEventListener("click", () => addGroup(null));
 document.getElementById("gExportBtn").addEventListener("click", () => {

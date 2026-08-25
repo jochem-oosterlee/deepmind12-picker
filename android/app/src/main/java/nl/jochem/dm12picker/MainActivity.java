@@ -390,6 +390,26 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean writeGlobalBlock(String valuesJson, int dev) {
+            try {
+                String s = valuesJson.trim();
+                if (s.startsWith("[")) s = s.substring(1);
+                if (s.endsWith("]")) s = s.substring(0, s.length() - 1);
+                String[] parts = s.split(",");
+                int[] vals = new int[parts.length];
+                for (int i = 0; i < parts.length; i++) {
+                    vals[i] = Integer.parseInt(parts[i].trim());
+                }
+                byte[] m = lib.globalBlockMsg(dev, vals);
+                if (m == null) return false;
+                lib.logOut(m);
+                return session.sendSysEx(m);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
         public String libNames() {
             return lib.namesJson();
         }
