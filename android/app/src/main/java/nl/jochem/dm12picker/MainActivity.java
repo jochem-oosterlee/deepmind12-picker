@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
             @Override
             public void onControlChange(int ch, int cc, int value) {
                 // NRPN van de synth volgen, zodat de editor meebeweegt met de faders
+                lib.noteCC(cc, value);
                 switch (cc) {
                     case 99: rxParamMsb = value; rxDataMsb = 0; break;
                     case 98: rxParamLsb = value; rxDataMsb = 0; break;
@@ -350,6 +351,23 @@ public class MainActivity extends Activity {
             if (p == null) return false;
             return session.sendSysEx(SysexLibrary.writeProgram(dev,
                     Math.max(0, Math.min(7, dstBank)), Math.max(0, Math.min(127, dstProg)), p));
+        }
+
+        @JavascriptInterface
+        public boolean requestGlobals(int dev) {
+            return session.sendSysEx(SysexLibrary.reqGlobal(dev));
+        }
+
+        @JavascriptInterface
+        public String globals() {
+            return lib.globalsJson();
+        }
+
+        /** Schrijft één globale instelling terug; de rest blijft byte-identiek. */
+        @JavascriptInterface
+        public boolean writeGlobal(int index, int value, int dev) {
+            byte[] m = lib.globalWriteMsg(dev, index, Math.max(0, Math.min(255, value)));
+            return m != null && session.sendSysEx(m);
         }
 
         @JavascriptInterface

@@ -80,6 +80,17 @@
   .lrow .dotp { width:7px; height:7px; border-radius:50%; background:var(--border); flex:none; }
   .lrow .dotp.has { background:var(--ok); }
   .note { font-size:12px; color:var(--muted); line-height:1.6; margin:8px 0; }
+  /* eigen dialoog: een WebView negeert confirm() en alert() */
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:20px; }
+  #modal .box { background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:16px; max-width:420px; width:100%; }
+  #modalText { font-size:14px; line-height:1.5; margin-bottom:14px; white-space:pre-line; }
+  .grow { flex:1; }
+  .gchanged { border-color:var(--active); background:#2c2415; }
+  .gname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
+  .lrow input[type=number] { width:64px; padding:6px; }
   .warn { color:var(--active); }
   .empty { color:var(--muted); padding:26px; text-align:center; }
   footer { margin-top:18px; font-size:11px; color:var(--muted); line-height:1.6; }
@@ -123,6 +134,25 @@
   <div class="grid" id="grid"></div>
 </div>
 
+<div id="modal" style="display:none">
+  <div class="box">
+    <div id="modalText"></div>
+    <div class="row" style="justify-content:flex-end;margin:0">
+      <button id="modalNo">Annuleren</button>
+      <button id="modalYes">Doorgaan</button>
+    </div>
+  </div>
+</div>
+
+<div id="page-global" style="display:none">
+  <div class="row" style="flex-wrap:wrap">
+    <button class="mini" id="gReadBtn">Lees uit synth</button>
+    <button class="mini" id="gHelpBtn">Uitleg</button>
+  </div>
+  <div class="note" id="gStat">Nog niet uitgelezen.</div>
+  <div id="gList"></div>
+</div>
+
 <div id="page-lib" style="display:none">
   <div class="row" style="flex-wrap:wrap">
     <button class="mini" id="scanNames">Scan alle namen</button>
@@ -145,7 +175,7 @@
   <div id="paramList"></div>
 </div>
 
-<footer id="foot">v1.9 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
+<footer id="foot">v1.10 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
 
 <script>
 "use strict";
@@ -172,8 +202,16 @@ let libBank = 0;
 let devNames = {};        // "A-0" -> [naam, categorie, heeftPatch]
 let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
-let lastParamRev = -1, lastNameCount = -1, wasConnected = false;
-let dragging = false, readWaiting = 0;
+let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
+let dragging = false, readWaiting = 0, dragTimer = null;
+
+// Tijdens slepen niet verversen, anders springt de regelaar onder je vinger weg.
+// Met een tijdslot, want een gemiste touchend zou het volgen anders blokkeren.
+function markDragging() {
+  dragging = true;
+  clearTimeout(dragTimer);
+  dragTimer = setTimeout(() => { dragging = false; }, 800);
+}
 
 // Scan van namen of patches: strikt één verzoek per keer, en pas verder als het
 // antwoord binnen is. Twee dumps die door elkaar heen aankomen laten de
@@ -385,6 +423,8 @@ function pollNow() {
       readWaiting = 0;
     }
     scanTick(lib);
+    if (isParamTab()) updateParamNote();
+    if (lib.globalRev !== lastGlobalRev) { lastGlobalRev = lib.globalRev; loadGlobals(); }
     if (scan) txt = `scan ${scan.i}/${scan.items.length} · ` + txt;
   }
   statusText.textContent = txt;
@@ -437,11 +477,35 @@ document.getElementById("notifyBtn").addEventListener("click", () => {
 });
 document.getElementById("panicBtn").addEventListener("click", () => AndroidBridge.panic(channel));
 
+// ================== eigen dialoog ==================
+// Een WebView negeert confirm() en alert(), dus die deden stilletjes niets.
+function ask(msg) {
+  return new Promise(res => {
+    const m = document.getElementById("modal");
+    document.getElementById("modalText").textContent = msg;
+    m.style.display = "flex";
+    const yes = document.getElementById("modalYes");
+    const no = document.getElementById("modalNo");
+    const done = v => { m.style.display = "none"; res(v); };
+    yes.onclick = () => done(true);
+    no.onclick = () => done(false);
+  });
+}
+
+function tell(msg) {
+  const m = document.getElementById("modal");
+  document.getElementById("modalText").textContent = msg;
+  m.style.display = "flex";
+  document.getElementById("modalYes").onclick = () => { m.style.display = "none"; };
+  document.getElementById("modalNo").onclick = () => { m.style.display = "none"; };
+}
+
 // ================== tabs ==================
 function buildTabs() {
   const t = document.getElementById("tabs");
   t.innerHTML = "";
-  const all = [{id:"presets", name:"Presets"}, {id:"lib", name:"Bibliotheek"}, ...PAGES];
+  const all = [{id:"presets", name:"Presets"}, {id:"lib", name:"Bibliotheek"},
+               ...PAGES, {id:"global", name:"Global"}];
   for (const p of all) {
     const b = document.createElement("button");
     b.className = "tab" + (tab === p.id ? " sel" : "");
@@ -457,9 +521,11 @@ function showTab() {
   buildTabs();
   document.getElementById("page-presets").style.display = tab === "presets" ? "block" : "none";
   document.getElementById("page-lib").style.display = tab === "lib" ? "block" : "none";
+  document.getElementById("page-global").style.display = tab === "global" ? "block" : "none";
   document.getElementById("page-params").style.display = isParamTab() ? "block" : "none";
   if (tab === "presets") renderGrid();
   else if (tab === "lib") renderLib();
+  else if (tab === "global") renderGlobals();
   else renderParams();
 }
 
@@ -629,10 +695,26 @@ document.getElementById("restoreBtn").addEventListener("click", () => {
     if (d.vals) vals = d.vals;
     store.save("dm12.names", names); store.save("dm12.favs", [...favs]); store.save("dm12.vals", vals);
     renderGrid();
-  } catch { alert("Geen geldige back-up op het klembord"); }
+    statusText.textContent = "back-up hersteld van het klembord";
+  } catch { tell("Geen geldige back-up op het klembord gevonden."); }
 });
 
 // ================== parameters ==================
+// Laat zien of de synth ook echt iets terugstuurt. Zonder dit is niet te zien
+// of het aan de app ligt of aan een instelling op de synth.
+function updateParamNote() {
+  const el = document.getElementById("paramNote");
+  if (!el) return;
+  let t = synthParams ? "waarden uit de synth" : "nog niet uitgelezen";
+  if (autoSync) t += " · auto aan";
+  if (libState) {
+    if (libState.rxPar > 0) t += " · synth stuurt mee: " + libState.rxLast;
+    else if (libState.rxCC > 0) t += " · synth stuurt CC's: " + libState.rxLast;
+    else t += " · synth stuurt niets (zet WiFi-modus op NRPN)";
+  }
+  el.textContent = t;
+}
+
 function pkey(p) { return p.n !== undefined ? "n" + p.n : "c" + p.cc; }
 function pval(p) {
   if (p.n !== undefined && synthParams && p.n < synthParams.length && vals[pkey(p)] === undefined) {
@@ -665,9 +747,7 @@ function sendParam(p, v) {
 function renderParams() {
   const page = PAGES.find(x => x.id === tab);
   const wrap = document.getElementById("paramList");
-  document.getElementById("paramNote").textContent = synthParams
-    ? "waarden uit de synth" + (autoSync ? " · auto volgt mee" : "")
-    : "tik op ‘Lees synth uit’ voor de echte waarden";
+  updateParamNote();
   wrap.innerHTML = "";
   if (!page) return;
   for (const p of page.params) {
@@ -716,11 +796,12 @@ function renderParams() {
       r.addEventListener("input", () => {
         const nv = +r.value;
         vs.textContent = fmt(p, nv);
-        dragging = true;
+        markDragging();
         if (!t) t = setTimeout(() => { t = null; doSend(p, +r.value); }, 25);
       });
       const fin = () => {
         dragging = false;
+        clearTimeout(dragTimer);
         clearTimeout(t); t = null;
         sendParam(p, +r.value);
       };
@@ -840,10 +921,14 @@ function renderLib() {
     const wr = document.createElement("button");
     wr.className = "mini"; wr.textContent = "⤴";
     wr.title = "opgeslagen patch terugschrijven naar dit slot";
-    wr.addEventListener("click", () => {
-      if (!confirm("Patch terugschrijven naar " + key + "?\n\nDit overschrijft het programma in de synth.")) return;
-      const ok = AndroidBridge.patchToSlot(libBank, p, libBank, p, devId);
-      statusText.textContent = ok ? key + " teruggeschreven" : "geen patch opgeslagen voor " + key;
+    wr.addEventListener("click", async () => {
+      const ok = await ask("Patch terugschrijven naar " + key + "?\n\n"
+        + "Dit overschrijft het programma dat nu in dat slot van de synth staat.");
+      if (!ok) return;
+      const done = AndroidBridge.patchToSlot(libBank, p, libBank, p, devId);
+      flash(wr, done);
+      statusText.textContent = done ? key + " teruggeschreven"
+                                    : "geen patch opgeslagen voor " + key;
     });
     row.appendChild(wr);
 
@@ -851,14 +936,135 @@ function renderLib() {
   }
 }
 
+// ================== globale instellingen ==================
+// De handleiding noemt de globale instellingen wel, maar niet op welke van de
+// 45 bytes ze staan. Daarom leert de app dat door twee lezingen te vergelijken:
+// verander iets op de synth, lees opnieuw, en de byte die veranderde licht op.
+const GLOBAL_DOC = [
+  "MIDI-kanaal", "keyboard local", "fader local", "global tune", "MIDI clock source",
+  "program change (Rx/Tx/Both)", "USB control mode (CC/NRPN)", "MIDI control mode (CC/NRPN)",
+  "MIDI soft thru", "USB → MIDI", "MIDI → USB", "fixed velocity", "velocity",
+  "velocity curve", "transpose", "aftertouch curve", "pedal CC", "sustain CC",
+  "fader pick-up", "LCD helderheid", "LCD contrast", "arp naar MIDI",
+  "send NRPN on load", "keyboard octave"
+];
+
+let gNames = store.load("dm12.gnames", {});
+let gData = null;
+
+function renderGlobals() {
+  const list = document.getElementById("gList");
+  const stat = document.getElementById("gStat");
+  list.innerHTML = "";
+  if (!gData) {
+    stat.textContent = "Nog niet uitgelezen — tik op ‘Lees uit synth’.";
+    return;
+  }
+  const ch = new Set(gData.changed || []);
+  stat.textContent = `${gData.bytes.length} bytes · lezing ${gData.rev}`
+    + (gData.hadPrevious
+        ? (ch.size ? ` · ${ch.size} byte(s) veranderd sinds de vorige lezing`
+                   : " · niets veranderd sinds de vorige lezing")
+        : " · lees nog eens na een wijziging op de synth om bytes te herkennen");
+
+  gData.bytes.forEach((v, i) => {
+    const row = document.createElement("div");
+    row.className = "lrow" + (ch.has(i) ? " gchanged" : "");
+
+    const num = document.createElement("span");
+    num.className = "lnum"; num.textContent = "#" + String(i).padStart(2, "0");
+    row.appendChild(num);
+
+    const nm = document.createElement("span");
+    nm.className = "gname";
+    nm.textContent = gNames[i] || (ch.has(i) ? "← net veranderd, geef een naam" : "—");
+    if (!gNames[i]) nm.style.color = "var(--muted)";
+    nm.addEventListener("click", () => {
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.value = gNames[i] || "";
+      inp.placeholder = "naam van deze instelling";
+      nm.replaceWith(inp);
+      inp.focus();
+      const fin = () => {
+        const t = inp.value.trim();
+        if (t) gNames[i] = t; else delete gNames[i];
+        store.save("dm12.gnames", gNames);
+        renderGlobals();
+      };
+      inp.addEventListener("blur", fin);
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") fin(); e.stopPropagation(); });
+    });
+    row.appendChild(nm);
+
+    const val = document.createElement("span");
+    val.className = "gval"; val.textContent = v;
+    row.appendChild(val);
+
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = v;
+    row.appendChild(inp);
+
+    const set = document.createElement("button");
+    set.className = "mini"; set.textContent = "Zet";
+    set.addEventListener("click", async () => {
+      const nv = Math.max(0, Math.min(255, parseInt(inp.value, 10)));
+      if (isNaN(nv) || nv === v) return;
+      const label = gNames[i] ? `“${gNames[i]}” (byte #${i})` : `byte #${i}`;
+      const ok = await ask("Globale instelling wijzigen?\n\n" + label + ": " + v + " → " + nv
+        + "\n\nDit past een instelling van de synth aan. Weet je niet zeker welke instelling"
+        + " dit is, lees dan eerst uit en vergelijk. Alle andere bytes blijven ongewijzigd.");
+      if (!ok) return;
+      const done = AndroidBridge.writeGlobal(i, nv, devId);
+      flash(set, done);
+      statusText.textContent = done ? "byte #" + i + " naar " + nv + " gestuurd"
+                                    : "niet verstuurd (geen verbinding of geen lezing)";
+      if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 400);
+    });
+    row.appendChild(set);
+    list.appendChild(row);
+  });
+}
+
+function loadGlobals() {
+  try {
+    const g = JSON.parse(AndroidBridge.globals());
+    if (g && Array.isArray(g.bytes)) {
+      gData = g;
+      if (tab === "global") renderGlobals();
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+const gReadBtn = document.getElementById("gReadBtn");
+gReadBtn.addEventListener("click", () => {
+  const ok = AndroidBridge.requestGlobals(devId);
+  flash(gReadBtn, ok);
+  statusText.textContent = ok ? "globale instellingen opgevraagd…" : "niet verbonden";
+});
+document.getElementById("gHelpBtn").addEventListener("click", () => {
+  tell("De synth stuurt zijn globale instellingen als één blok van 45 bytes. "
+    + "De handleiding noemt wél welke instellingen erin zitten, maar niet op welke plek. "
+    + "Daarom: lees uit, verander één ding op de synth (GLOBAL-menu), lees opnieuw — "
+    + "de byte die veranderde licht oranje op. Geef hem een naam door erop te tikken, "
+    + "en daarna kun je hem vanuit de app zetten.\n\n"
+    + "Instellingen volgens de handleiding: " + GLOBAL_DOC.join(", ") + ".\n\n"
+    + "De WiFi-controlemodus (CC of NRPN) staat niet in de handleiding van 2016 en is "
+    + "dus een van de overige bytes — precies iets om zo te vinden.");
+});
+
 document.getElementById("scanNames").addEventListener("click", () => {
   AndroidBridge.appNotify(devId);
   scanStart("names", [0,1,2,3,4,5,6,7]);
   statusText.textContent = "namen scannen, bank voor bank…";
 });
-document.getElementById("scanBankPatches").addEventListener("click", () => {
-  if (!confirm("Alle 128 patches van bank " + BANKS[libBank] + " ophalen?\nDit duurt een paar minuten.")) return;
-  scanStart("patches", Array.from({length: PROGS}, (_, i) => i), libBank);
+document.getElementById("scanBankPatches").addEventListener("click", async () => {
+  const bank = libBank;
+  if (!await ask("Alle 128 patches van bank " + BANKS[bank] + " ophalen?\n\n"
+      + "Dit duurt een paar minuten. Je kunt de app gewoon blijven gebruiken.")) return;
+  scanStart("patches", Array.from({length: PROGS}, (_, i) => i), bank);
 });
 document.getElementById("libSaveBtn").addEventListener("click", () => {
   AndroidBridge.libSave();

@@ -82,7 +82,12 @@ global.AndroidBridge = {
     event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
     badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: 7,
-    info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0}),
+    info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0,
+    globalRev: 1, rxCC: 12, rxPar: 3, rxLast: "par 39 = 200"}),
+  globals: () => JSON.stringify({rev: 1, hadPrevious: true, changed: [6],
+    bytes: Array.from({length: 45}, (_, i) => (i * 3) & 0xFF)}),
+  requestGlobals: d => { sent.push(["reqGlobals", d]); return true; },
+  writeGlobal: (i, v, d) => { sent.push(["writeGlobal", i, v, d]); return true; },
   libNames: () => JSON.stringify({"A-0": ["Blue Dolphin", 2, 1], "A-1": ["Bass Pong", 1, 0]}),
   libParams: () => JSON.stringify(Array.from({length: 242}, (_, i) => (i * 7) & 0xFF)),
   getWifiCreds: () => JSON.stringify({ssid: "Deepmind12", pw: "Passphrase"}),
@@ -121,6 +126,9 @@ const bankTabs = document.getElementById("bankTabs");
 console.log("tabs:", tabs.children.length, "| bankknoppen:", bankTabs.children.length,
             "| presets:", grid.children.length);
 if (tabs.children.length < 5) { console.error("FOUT: tabs niet opgebouwd"); process.exit(1); }
+if (!tabs.children.some(t => t.textContent === "Global")) {
+  console.error("FOUT: Global-tab ontbreekt"); process.exit(1);
+}
 if (grid.children.length !== 128) { console.error("FOUT: presetraster niet opgebouwd"); process.exit(1); }
 
 // elke tab openen en de inhoud renderen
@@ -130,7 +138,13 @@ for (const t of [...tabs.children]) {
   try {
     t.fire("click");
     const list = document.getElementById("paramList");
-    console.log("tab", JSON.stringify(t.textContent), "-> parameters:", list.children.length);
+    const glist = document.getElementById("gList");
+    console.log("tab", JSON.stringify(t.textContent), "-> parameters:", list.children.length,
+                t.textContent === "Global" ? "| globale bytes: " + glist.children.length : "");
+    if (t.textContent === "Global" && glist.children.length !== 45) {
+      console.error("FOUT: globale instellingen niet gerenderd");
+      failures++;
+    }
   } catch (e) {
     console.error("FOUT in tab", t.textContent, ":", e.message);
     failures++;
@@ -148,7 +162,7 @@ try {
 // alle knoppen in de kop en de bibliotheek
 for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
-                  "libExportBtn","readBtn","pushBtn","autoBtn"]) {
+                  "libExportBtn","readBtn","pushBtn","autoBtn","gReadBtn","gHelpBtn"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");

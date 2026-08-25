@@ -24,6 +24,8 @@ public class SysexLibrary {
             "SEQ", "PERC", "AMBIENT", "MODULAR", "USER-1", "USER-2", "USER-3", "USER-4"};
 
     public static final int PROGRAM_BYTES = 242;
+    /** Globale instellingen: 45 bytes (handleiding 19.2.4). */
+    public static final int GLOBAL_BYTES = 45;
     private static final int NAME_OFFSET = 223;
     private static final int NAME_LEN = 16;
     private static final int CATEGORY_OFFSET = 240;
@@ -35,6 +37,11 @@ public class SysexLibrary {
     /** Ruwe, ingepakte programmadata precies zoals ontvangen (voor terugschrijven). */
     private final Map<String, byte[]> patches = new LinkedHashMap<>();
     private byte[] editBuffer;
+    /** Globale instellingen: uitgepakt, de vorige lezing (om te vergelijken) en
+     *  de ruwe ingepakte data, zodat terugschrijven byte-identiek blijft op de
+     *  ene byte die we bewust veranderen. */
+    private byte[] globals, prevGlobals, globalsPacked;
+    public volatile int globalRev = 0;
 
     public volatile int curBank = -1, curProg = -1, deviceRxCh = -1, ifaceId = -1;
     /** Uit een antwoord van de synth afgeleid SysEx device-ID (-1 = nog onbekend). */
@@ -42,6 +49,9 @@ public class SysexLibrary {
     public volatile int nameDumps = 0, patchDumps = 0, badNames = 0;
     /** Tellers zodat de UI weet wanneer er nieuwe parameterwaarden zijn. */
     public volatile int paramRev = 0;
+    /** Wat de synth ons stuurt: bewijs dat de andere richting werkt. */
+    public volatile int rxCCs = 0, rxParams = 0;
+    public volatile String lastMidiIn = "";
     public volatile String lastInfo = "";
 
     public SysexLibrary() {
@@ -241,6 +251,20 @@ public class SysexLibrary {
                 lastInfo = "edit buffer ontvangen (" + data.length + " bytes)";
                 break;
             }
+            case 0x06: { // Global Parameter Dump Response
+                if (m.length < 9) return;
+                byte[] packed = new byte[end - 8];
+                System.arraycopy(m, 8, packed, 0, packed.length);
+                byte[] data = unpack7(m, 8, end, GLOBAL_BYTES);
+                synchronized (lock) {
+                    prevGlobals = globals;
+                    globals = data;
+                    globalsPacked = packed;
+                }
+                globalRev++;
+                lastInfo = "globale instellingen ontvangen (" + data.length + " bytes)";
+                break;
+            }
             case 0x10: { // Control App Notify Response
                 if (m.length < 12) return;
                 deviceRxCh = m[7] & 0x7F;
@@ -264,6 +288,16 @@ public class SysexLibrary {
             if (param >= 0 && param < editBuffer.length) editBuffer[param] = (byte) value;
         }
         paramRev++;
+        rxParams++;
+        lastMidiIn = "par " + param + " = " + value;
+    }
+
+    /** Elk binnenkomend CC meetellen, ook de plumbing van NRPN en wat we overslaan. */
+    public void noteCC(int cc, int value) {
+        rxCCs++;
+        if (cc != 99 && cc != 98 && cc != 6 && cc != 38) {
+            lastMidiIn = "CC " + cc + " = " + value;
+        }
     }
 
     public void handleProgramChange(int bank, int prog) {
@@ -320,6 +354,67 @@ public class SysexLibrary {
         }
     }
 
+    /**
+     * Globale instellingen plus welke bytes veranderd zijn sinds de vorige
+     * lezing. Die vergelijking is de manier om te achterhalen welke byte bij
+     * welke instelling hoort: de handleiding noemt de instellingen wel, maar
+     * niet hun plek in het blok van 45 bytes.
+     */
+    public String globalsJson() {
+        synchronized (lock) {
+            if (globals == null) return "null";
+            StringBuilder sb = new StringBuilder("{\"rev\":").append(globalRev)
+                    .append(",\"bytes\":[");
+            for (int i = 0; i < globals.length; i++) {
+                if (i > 0) sb.append(",");
+                sb.append(globals[i] & 0xFF);
+            }
+            sb.append("],\"changed\":[");
+            boolean first = true;
+            if (prevGlobals != null) {
+                for (int i = 0; i < Math.min(globals.length, prevGlobals.length); i++) {
+                    if (globals[i] != prevGlobals[i]) {
+                        if (!first) sb.append(",");
+                        sb.append(i);
+                        first = false;
+                    }
+                }
+            }
+            return sb.append("],\"hadPrevious\":").append(prevGlobals != null).append("}").toString();
+        }
+    }
+
+    /**
+     * Verandert één databyte binnen de ingepakte data. Zo blijft al het andere
+     * byte-identiek aan wat de synth stuurde, inclusief de opvulling die de
+     * DeepMind ruimer neemt dan strikt nodig.
+     */
+    static void setPackedByte(byte[] packed, int index, int value) {
+        int group = index / 7, pos = index % 7;
+        int msbAt = group * 8, at = msbAt + 1 + pos;
+        if (msbAt >= packed.length || at >= packed.length) return;
+        packed[at] = (byte) (value & 0x7F);
+        if ((value & 0x80) != 0) packed[msbAt] |= (byte) (1 << pos);
+        else packed[msbAt] &= (byte) ~(1 << pos);
+    }
+
+    /** Bericht om één globale instelling terug te schrijven, of null zonder lezing. */
+    public byte[] globalWriteMsg(int dev, int index, int value) {
+        synchronized (lock) {
+            if (globalsPacked == null || index < 0 || index >= GLOBAL_BYTES) return null;
+            byte[] packed = globalsPacked.clone();
+            setPackedByte(packed, index, value);
+            byte[] m = new byte[8 + packed.length + 1];
+            System.arraycopy(HEADER, 0, m, 0, 5);
+            m[5] = (byte) (dev & 0x0F);
+            m[6] = 0x06;  // Global Parameter Dump Response
+            m[7] = 0x06;  // Comms Protocol Version
+            System.arraycopy(packed, 0, m, 8, packed.length);
+            m[m.length - 1] = (byte) 0xF7;
+            return m;
+        }
+    }
+
     public String statusJson() {
         synchronized (lock) {
             return "{\"names\":" + countNames() + ",\"patches\":" + patches.size()
@@ -328,6 +423,9 @@ public class SysexLibrary {
                     + ",\"curBank\":" + curBank + ",\"curProg\":" + curProg
                     + ",\"iface\":" + ifaceId + ",\"dev\":" + deviceId
                     + ",\"editBuffer\":" + (editBuffer != null) + ",\"paramRev\":" + paramRev
+                    + ",\"globalRev\":" + globalRev
+                    + ",\"rxCC\":" + rxCCs + ",\"rxPar\":" + rxParams
+                    + ",\"rxLast\":\"" + esc(lastMidiIn) + "\""
                     + ",\"info\":\"" + esc(lastInfo) + "\"}";
         }
     }
