@@ -114,10 +114,12 @@
   <div id="settings" style="display:none">
     <div class="row">
       <input type="text" id="ipInput" placeholder="IP van de synth">
-      <button class="mini" id="ipBtn">IP</button>
+      <button class="mini" id="ipBtn">Verbind</button>
+      <button class="mini" id="findBtn">Zoek</button>
       <label style="font-size:12px;color:var(--muted)">Kan.</label>
       <select id="midiCh"></select>
     </div>
+    <div class="row" id="foundRow" style="display:none;flex-wrap:wrap"></div>
     <div class="row">
       <input type="text" id="ssidInput" placeholder="SSID">
       <input type="text" id="pwInput" placeholder="wachtwoord">
@@ -215,6 +217,8 @@ let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
 let dragging = false, readWaiting = 0, dragTimer = null;
+let settingsOpened = false;
+const started = Date.now();
 
 // Tijdens slepen niet verversen, anders springt de regelaar onder je vinger weg.
 // Met een tijdslot, want een gemiste touchend zou het volgen anders blokkeren.
@@ -403,6 +407,13 @@ function pollNow() {
   if (s.connected && !wasConnected) { AndroidBridge.appNotify(-1); }
   wasConnected = s.connected;
 
+  // niet verbonden na een paar seconden? Dan de instellingen zelf openklappen,
+  // want daar staan het IP-adres en de zoekknop.
+  if (!s.connected && !settingsOpened && Date.now() - started > 7000) {
+    settingsOpened = true;
+    document.getElementById("settings").style.display = "block";
+  }
+
   let lib;
   try { lib = JSON.parse(AndroidBridge.libStatus()); } catch { lib = null; }
   if (lib) {
@@ -460,10 +471,49 @@ function loadSynthParams() {
 document.getElementById("gearBtn").addEventListener("click", () => {
   const s = document.getElementById("settings");
   s.style.display = s.style.display === "none" ? "block" : "none";
+  settingsOpened = true;
 });
 document.getElementById("ipBtn").addEventListener("click", () => {
   AndroidBridge.setIp(ipInput.value.trim()); setTimeout(poll, 300);
 });
+
+// De synth opzoeken op het netwerk, zodat je geen IP hoeft te weten.
+const findBtn = document.getElementById("findBtn");
+findBtn.addEventListener("click", () => {
+  AndroidBridge.discover();
+  flash(findBtn, true);
+  statusText.textContent = "zoeken op het netwerk…";
+  pollDiscovery();
+});
+
+function pollDiscovery() {
+  let d;
+  try { d = JSON.parse(AndroidBridge.discovered()); } catch { return; }
+  const row = document.getElementById("foundRow");
+  row.innerHTML = "";
+  const any = (d.found && d.found.length) || d.status;
+  row.style.display = any ? "flex" : "none";
+  if (d.status) {
+    const s = document.createElement("span");
+    s.style.cssText = "font-size:12px;color:var(--muted)";
+    s.textContent = d.status;
+    row.appendChild(s);
+  }
+  for (const f of d.found || []) {
+    const b = document.createElement("button");
+    b.className = "mini";
+    b.textContent = f;
+    b.addEventListener("click", () => {
+      const ip = String(f).split(" ")[0];
+      AndroidBridge.setIp(ip);
+      ipInput.value = ip;
+      statusText.textContent = "verbinden met " + ip + "…";
+      row.style.display = "none";
+    });
+    row.appendChild(b);
+  }
+  if (d.running) setTimeout(pollDiscovery, 800);
+}
 const chSel = document.getElementById("midiCh");
 for (let i = 0; i < 16; i++) {
   const o = document.createElement("option"); o.value = i; o.textContent = i + 1; chSel.appendChild(o);

@@ -92,6 +92,107 @@ public class AppleMidiSession {
 
     public String getPeerIp() { return peerIp; }
 
+    // ---------- zoeken op het netwerk ----------
+
+    /** Gevonden apparaten, als "ip" of "ip (naam)". */
+    public final java.util.List<String> discovered =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
+    public volatile boolean discovering = false;
+    public volatile String discoverStatus = "";
+
+    /**
+     * Zoekt RTP-MIDI-apparaten op het eigen subnet: nodig alle 254 adressen uit
+     * en kijk wie antwoordt. Zo hoeft niemand een IP-adres te weten.
+     */
+    public void discover() {
+        if (discovering) return;
+        discovering = true;
+        discovered.clear();
+        discoverStatus = "zoeken…";
+        new Thread(() -> {
+            DatagramSocket s = null;
+            try {
+                String own = localIpv4();
+                if (own == null) {
+                    discoverStatus = "geen netwerkverbinding";
+                    return;
+                }
+                String base = own.substring(0, own.lastIndexOf('.') + 1);
+                s = new DatagramSocket();
+                s.setSoTimeout(250);
+                // eigen ssrc, om de lopende sessie niet in de war te schoppen
+                int probeSsrc = rnd.nextInt(), token = rnd.nextInt();
+                byte[] pkt = probePacket(token, probeSsrc);
+                for (int h = 1; h <= 254; h++) {
+                    if (own.equals(base + h)) continue;
+                    try {
+                        s.send(new DatagramPacket(pkt, pkt.length,
+                                InetAddress.getByName(base + h), APPLEMIDI_PORT));
+                    } catch (Exception ignored) {
+                    }
+                }
+                byte[] buf = new byte[1024];
+                long deadline = System.currentTimeMillis() + 2500;
+                while (System.currentTimeMillis() < deadline) {
+                    try {
+                        DatagramPacket p = new DatagramPacket(buf, buf.length);
+                        s.receive(p);
+                        if (p.getLength() < 4 || buf[0] != (byte) 0xFF || buf[1] != (byte) 0xFF) continue;
+                        String cmd = "" + (char) (buf[2] & 0xFF) + (char) (buf[3] & 0xFF);
+                        if (!cmd.equals("OK") && !cmd.equals("NO")) continue;
+                        String ip = p.getAddress().getHostAddress();
+                        String nm = p.getLength() > 16 ? extractName(buf, 16) : "";
+                        String entry = ip + (nm.isEmpty() ? "" : " (" + nm.trim() + ")");
+                        if (!discovered.contains(entry)) discovered.add(entry);
+                        // netjes afmelden: we maken hier geen sessie
+                        try {
+                            byte[] bye = probePacket(token, probeSsrc);
+                            bye[2] = 'B'; bye[3] = 'Y';
+                            s.send(new DatagramPacket(bye, bye.length, p.getAddress(), p.getPort()));
+                        } catch (Exception ignored) {
+                        }
+                    } catch (SocketTimeoutException e) {
+                        // gewoon verder wachten tot de deadline
+                    }
+                }
+                discoverStatus = discovered.isEmpty()
+                        ? "niets gevonden op " + base + "x"
+                        : discovered.size() + " apparaat/apparaten gevonden";
+            } catch (Exception e) {
+                discoverStatus = "zoeken mislukt: " + e.getMessage();
+            } finally {
+                if (s != null) s.close();
+                discovering = false;
+            }
+        }, "am-discover").start();
+    }
+
+    private byte[] probePacket(int token, int ssrcValue) {
+        byte[] nm = name.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer b = ByteBuffer.allocate(16 + nm.length + 1);
+        b.put(APPLEMIDI_SIG_BYTES).put((byte) 'I').put((byte) 'N');
+        b.putInt(2).putInt(token).putInt(ssrcValue);
+        b.put(nm).put((byte) 0);
+        return b.array();
+    }
+
+    private static final byte[] APPLEMIDI_SIG_BYTES = {(byte) 0xFF, (byte) 0xFF};
+
+    /** Eigen IPv4-adres, bepaald door te kijken welke interface uitgaand gebruikt wordt. */
+    private static String localIpv4() {
+        DatagramSocket s = null;
+        try {
+            s = new DatagramSocket();
+            s.connect(InetAddress.getByName("192.0.2.1"), 9); // stuurt niets
+            String ip = s.getLocalAddress().getHostAddress();
+            return (ip == null || ip.startsWith("0.")) ? null : ip;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (s != null) s.close();
+        }
+    }
+
     private void bindPair() {
         for (int p = 5006; p < 5100; p += 2) {
             try {

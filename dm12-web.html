@@ -114,10 +114,12 @@
   <div id="settings" style="display:none">
     <div class="row">
       <input type="text" id="ipInput" placeholder="MIDI-poort (deel van de naam)">
-      <button class="mini" id="ipBtn">IP</button>
+      <button class="mini" id="ipBtn">Verbind</button>
+      <button class="mini" id="findBtn">Zoek</button>
       <label style="font-size:12px;color:var(--muted)">Kan.</label>
       <select id="midiCh"></select>
     </div>
+    <div class="row" id="foundRow" style="display:none;flex-wrap:wrap"></div>
     <div class="row">
       <span style="font-size:12px;color:var(--muted)">Verbinding via USB of rtpMIDI — kies hierboven de MIDI-poort.</span><input type="text" id="ssidInput" style="display:none"><input type="text" id="pwInput" style="display:none"><button class="mini" id="wifiBtn" style="display:none"></button><button class="mini" id="wifiOffBtn" style="display:none"></button>
     </div>
@@ -232,6 +234,19 @@
   let midi = null, out = null, preferred = "";
   let rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
 
+  // "midi"   = rechtstreeks via Web MIDI (USB of rtpMIDI)
+  // "bridge" = via dm12-bridge.py, die de RTP-MIDI-sessie over het netwerk doet
+  let mode = "";
+  let bridgeSeq = 0, pending = [], flushTimer = null, chain = Promise.resolve();
+  const disco = {running: false, found: [], status: ""};
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const hex = b => Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
+  const unhex = s => {
+    const o = [];
+    for (let i = 0; i + 1 < s.length; i += 2) o.push(parseInt(s.substr(i, 2), 16));
+    return o;
+  };
+
   // ---------- codering ----------
 
   function unpack7(src, off, end, max) {
@@ -340,13 +355,14 @@
     }
   }
 
-  function onMessage(e) {
-    const d = e.data;
+  function handleBytes(d) {
     S.pkts++;
     if (d[0] === 0xF0) handleSysEx(d);
     else if ((d[0] & 0xF0) === 0xB0) onCC(d[1], d[2]);
     else if ((d[0] & 0xF0) === 0xC0) { S.curProg = d[1]; }
   }
+
+  function onMessage(e) { handleBytes(e.data); }
 
   // ---------- verbinding ----------
 
@@ -363,9 +379,11 @@
                    : "geen MIDI-uitgang gevonden — sluit de DeepMind aan via USB of start rtpMIDI";
   }
 
-  function init() {
+  function initWebMidi() {
+    mode = "midi";
     if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
-      S.status = "deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge";
+      S.status = "deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge,"
+               + " of start dm12-bridge.py";
       return;
     }
     navigator.requestMIDIAccess({sysex: true}).then(access => {
@@ -377,7 +395,69 @@
     });
   }
 
+  // ---------- netwerkbrug ----------
+
+  function startBridge() {
+    mode = "bridge";
+    S.status = "netwerkbrug gevonden";
+    (async () => {
+      for (;;) {
+        try {
+          const d = await (await fetch("/status")).json();
+          S.connected = !!d.connected;
+          S.status = d.status;
+          S.portName = d.ip;
+          S.pkts = d.packets || 0;
+          S.info = d.framing ? "uitlijnfouten: " + d.framing : S.info;
+        } catch {
+          S.connected = false;
+          S.status = "netwerkbrug niet bereikbaar";
+        }
+        await sleep(1500);
+      }
+    })();
+    (async () => {
+      for (;;) {
+        try {
+          const d = await (await fetch("/recv?since=" + bridgeSeq + "&wait=1")).json();
+          bridgeSeq = d.next;
+          for (const h of d.msgs) handleBytes(unhex(h));
+        } catch {
+          await sleep(700);
+        }
+      }
+    })();
+  }
+
+  function flushPending() {
+    const body = pending.join("\n");
+    pending = [];
+    if (!body) return;
+    // aan elkaar geregen, zodat de volgorde van berichten gegarandeerd blijft
+    chain = chain.then(() => fetch("/midi", {method: "POST", body}).catch(() => {}));
+  }
+
+  function init() {
+    // wordt deze pagina door de netwerkbrug geserveerd? Dan die gebruiken.
+    if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)
+        && typeof fetch === "function") {
+      fetch("/status").then(r => r.json()).then(d => {
+        if (d && d.transport === "bridge") startBridge();
+        else initWebMidi();
+      }).catch(() => initWebMidi());
+    } else {
+      initWebMidi();
+    }
+  }
+
   function send(bytes) {
+    if (mode === "bridge") {
+      pending.push(hex(bytes));
+      if (!flushTimer) {
+        flushTimer = setTimeout(() => { flushTimer = null; flushPending(); }, 8);
+      }
+      return S.connected;
+    }
     if (!out) return false;
     try { out.send(bytes); return true; } catch { return false; }
   }
@@ -481,8 +561,34 @@
     // op de pc bewaart de browser zelf; de bibliotheek gaat mee via de back-up
     libSave: () => { S.info = "op de pc bewaart de browser dit zelf"; },
 
-    // de MIDI-poort kiezen op een deel van zijn naam
-    setIp: t => { preferred = (t || "").trim().toLowerCase(); pickPorts(); },
+    // via de brug: het IP van de synth. Via Web MIDI: een deel van de poortnaam.
+    setIp: t => {
+      const v = (t || "").trim();
+      if (mode === "bridge") {
+        fetch("/config?ip=" + encodeURIComponent(v)).catch(() => {});
+        return;
+      }
+      preferred = v.toLowerCase();
+      pickPorts();
+    },
+
+    /** Zoekt de synth op het netwerk (alleen via de brug). */
+    discover: () => {
+      if (mode !== "bridge") {
+        disco.status = "zoeken werkt via dm12-bridge.py; via Web MIDI kies je een poort";
+        return;
+      }
+      disco.running = true;
+      disco.status = "zoeken…";
+      fetch("/discover?start=1").then(r => r.json()).then(d => Object.assign(disco, d))
+        .catch(() => { disco.running = false; disco.status = "zoeken mislukt"; });
+      const tick = () => fetch("/discover").then(r => r.json()).then(d => {
+        Object.assign(disco, d);
+        if (d.running) setTimeout(tick, 700);
+      }).catch(() => { disco.running = false; });
+      setTimeout(tick, 700);
+    },
+    discovered: () => JSON.stringify(disco),
     getWifiCreds: () => JSON.stringify({ssid: "", pw: ""}),
     connectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
     disconnectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
@@ -523,6 +629,8 @@ let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
 let dragging = false, readWaiting = 0, dragTimer = null;
+let settingsOpened = false;
+const started = Date.now();
 
 // Tijdens slepen niet verversen, anders springt de regelaar onder je vinger weg.
 // Met een tijdslot, want een gemiste touchend zou het volgen anders blokkeren.
@@ -711,6 +819,13 @@ function pollNow() {
   if (s.connected && !wasConnected) { AndroidBridge.appNotify(-1); }
   wasConnected = s.connected;
 
+  // niet verbonden na een paar seconden? Dan de instellingen zelf openklappen,
+  // want daar staan het IP-adres en de zoekknop.
+  if (!s.connected && !settingsOpened && Date.now() - started > 7000) {
+    settingsOpened = true;
+    document.getElementById("settings").style.display = "block";
+  }
+
   let lib;
   try { lib = JSON.parse(AndroidBridge.libStatus()); } catch { lib = null; }
   if (lib) {
@@ -768,10 +883,49 @@ function loadSynthParams() {
 document.getElementById("gearBtn").addEventListener("click", () => {
   const s = document.getElementById("settings");
   s.style.display = s.style.display === "none" ? "block" : "none";
+  settingsOpened = true;
 });
 document.getElementById("ipBtn").addEventListener("click", () => {
   AndroidBridge.setIp(ipInput.value.trim()); setTimeout(poll, 300);
 });
+
+// De synth opzoeken op het netwerk, zodat je geen IP hoeft te weten.
+const findBtn = document.getElementById("findBtn");
+findBtn.addEventListener("click", () => {
+  AndroidBridge.discover();
+  flash(findBtn, true);
+  statusText.textContent = "zoeken op het netwerk…";
+  pollDiscovery();
+});
+
+function pollDiscovery() {
+  let d;
+  try { d = JSON.parse(AndroidBridge.discovered()); } catch { return; }
+  const row = document.getElementById("foundRow");
+  row.innerHTML = "";
+  const any = (d.found && d.found.length) || d.status;
+  row.style.display = any ? "flex" : "none";
+  if (d.status) {
+    const s = document.createElement("span");
+    s.style.cssText = "font-size:12px;color:var(--muted)";
+    s.textContent = d.status;
+    row.appendChild(s);
+  }
+  for (const f of d.found || []) {
+    const b = document.createElement("button");
+    b.className = "mini";
+    b.textContent = f;
+    b.addEventListener("click", () => {
+      const ip = String(f).split(" ")[0];
+      AndroidBridge.setIp(ip);
+      ipInput.value = ip;
+      statusText.textContent = "verbinden met " + ip + "…";
+      row.style.display = "none";
+    });
+    row.appendChild(b);
+  }
+  if (d.running) setTimeout(pollDiscovery, 800);
+}
 const chSel = document.getElementById("midiCh");
 for (let i = 0; i < 16; i++) {
   const o = document.createElement("option"); o.value = i; o.textContent = i + 1; chSel.appendChild(o);

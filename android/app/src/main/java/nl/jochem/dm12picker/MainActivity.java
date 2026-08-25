@@ -285,6 +285,25 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void discover() {
+            session.discover();
+        }
+
+        @JavascriptInterface
+        public String discovered() {
+            StringBuilder sb = new StringBuilder("{\"running\":")
+                    .append(session.discovering).append(",\"status\":\"")
+                    .append(jsonEscape(session.discoverStatus)).append("\",\"found\":[");
+            synchronized (session.discovered) {
+                for (int i = 0; i < session.discovered.size(); i++) {
+                    if (i > 0) sb.append(",");
+                    sb.append("\"").append(jsonEscape(session.discovered.get(i))).append("\"");
+                }
+            }
+            return sb.append("]}").toString();
+        }
+
+        @JavascriptInterface
         public String getWifiCreds() {
             return "{\"ssid\":\"" + jsonEscape(prefs.getString("ssid", DEFAULT_SSID))
                     + "\",\"pw\":\"" + jsonEscape(prefs.getString("pw", DEFAULT_PW)) + "\"}";

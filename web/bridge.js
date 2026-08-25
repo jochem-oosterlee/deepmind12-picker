@@ -44,6 +44,19 @@
   let midi = null, out = null, preferred = "";
   let rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
 
+  // "midi"   = rechtstreeks via Web MIDI (USB of rtpMIDI)
+  // "bridge" = via dm12-bridge.py, die de RTP-MIDI-sessie over het netwerk doet
+  let mode = "";
+  let bridgeSeq = 0, pending = [], flushTimer = null, chain = Promise.resolve();
+  const disco = {running: false, found: [], status: ""};
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const hex = b => Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
+  const unhex = s => {
+    const o = [];
+    for (let i = 0; i + 1 < s.length; i += 2) o.push(parseInt(s.substr(i, 2), 16));
+    return o;
+  };
+
   // ---------- codering ----------
 
   function unpack7(src, off, end, max) {
@@ -152,13 +165,14 @@
     }
   }
 
-  function onMessage(e) {
-    const d = e.data;
+  function handleBytes(d) {
     S.pkts++;
     if (d[0] === 0xF0) handleSysEx(d);
     else if ((d[0] & 0xF0) === 0xB0) onCC(d[1], d[2]);
     else if ((d[0] & 0xF0) === 0xC0) { S.curProg = d[1]; }
   }
+
+  function onMessage(e) { handleBytes(e.data); }
 
   // ---------- verbinding ----------
 
@@ -175,9 +189,11 @@
                    : "geen MIDI-uitgang gevonden — sluit de DeepMind aan via USB of start rtpMIDI";
   }
 
-  function init() {
+  function initWebMidi() {
+    mode = "midi";
     if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
-      S.status = "deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge";
+      S.status = "deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge,"
+               + " of start dm12-bridge.py";
       return;
     }
     navigator.requestMIDIAccess({sysex: true}).then(access => {
@@ -189,7 +205,69 @@
     });
   }
 
+  // ---------- netwerkbrug ----------
+
+  function startBridge() {
+    mode = "bridge";
+    S.status = "netwerkbrug gevonden";
+    (async () => {
+      for (;;) {
+        try {
+          const d = await (await fetch("/status")).json();
+          S.connected = !!d.connected;
+          S.status = d.status;
+          S.portName = d.ip;
+          S.pkts = d.packets || 0;
+          S.info = d.framing ? "uitlijnfouten: " + d.framing : S.info;
+        } catch {
+          S.connected = false;
+          S.status = "netwerkbrug niet bereikbaar";
+        }
+        await sleep(1500);
+      }
+    })();
+    (async () => {
+      for (;;) {
+        try {
+          const d = await (await fetch("/recv?since=" + bridgeSeq + "&wait=1")).json();
+          bridgeSeq = d.next;
+          for (const h of d.msgs) handleBytes(unhex(h));
+        } catch {
+          await sleep(700);
+        }
+      }
+    })();
+  }
+
+  function flushPending() {
+    const body = pending.join("\n");
+    pending = [];
+    if (!body) return;
+    // aan elkaar geregen, zodat de volgorde van berichten gegarandeerd blijft
+    chain = chain.then(() => fetch("/midi", {method: "POST", body}).catch(() => {}));
+  }
+
+  function init() {
+    // wordt deze pagina door de netwerkbrug geserveerd? Dan die gebruiken.
+    if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)
+        && typeof fetch === "function") {
+      fetch("/status").then(r => r.json()).then(d => {
+        if (d && d.transport === "bridge") startBridge();
+        else initWebMidi();
+      }).catch(() => initWebMidi());
+    } else {
+      initWebMidi();
+    }
+  }
+
   function send(bytes) {
+    if (mode === "bridge") {
+      pending.push(hex(bytes));
+      if (!flushTimer) {
+        flushTimer = setTimeout(() => { flushTimer = null; flushPending(); }, 8);
+      }
+      return S.connected;
+    }
     if (!out) return false;
     try { out.send(bytes); return true; } catch { return false; }
   }
@@ -293,8 +371,34 @@
     // op de pc bewaart de browser zelf; de bibliotheek gaat mee via de back-up
     libSave: () => { S.info = "op de pc bewaart de browser dit zelf"; },
 
-    // de MIDI-poort kiezen op een deel van zijn naam
-    setIp: t => { preferred = (t || "").trim().toLowerCase(); pickPorts(); },
+    // via de brug: het IP van de synth. Via Web MIDI: een deel van de poortnaam.
+    setIp: t => {
+      const v = (t || "").trim();
+      if (mode === "bridge") {
+        fetch("/config?ip=" + encodeURIComponent(v)).catch(() => {});
+        return;
+      }
+      preferred = v.toLowerCase();
+      pickPorts();
+    },
+
+    /** Zoekt de synth op het netwerk (alleen via de brug). */
+    discover: () => {
+      if (mode !== "bridge") {
+        disco.status = "zoeken werkt via dm12-bridge.py; via Web MIDI kies je een poort";
+        return;
+      }
+      disco.running = true;
+      disco.status = "zoeken…";
+      fetch("/discover?start=1").then(r => r.json()).then(d => Object.assign(disco, d))
+        .catch(() => { disco.running = false; disco.status = "zoeken mislukt"; });
+      const tick = () => fetch("/discover").then(r => r.json()).then(d => {
+        Object.assign(disco, d);
+        if (d.running) setTimeout(tick, 700);
+      }).catch(() => { disco.running = false; });
+      setTimeout(tick, 700);
+    },
+    discovered: () => JSON.stringify(disco),
     getWifiCreds: () => JSON.stringify({ssid: "", pw: ""}),
     connectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
     disconnectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
