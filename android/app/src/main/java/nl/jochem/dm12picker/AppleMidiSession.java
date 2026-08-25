@@ -33,6 +33,7 @@ public class AppleMidiSession {
 
     volatile boolean connected = false;
     volatile String status = "wacht op verbinding";
+    volatile String lastEvent = "";
 
     private DatagramSocket ctrl;
     private DatagramSocket data;
@@ -213,7 +214,13 @@ public class AppleMidiSession {
 
     private void handle(DatagramSocket sock, byte[] pkt, InetAddress from, int fromPort) {
         lastRxMs = System.currentTimeMillis();
-        if (pkt.length >= 4 && pkt[0] == (byte) 0xFF && pkt[1] == (byte) 0xFF) {
+        boolean isCommand = pkt.length >= 4
+                && pkt[0] == (byte) 0xFF && pkt[1] == (byte) 0xFF;
+        lastEvent = isCommand
+                ? "ontving " + (char) (pkt[2] & 0xFF) + (char) (pkt[3] & 0xFF)
+                        + " van " + from.getHostAddress()
+                : "ontving MIDI-data van " + from.getHostAddress();
+        if (isCommand) {
             ByteBuffer b = ByteBuffer.wrap(pkt);
             char c1 = (char) (pkt[2] & 0xFF);
             char c2 = (char) (pkt[3] & 0xFF);

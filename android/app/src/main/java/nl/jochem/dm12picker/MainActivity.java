@@ -115,6 +115,7 @@ public class MainActivity extends Activity {
         public String getStatus() {
             return "{\"connected\":" + session.connected
                     + ",\"status\":\"" + jsonEscape(session.status)
+                    + "\",\"event\":\"" + jsonEscape(session.lastEvent)
                     + "\",\"ip\":\"" + jsonEscape(session.getPeerIp()) + "\"}";
         }
 

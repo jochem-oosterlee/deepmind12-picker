@@ -11,9 +11,11 @@
     --active:#ffb547; --star:#ffd24d; --radius:10px;
   }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; padding:12px; }
-  header { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; }
-  h1 { font-size:17px; font-weight:600; margin-right:auto; white-space:nowrap; }
+  body { background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; padding:0 12px 12px; }
+  #topbar { position:sticky; top:0; z-index:10; background:var(--bg); padding:10px 0 8px;
+    display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--border); margin-bottom:10px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  h1 { font-size:15px; font-weight:600; white-space:nowrap; }
   h1 span { color:var(--accent); }
   select, input[type="text"], button {
     background:var(--panel2); color:var(--text); border:1px solid var(--border);
@@ -21,11 +23,13 @@
   }
   select:focus, input:focus { border-color:var(--accent); }
   button { cursor:pointer; }
-  #status { display:flex; align-items:center; gap:8px; font-size:13px; padding:8px 12px;
-    border-radius:var(--radius); background:var(--panel); border:1px solid var(--border); color:var(--muted); }
+  #status { flex:1; display:flex; align-items:center; gap:8px; font-size:13px; padding:8px 12px;
+    border-radius:var(--radius); background:var(--panel); border:1px solid var(--border);
+    color:var(--muted); min-width:0; }
+  #statusText { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #dot { width:10px; height:10px; border-radius:50%; background:#ff7b72; flex:none; }
   #dot.ok { background:#6fd487; }
-  #ipInput { width:130px; }
+  #ipInput { flex:1; min-width:110px; }
   .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
   #search { flex:1; min-width:150px; }
   .banks { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
@@ -49,14 +53,18 @@
 </head>
 <body>
 
-<header>
-  <h1>DeepMind <span>12</span> — Picker</h1>
-  <div id="status"><span id="dot"></span><span id="statusText">verbinden…</span></div>
-  <input type="text" id="ipInput" placeholder="IP DeepMind" title="IP van de DeepMind (GLOBAL → CONNECTIVITY → NETWORK SETTINGS)">
-  <button id="ipBtn">Verbind</button>
-  <label style="font-size:12px;color:var(--muted)">Kanaal</label>
-  <select id="midiCh"></select>
-</header>
+<div id="topbar">
+  <div class="row">
+    <h1>DM<span>12</span></h1>
+    <div id="status"><span id="dot"></span><span id="statusText">verbinden…</span></div>
+  </div>
+  <div class="row">
+    <input type="text" id="ipInput" placeholder="IP DeepMind" title="IP van de DeepMind (GLOBAL → CONNECTIVITY → NETWORK SETTINGS)">
+    <button id="ipBtn">Verbind</button>
+    <label style="font-size:12px;color:var(--muted)">Kan.</label>
+    <select id="midiCh"></select>
+  </div>
+</div>
 
 <div class="toolbar">
   <input type="text" id="search" placeholder="Zoek preset…">
@@ -97,7 +105,7 @@ function poll() {
   try {
     const s = JSON.parse(AndroidBridge.getStatus());
     dot.className = s.connected ? "ok" : "";
-    statusText.textContent = s.status;
+    statusText.textContent = s.status + (!s.connected && s.event ? " · " + s.event : "");
     if (document.activeElement !== ipInput) ipInput.value = s.ip;
   } catch {
     dot.className = "";
