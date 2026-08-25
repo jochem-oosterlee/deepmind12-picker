@@ -261,6 +261,19 @@ function testLabels() {
     for (const c of e.children || []) walk(c);
   })(card2);
   console.log("labeleditor open, invoervelden:", inputs.length);
+  // Tab moet van tekstveld naar tekstveld gaan, niet langs de kruisjes
+  const crosses = [];
+  (function walk(e) {
+    if (e.textContent === "×") crosses.push(e);
+    for (const c of e.children || []) walk(c);
+  })(card2);
+  const inOrder = crosses.filter(x => x.tabIndex !== -1);
+  console.log("kruisjes buiten de tab-volgorde:", crosses.length - inOrder.length,
+              "van", crosses.length);
+  if (inOrder.length) {
+    console.error("FOUT: Tab loopt langs de verwijderknoppen");
+    failures++;
+  }
   if (inputs.length < 2) { console.error("FOUT: labelregels ontbreken"); failures++; return; }
   inputs[0].value = "Rx";
   inputs[1].value = "Tx";

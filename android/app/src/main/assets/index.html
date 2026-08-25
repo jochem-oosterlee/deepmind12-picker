@@ -1538,6 +1538,7 @@ function labelEditor(i) {
     const signed = document.createElement("button");
     signed.className = "mini" + (m.signed ? " on" : "");
     signed.textContent = "±";
+    signed.tabIndex = -1;   // Tab gaat van het getalveld naar de eenheid
     signed.title = "negative values sit above 127 (255 = -1). Try it and see which "
                  + "reading matches the synth.";
     signed.addEventListener("click", () => {
@@ -1608,6 +1609,8 @@ function labelEditor(i) {
     });
     const x = document.createElement("button");
     x.className = "mini"; x.textContent = "×"; x.title = "remove";
+    // buiten de tab-volgorde, zodat Tab van tekstveld naar tekstveld gaat
+    x.tabIndex = -1;
     x.addEventListener("click", () => { draft.splice(n, 1); rebuild(); });
     r.appendChild(num); r.appendChild(l); r.appendChild(x);
     if (gFocus && gFocus.i === i && gFocus.n === n) gFocusEl = l;
