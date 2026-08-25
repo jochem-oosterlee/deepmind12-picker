@@ -337,6 +337,41 @@ setTimeout(() => {
     }
   }
 
+  // LFO-paneel: vormknoppen en regelaars moeten de juiste parameters sturen
+  const lfoTab = [...document.getElementById("tabs").children]
+    .find(t => t.textContent === "LFO");
+  lfoTab.fire("click");
+  const plist = document.getElementById("paramList");
+  const shapeBtns = [];
+  (function walk(e) {
+    if (e.dataset && e.dataset.shape !== undefined) shapeBtns.push(e);
+    for (const c of e.children || []) walk(c);
+  })(plist);
+  console.log("LFO-panelen:", plist.children.length, "| vormknoppen:", shapeBtns.length);
+  if (plist.children.length !== 2 || shapeBtns.length !== 14) {
+    console.error("FOUT: LFO-panelen niet volledig opgebouwd");
+    failures++;
+  } else {
+    sent = [];
+    shapeBtns[2].fire("click");             // blokgolf op LFO 1 = parameter 2
+    console.log("vorm gekozen ->", JSON.stringify(sent[0]));
+    if (!sent.some(s => s[0] === "nrpn" && s[1] === 2 && s[2] === 2)) {
+      console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
+      failures++;
+    }
+    sent = [];
+    shapeBtns[9].fire("click");             // tweede paneel: parameter 9
+    console.log("vorm op LFO 2 ->", JSON.stringify(sent[0]));
+    if (!sent.some(s => s[0] === "nrpn" && s[1] === 9)) {
+      console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
+      failures++;
+    }
+  }
+
+  // terug naar de Global-tab: de controles hieronder gaan daarover
+  [...document.getElementById("tabs").children]
+    .find(t => t.textContent === "Global").fire("click");
+
   // logboek openen en een regel uitklappen
   document.getElementById("logBtn").fire("click");
   const logList = document.getElementById("logList");

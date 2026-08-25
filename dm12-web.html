@@ -143,6 +143,37 @@
   .logline.param .m { color:var(--muted); }
   .loghex { font-size:10px; color:#6b7280; word-break:break-all; padding:1px 0 4px 20px;
     font-family:ui-monospace,Consolas,"Courier New",monospace; }
+
+  /* LFO-paneel */
+  .lfo { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:10px 12px 12px; margin-bottom:10px; }
+  .lfo .head { display:flex; align-items:center; gap:8px; margin-bottom:8px;
+    font-size:12px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+    color:var(--accent); }
+  .lfo .head .now { margin-left:auto; color:var(--muted); font-weight:400;
+    letter-spacing:0; text-transform:none; font-size:11px; }
+  .lfo .wave { display:block; width:100%; height:120px; background:#0f1115;
+    border:1px solid var(--border); border-radius:8px; }
+  .shapes { display:flex; gap:5px; margin:8px 0 2px; flex-wrap:wrap; }
+  .shapes button { padding:3px 6px; line-height:0; }
+  .shapes button.on { background:var(--accent-dim); border-color:var(--accent); }
+  .shapes svg { display:block; }
+  .faders { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:8px 12px; margin-top:10px; }
+  .fader .lab { display:flex; justify-content:space-between; font-size:11px;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .fader .lab b { color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;
+    text-transform:none; letter-spacing:0; }
+  .fader input[type=range] { width:100%; height:24px; accent-color:var(--accent);
+    background:transparent; }
+  .pills { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .pills button { padding:7px 12px; font-size:12px; }
+  .pills button.on { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
+  .pills .seg { display:flex; gap:0; }
+  .pills .seg button { border-radius:0; }
+  .pills .seg button:first-child { border-radius:var(--radius) 0 0 var(--radius); }
+  .pills .seg button:last-child { border-radius:0 var(--radius) var(--radius) 0; }
+  .pills .seg button + button { border-left:none; }
   .labrow input.l { flex:1; min-width:0; padding:4px 6px; }
   .gval { color:var(--accent); font-variant-numeric:tabular-nums; width:34px; text-align:right; }
   .lrow input[type=number] { width:64px; padding:6px; }
@@ -958,7 +989,7 @@ const PAGES = [
     S(87,"Unison detune"), S(88,"Voice drift"), S(89,"Parameter drift"), S(90,"Drift rate"),
     B(91,"Portamento balance"), T(92,"Key down reset"),
   ]},
-  {id:"lfo", name:"LFO", params:[
+  {id:"lfo", name:"LFO", custom:"lfo", params:[
     H("LFO 1"),
     S(0,"Rate"), S(1,"Delay / fade"), E(2,"Shape",SHAPE), T(3,"Key sync"), T(4,"Arp sync"),
     S(5,"Poly / mono / spread"), S(6,"Slew rate"),
@@ -1542,12 +1573,227 @@ function sendParam(p, v) {
   saveTimer = setTimeout(() => store.save("dm12.vals", vals), 800);
 }
 
+// ================== LFO-paneel ==================
+// Eén component voor beide LFO's: de parameters van LFO 2 staan zeven plekken
+// verder (rate 0/7, delay 1/8, vorm 2/9, key sync 3/10, arp sync 4/11,
+// poly-mono 5/12, slew 6/13).
+const SHAPE_NAMES = ["Sine", "Triangle", "Square", "Ramp up", "Ramp down",
+                     "Sample & Hold", "Sample & Glide"];
+const SHAPE_GLYPH = [
+  'M1 8C5 1 9 1 13 8 17 15 21 15 25 8 27 4.5 29 3 31 3',
+  'M1 14 8 2 15 14 22 2 29 14',
+  'M1 14V2H8v12h7V2h7v12h7',
+  'M1 14 12 3v11L23 3v11',
+  'M1 3 12 14V3l11 11V3',
+  'M1 10h7V4h7v9h7V7h7',
+  'M1 10c4 0 3-6 7-6s3 9 7 9 3-6 7-6 4 0 7 0',
+];
+
+function lfoGlyph(shape, colour) {
+  return '<svg width="32" height="16" viewBox="0 0 32 16" aria-hidden="true">'
+    + '<path d="' + SHAPE_GLYPH[shape] + '" fill="none" stroke="' + colour
+    + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+
+/** Tekent de golfvorm zoals hij met deze instellingen zou lopen. */
+function lfoWaveSvg(shape, rate, delay, slew, mono) {
+  const w = 600, h = 120, mid = h / 2, amp = mid - 12;
+  const n = 300;
+  const cycles = 1 + Math.round((rate / 255) * 7);      // sneller = meer perioden
+  // vaste reeks, zodat sample & hold niet bij elke tekening verspringt
+  const rnd = [0.65, -0.35, 0.9, -0.8, 0.25, -0.6, 0.75, -0.15, 0.5, -0.95, 0.2, -0.7];
+  const fade = Math.min(0.85, delay / 255);
+  const k = shape === 6 ? 0.09 : 1 - Math.pow(slew / 255, 0.6) * 0.93;
+  let prev = 0;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * cycles, ph = t % 1;
+    let v;
+    if (shape === 0) v = Math.sin(ph * Math.PI * 2);
+    else if (shape === 1) v = 1 - 4 * Math.abs(ph - 0.5);
+    else if (shape === 2) v = ph < 0.5 ? 1 : -1;
+    else if (shape === 3) v = ph * 2 - 1;
+    else if (shape === 4) v = 1 - ph * 2;
+    else v = rnd[Math.floor(t) % rnd.length];
+    prev += (v - prev) * k;
+    const env = fade > 0.01 ? Math.min(1, (i / n) / fade) : 1;
+    pts.push((i / n * w).toFixed(1) + "," + (mid - prev * amp * env).toFixed(1));
+  }
+  const grid = [0.25, 0.5, 0.75].map(f =>
+    '<line x1="' + (w * f) + '" y1="6" x2="' + (w * f) + '" y2="' + (h - 6)
+    + '" stroke="#22262e"/>').join("");
+  const fadeMark = fade > 0.02
+    ? '<rect x="0" y="0" width="' + (w * fade) + '" height="' + h
+      + '" fill="#4da3ff" opacity="0.06"/>'
+      + '<line x1="' + (w * fade) + '" y1="0" x2="' + (w * fade) + '" y2="' + h
+      + '" stroke="#4da3ff" opacity="0.35" stroke-dasharray="3 3"/>' : "";
+  return '<svg class="wave" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
+    + grid + fadeMark
+    + '<line x1="0" y1="' + mid + '" x2="' + w + '" y2="' + mid + '" stroke="#2c313a"/>'
+    + '<polyline points="' + pts.join(" ") + '" fill="none" stroke="'
+    + (mono > 0 ? "#ffb547" : "#4da3ff") + '" stroke-width="2.2"'
+    + ' stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+
+function renderLfo(base, title) {
+  const P = n => ({k: "s", n: n, max: 255});
+  const get = off => pval(P(base + off));
+  const box = document.createElement("div");
+  box.className = "lfo";
+
+  const head = document.createElement("div");
+  head.className = "head";
+  const hTitle = document.createElement("span");
+  hTitle.textContent = title;
+  const hNow = document.createElement("span");
+  hNow.className = "now";
+  head.appendChild(hTitle);
+  head.appendChild(hNow);
+  box.appendChild(head);
+
+  const waveBox = document.createElement("div");
+  box.appendChild(waveBox);
+
+  const shapes = document.createElement("div");
+  shapes.className = "shapes";
+  box.appendChild(shapes);
+
+  const faders = document.createElement("div");
+  faders.className = "faders";
+  box.appendChild(faders);
+
+  const pills = document.createElement("div");
+  pills.className = "pills";
+  box.appendChild(pills);
+
+  const draw = () => {
+    const shape = Math.min(6, get(2)), mono = get(5);
+    waveBox.innerHTML = lfoWaveSvg(shape, get(0), get(1), get(6), mono);
+    hNow.textContent = SHAPE_NAMES[shape] + " · rate " + get(0)
+      + (get(1) ? " · delay " + get(1) : "")
+      + (get(6) ? " · slew " + get(6) : "")
+      + (mono === 0 ? " · poly" : mono === 1 ? " · mono" : " · spread " + (mono - 1));
+    for (const b of Array.from(shapes.children)) {
+      b.classList.toggle("on", +b.dataset.shape === shape);
+      b.innerHTML = lfoGlyph(+b.dataset.shape,
+        +b.dataset.shape === shape ? "#ffffff" : "#8a919c");
+    }
+  };
+
+  SHAPE_NAMES.forEach((nm, s) => {
+    const b = document.createElement("button");
+    b.dataset.shape = s;
+    b.title = nm;
+    b.addEventListener("click", () => { doSend(P(base + 2), s); draw(); });
+    shapes.appendChild(b);
+  });
+
+  [[0, "Rate", 255], [6, "Slew", 255], [1, "Delay / fade", 255]].forEach(([off, nm, max]) => {
+    const f = document.createElement("div");
+    f.className = "fader";
+    const lab = document.createElement("div");
+    lab.className = "lab";
+    const t = document.createElement("span"); t.textContent = nm;
+    const v = document.createElement("b"); v.textContent = get(off);
+    lab.appendChild(t); lab.appendChild(v);
+    const r = document.createElement("input");
+    r.type = "range"; r.min = 0; r.max = max; r.value = get(off);
+    let timer = null;
+    r.addEventListener("input", () => {
+      v.textContent = r.value;
+      markDragging();
+      if (!timer) timer = setTimeout(() => { timer = null; doSend(P(base + off), +r.value); draw(); }, 25);
+    });
+    const fin = () => {
+      dragging = false;
+      clearTimeout(timer); timer = null;
+      sendParam(P(base + off), +r.value);
+      draw();
+    };
+    r.addEventListener("change", fin);
+    r.addEventListener("touchend", fin);
+    f.appendChild(lab); f.appendChild(r);
+    faders.appendChild(f);
+  });
+
+  [[3, "Key sync"], [4, "Arp sync"]].forEach(([off, nm]) => {
+    const b = document.createElement("button");
+    b.textContent = nm;
+    const paint = () => b.classList.toggle("on", get(off) > 0);
+    paint();
+    b.addEventListener("click", () => {
+      doSend(P(base + off), get(off) > 0 ? 0 : 1);
+      paint();
+      draw();
+    });
+    pills.appendChild(b);
+  });
+
+  // poly / mono / spread: één instelling waarin spread de waardes 2-255 gebruikt
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  const spreadRow = document.createElement("div");
+  spreadRow.style.cssText = "flex:1;min-width:140px";
+  const paintSeg = () => {
+    const m = get(5);
+    Array.from(seg.children).forEach((b, n) => {
+      b.classList.toggle("on", n === (m === 0 ? 0 : m === 1 ? 1 : 2));
+    });
+    spreadRow.style.display = get(5) >= 2 ? "block" : "none";
+  };
+  [["Poly", 0], ["Mono", 1], ["Spread", 2]].forEach(([nm, val]) => {
+    const b = document.createElement("button");
+    b.textContent = nm;
+    b.addEventListener("click", () => {
+      doSend(P(base + 5), val === 2 ? Math.max(2, get(5)) : val);
+      paintSeg();
+      draw();
+    });
+    seg.appendChild(b);
+  });
+  pills.appendChild(seg);
+
+  const sLab = document.createElement("div");
+  sLab.className = "lab";
+  const sT = document.createElement("span"); sT.textContent = "Spread";
+  const sV = document.createElement("b"); sV.textContent = Math.max(1, get(5) - 1);
+  sLab.appendChild(sT); sLab.appendChild(sV);
+  const sR = document.createElement("input");
+  sR.type = "range"; sR.min = 1; sR.max = 254; sR.value = Math.max(1, get(5) - 1);
+  let sTimer = null;
+  sR.addEventListener("input", () => {
+    sV.textContent = sR.value;
+    markDragging();
+    if (!sTimer) sTimer = setTimeout(() => {
+      sTimer = null;
+      doSend(P(base + 5), +sR.value + 1);
+    }, 25);
+  });
+  sR.addEventListener("change", () => {
+    dragging = false;
+    sendParam(P(base + 5), +sR.value + 1);
+    draw();
+  });
+  spreadRow.appendChild(sLab);
+  spreadRow.appendChild(sR);
+  pills.appendChild(spreadRow);
+
+  paintSeg();
+  draw();
+  return box;
+}
+
 function renderParams() {
   const page = PAGES.find(x => x.id === tab);
   const wrap = document.getElementById("paramList");
   updateParamNote();
   wrap.innerHTML = "";
   if (!page) return;
+  if (page.custom === "lfo") {
+    wrap.appendChild(renderLfo(0, "LFO 1"));
+    wrap.appendChild(renderLfo(7, "LFO 2"));
+    return;
+  }
   for (const p of page.params) {
     if (p.k === "h") {
       const h = document.createElement("div");
