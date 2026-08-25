@@ -39,7 +39,7 @@ public class SysexLibrary {
     public volatile int curBank = -1, curProg = -1, deviceRxCh = -1, ifaceId = -1;
     /** Uit een antwoord van de synth afgeleid SysEx device-ID (-1 = nog onbekend). */
     public volatile int deviceId = -1;
-    public volatile int nameDumps = 0, patchDumps = 0;
+    public volatile int nameDumps = 0, patchDumps = 0, badNames = 0;
     /** Tellers zodat de UI weet wanneer er nieuwe parameterwaarden zijn. */
     public volatile int paramRev = 0;
     public volatile String lastInfo = "";
@@ -197,13 +197,20 @@ public class SysexLibrary {
                 if (m.length < 10) return;
                 int bank = m[8] & 0x07;
                 byte[] data = unpack7(m, 9, end, 128 * NAME_LEN);
+                int good = 0, bad = 0;
                 synchronized (lock) {
                     for (int p = 0; p < 128 && (p + 1) * NAME_LEN <= data.length; p++) {
-                        names[bank][p] = text(data, p * NAME_LEN, NAME_LEN);
+                        String nm = text(data, p * NAME_LEN, NAME_LEN);
+                        // alleen leesbare namen bewaren: raakt de uitpakking uit
+                        // de maat, dan liever geen naam dan onzin
+                        if (!isClean(nm)) { bad++; continue; }
+                        if (!nm.isEmpty()) { names[bank][p] = nm; good++; }
                     }
                 }
                 nameDumps++;
-                lastInfo = "namen bank " + (char) ('A' + bank) + " ontvangen";
+                badNames += bad;
+                lastInfo = "bank " + (char) ('A' + bank) + ": " + good + " namen"
+                        + (bad > 0 ? ", " + bad + " onleesbaar" : "");
                 break;
             }
             case 0x02: { // Program Dump Response
@@ -215,7 +222,8 @@ public class SysexLibrary {
                 synchronized (lock) {
                     patches.put(bank + "-" + prog, packed);
                     if (data.length > CATEGORY_OFFSET) {
-                        names[bank][prog] = text(data, NAME_OFFSET, NAME_LEN);
+                        String nm = text(data, NAME_OFFSET, NAME_LEN);
+                        if (isClean(nm) && !nm.isEmpty()) names[bank][prog] = nm;
                         categories[bank][prog] = data[CATEGORY_OFFSET] & 0xFF;
                     }
                 }
@@ -263,6 +271,15 @@ public class SysexLibrary {
         curProg = prog;
     }
 
+    /** Bestaat de tekst volledig uit leesbare ASCII-tekens? */
+    private static boolean isClean(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x20 || c > 0x7E) return false;
+        }
+        return true;
+    }
+
     private static String text(byte[] d, int off, int len) {
         int n = 0;
         while (n < len && off + n < d.length && d[off + n] != 0) n++;
@@ -307,6 +324,7 @@ public class SysexLibrary {
         synchronized (lock) {
             return "{\"names\":" + countNames() + ",\"patches\":" + patches.size()
                     + ",\"nameDumps\":" + nameDumps + ",\"patchDumps\":" + patchDumps
+                    + ",\"badNames\":" + badNames
                     + ",\"curBank\":" + curBank + ",\"curProg\":" + curProg
                     + ",\"iface\":" + ifaceId + ",\"dev\":" + deviceId
                     + ",\"editBuffer\":" + (editBuffer != null) + ",\"paramRev\":" + paramRev

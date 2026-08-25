@@ -28,8 +28,13 @@
     background:var(--panel2); color:var(--text); border:1px solid var(--border);
     border-radius:var(--radius); padding:8px 10px; font-size:13px; outline:none; }
   select:focus, input:focus { border-color:var(--accent); }
-  button { cursor:pointer; }
+  button { cursor:pointer; transition:background .08s, border-color .08s, transform .08s; }
+  button:active { background:var(--accent-dim); border-color:var(--accent); color:#fff;
+    transform:scale(.96); }
+  /* knippert kort na een actie, zodat je ziet dat er iets verstuurd is */
+  button.flash { background:var(--accent-dim); border-color:var(--accent); color:#fff; }
   button.mini { padding:6px 8px; font-size:12px; }
+  #autoBtn.on { background:#1e4d2b; border-color:var(--ok); color:#fff; }
   #settings input { flex:1; min-width:70px; }
   #tabs { display:flex; gap:5px; overflow-x:auto; padding-bottom:8px; scrollbar-width:none; }
   #tabs::-webkit-scrollbar { display:none; }
@@ -134,12 +139,13 @@
   <div class="row">
     <button class="mini" id="readBtn">Lees synth uit</button>
     <button class="mini" id="pushBtn">Stuur pagina</button>
+    <button class="mini" id="autoBtn" title="blijf de synth volgen">Auto</button>
     <span id="paramNote" style="font-size:11px;color:var(--muted);flex:1"></span>
   </div>
   <div id="paramList"></div>
 </div>
 
-<footer id="foot">v1.7 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
+<footer id="foot">v1.8 · Zet op de synth <i>GLOBAL → MIDI SETTINGS → PROGRAM CHANGE</i> op <i>Rx</i>/<i>Both</i>.</footer>
 
 <script>
 "use strict";
@@ -167,9 +173,41 @@ let devNames = {};        // "A-0" -> [naam, categorie, heeftPatch]
 let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, wasConnected = false;
-let dragging = false;
+let dragging = false, readWaiting = 0;
 
-// wachtrij voor SysEx-verzoeken: de synth niet overladen.
+// Scan van namen of patches: strikt één verzoek per keer, en pas verder als het
+// antwoord binnen is. Twee dumps die door elkaar heen aankomen laten de
+// uitpakking uit de maat lopen, met onleesbare namen als gevolg.
+let libState = null, scan = null;
+
+function scanStart(kind, items, bank) {
+  scan = {kind, items, bank, i:0, mark:-1, deadline:0};
+  scanStep();
+}
+
+function scanStep() {
+  if (!scan) return;
+  if (scan.i >= scan.items.length) {
+    statusText.textContent = "scan klaar (" + scan.items.length + " opgevraagd)";
+    scan = null;
+    AndroidBridge.libSave();
+    return;
+  }
+  const it = scan.items[scan.i++];
+  scan.mark = libState ? (scan.kind === "names" ? libState.nameDumps : libState.patchDumps) : 0;
+  scan.deadline = Date.now() + (scan.kind === "names" ? 6000 : 2500);
+  if (scan.kind === "names") AndroidBridge.requestBankNames(it, devId);
+  else AndroidBridge.requestProgram(scan.bank, it, devId);
+  setTimeout(poll, 600);
+}
+
+function scanTick(lib) {
+  if (!scan) return;
+  const n = scan.kind === "names" ? lib.nameDumps : lib.patchDumps;
+  if (n > scan.mark || Date.now() > scan.deadline) scanStep();
+}
+
+// wachtrij voor losse SysEx-verzoeken.
 // Moet boven poll() staan, want poll() leest queue.length.
 let queue = [], queueTimer = null;
 function enqueue(fn) {
@@ -319,6 +357,7 @@ function pollNow() {
   let lib;
   try { lib = JSON.parse(AndroidBridge.libStatus()); } catch { lib = null; }
   if (lib) {
+    libState = lib;
     if (lib.dev >= 0) devId = lib.dev;
     document.getElementById("devInfo").textContent =
       "dev " + (lib.dev < 0 ? "?" : lib.dev) + (lib.iface >= 0 ? " · iface " + lib.iface : "");
@@ -328,12 +367,25 @@ function pollNow() {
     if (lib.info) txt += " · " + lib.info;
     document.getElementById("libStat").textContent =
       `namen: ${lib.names}/1024 · patches: ${lib.patches} · dumps: ${lib.nameDumps}/${lib.patchDumps}`
-      + (queue.length ? ` · bezig: ${queue.length} verzoeken` : "");
+      + (lib.badNames ? ` · onleesbaar: ${lib.badNames}` : "")
+      + ` · sysex: ${lib.sysex} (${lib.sysexLen} bytes, ${lib.segs} delen)`
+      + (lib.framing ? ` · uitlijnfouten: ${lib.framing}` : "")
+      + (scan ? ` · scan ${scan.i}/${scan.items.length}` : "")
+      + (queue.length ? ` · wachtrij ${queue.length}` : "");
     if (lib.names !== lastNameCount) { lastNameCount = lib.names; loadDevNames(); }
     if (lib.paramRev !== lastParamRev) {
       lastParamRev = lib.paramRev;
       loadSynthParams();
+      if (readWaiting) {
+        txt = "waarden uit de synth ontvangen · " + txt;
+        readWaiting = 0;
+      }
+    } else if (readWaiting && Date.now() - readWaiting > 4000) {
+      txt = "geen antwoord van de synth op het uitleesverzoek · " + txt;
+      readWaiting = 0;
     }
+    scanTick(lib);
+    if (scan) txt = `scan ${scan.i}/${scan.items.length} · ` + txt;
   }
   statusText.textContent = txt;
 }
@@ -597,9 +649,11 @@ function fmt(p, v) {
 }
 function doSend(p, v) {
   vals[pkey(p)] = v;
-  if (p.n !== undefined) AndroidBridge.sendNRPN(p.n, v, channel);
-  else AndroidBridge.sendCC(p.cc, v, channel);
+  const ok = p.n !== undefined
+    ? AndroidBridge.sendNRPN(p.n, v, channel)
+    : AndroidBridge.sendCC(p.cc, v, channel);
   if (synthParams && p.n !== undefined && p.n < synthParams.length) synthParams[p.n] = v;
+  return ok;
 }
 let saveTimer = null;
 function sendParam(p, v) {
@@ -612,7 +666,8 @@ function renderParams() {
   const page = PAGES.find(x => x.id === tab);
   const wrap = document.getElementById("paramList");
   document.getElementById("paramNote").textContent = synthParams
-    ? "waarden gelezen uit de synth" : "tik op ‘Lees synth uit’ voor de echte waarden";
+    ? "waarden uit de synth" + (autoSync ? " · auto volgt mee" : "")
+    : "tik op ‘Lees synth uit’ voor de echte waarden";
   wrap.innerHTML = "";
   if (!page) return;
   for (const p of page.params) {
@@ -677,21 +732,58 @@ function renderParams() {
   }
 }
 
-document.getElementById("readBtn").addEventListener("click", () => {
+// korte visuele bevestiging op de knop zelf
+function flash(el, ok) {
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), ok ? 220 : 600);
+}
+
+const readBtn = document.getElementById("readBtn");
+readBtn.addEventListener("click", () => {
   AndroidBridge.appNotify(devId);
-  AndroidBridge.requestEditBuffer(devId);
-  statusText.textContent = "edit buffer opgevraagd…";
+  const ok = AndroidBridge.requestEditBuffer(devId);
+  flash(readBtn, ok);
+  statusText.textContent = ok ? "edit buffer opgevraagd, wacht op antwoord…"
+                              : "niet verbonden — kan niets opvragen";
+  readWaiting = ok ? Date.now() : 0;
 });
-document.getElementById("pushBtn").addEventListener("click", () => {
+
+const pushBtn = document.getElementById("pushBtn");
+pushBtn.addEventListener("click", () => {
   const page = PAGES.find(x => x.id === tab);
-  if (!page) return;
-  let n = 0;
+  if (!page) { statusText.textContent = "open eerst een parameter-tab"; return; }
+  let n = 0, ok = true;
   for (const p of page.params) {
     if (p.k === "h") continue;
-    doSend(p, pval(p)); n++;
+    if (doSend(p, pval(p)) === false) ok = false;
+    n++;
   }
-  statusText.textContent = n + " parameters verstuurd";
+  flash(pushBtn, ok);
+  statusText.textContent = ok ? n + " parameters van deze pagina verstuurd"
+                              : "niet verbonden — niets verstuurd";
 });
+
+// Auto: blijft de synth volgen door de edit buffer periodiek op te vragen.
+// Wijzigingen in de app gaan altijd al direct naar de synth.
+const autoBtn = document.getElementById("autoBtn");
+let autoSync = store.load("dm12.auto", false);
+let autoTimer = null;
+function setAuto(on) {
+  autoSync = on;
+  store.save("dm12.auto", on);
+  autoBtn.classList.toggle("on", on);
+  clearInterval(autoTimer);
+  autoTimer = null;
+  if (on) {
+    autoTimer = setInterval(() => {
+      if (!dragging && libState && libState.dev >= 0) AndroidBridge.requestEditBuffer(devId);
+    }, 2500);
+    AndroidBridge.appNotify(devId);
+    AndroidBridge.requestEditBuffer(devId);
+  }
+}
+autoBtn.addEventListener("click", () => setAuto(!autoSync));
+setAuto(autoSync);
 
 // ================== bibliotheek ==================
 function renderLib() {
@@ -761,15 +853,12 @@ function renderLib() {
 
 document.getElementById("scanNames").addEventListener("click", () => {
   AndroidBridge.appNotify(devId);
-  for (let b = 0; b < 8; b++) enqueue(() => AndroidBridge.requestBankNames(b, devId));
-  statusText.textContent = "namen van 8 banken opgevraagd…";
+  scanStart("names", [0,1,2,3,4,5,6,7]);
+  statusText.textContent = "namen scannen, bank voor bank…";
 });
 document.getElementById("scanBankPatches").addEventListener("click", () => {
-  if (!confirm("Alle 128 patches van bank " + BANKS[libBank] + " ophalen?\nDit duurt ongeveer 20 seconden.")) return;
-  for (let p = 0; p < PROGS; p++) {
-    const prog = p;
-    enqueue(() => AndroidBridge.requestProgram(libBank, prog, devId));
-  }
+  if (!confirm("Alle 128 patches van bank " + BANKS[libBank] + " ophalen?\nDit duurt een paar minuten.")) return;
+  scanStart("patches", Array.from({length: PROGS}, (_, i) => i), libBank);
 });
 document.getElementById("libSaveBtn").addEventListener("click", () => {
   AndroidBridge.libSave();

@@ -45,6 +45,10 @@ public class AppleMidiSession {
     private volatile MidiListener listener;
     private final ByteArrayOutputStream sysex = new ByteArrayOutputStream();
 
+    /** Diagnose van de ontvangstkant. */
+    public volatile int midiPackets = 0, sysexCount = 0, lastSysexLen = 0,
+            sysexSegments = 0, framingErrors = 0;
+
     public void setListener(MidiListener l) {
         this.listener = l;
     }
@@ -303,6 +307,7 @@ public class AppleMidiSession {
      */
     private void parseRtpMidi(byte[] pkt) {
         if (pkt.length < 13) return;
+        midiPackets++;
         int b0 = pkt[12] & 0xFF;
         int len, off;
         if ((b0 & 0x80) != 0) { // lange vorm: 12-bits lengte
@@ -319,30 +324,36 @@ public class AppleMidiSession {
         boolean first = true;
         int running = 0;
 
-        while (i < end) {
-            if (!first || leadingDelta) { // delta-tijd: variabele lengte
-                while (i < end && (pkt[i] & 0x80) != 0) i++;
-                if (i < end) i++;
+        // Vervolg van een SysEx die in een eerder pakket begon. Implementaties
+        // verschillen in of er een delta-tijd vóór de F7-markering staat, dus
+        // zoek die markering op beide plekken. Eén byte verkeerd gokken zou de
+        // hele rest van de dump uit de maat laten lopen.
+        if (sysex.size() > 0) {
+            int s;
+            if (off < end && (pkt[off] & 0xFF) == 0xF7) {
+                s = off + 1;
+            } else {
+                int d = skipDelta(pkt, off, end);
+                s = (d < end && (pkt[d] & 0xFF) == 0xF7) ? d + 1 : off;
             }
+            i = consumeSysEx(pkt, s, end);
+            first = false;
+        }
+
+        while (i < end) {
+            if (!first || leadingDelta) i = skipDelta(pkt, i, end);
             first = false;
             if (i >= end) break;
 
             int st = pkt[i] & 0xFF;
-            if (st == 0xF0 || (st == 0xF7 && sysex.size() > 0)) {
-                i++;
-                if (st == 0xF0) {
-                    sysex.reset();
-                    sysex.write(0xF0);
-                }
-                while (i < end) {
-                    int v = pkt[i++] & 0xFF;
-                    if (v == 0xF7) {
-                        sysex.write(0xF7);
-                        flushSysEx();
-                        break;
-                    }
-                    sysex.write(v);
-                }
+            if (st == 0xF0) {
+                sysex.reset();
+                sysex.write(0xF0);
+                i = consumeSysEx(pkt, i + 1, end);
+                continue;
+            }
+            if (st == 0xF7 && sysex.size() > 0) {
+                i = consumeSysEx(pkt, i + 1, end);
                 continue;
             }
 
@@ -378,9 +389,42 @@ public class AppleMidiSession {
         return 0;
     }
 
+    /** Slaat een delta-tijd over: bytes met het hoogste bit gezet, plus de afsluitende. */
+    private static int skipDelta(byte[] pkt, int i, int end) {
+        while (i < end && (pkt[i] & 0x80) != 0) i++;
+        return i < end ? i + 1 : i;
+    }
+
+    /**
+     * Leest SysEx-payload tot de afsluitende F7 of tot het pakket op is (dan
+     * volgt het vervolg in een later pakket). Een statusbyte binnen een SysEx
+     * kan niet: dan is de uitlijning kwijt en gooien we de buffer weg in plaats
+     * van onzin door te geven.
+     */
+    private int consumeSysEx(byte[] pkt, int i, int end) {
+        sysexSegments++;
+        while (i < end) {
+            int v = pkt[i++] & 0xFF;
+            if (v == 0xF7) {
+                sysex.write(0xF7);
+                flushSysEx();
+                return i;
+            }
+            if (v >= 0x80) {
+                framingErrors++;
+                sysex.reset();
+                return i - 1;
+            }
+            sysex.write(v);
+        }
+        return i;
+    }
+
     private void flushSysEx() {
         byte[] msg = sysex.toByteArray();
         sysex.reset();
+        sysexCount++;
+        lastSysexLen = msg.length;
         MidiListener l = listener;
         if (l != null) l.onSysEx(msg);
     }

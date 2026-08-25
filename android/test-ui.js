@@ -81,7 +81,8 @@ global.AndroidBridge = {
   getStatus: () => JSON.stringify({connected: true, status: "verbonden met FakeDM12",
     event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
-    curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: 7, info: "edit buffer ontvangen"}),
+    badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: 7,
+    info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0}),
   libNames: () => JSON.stringify({"A-0": ["Blue Dolphin", 2, 1], "A-1": ["Bass Pong", 1, 0]}),
   libParams: () => JSON.stringify(Array.from({length: 242}, (_, i) => (i * 7) & 0xFF)),
   getWifiCreds: () => JSON.stringify({ssid: "Deepmind12", pw: "Passphrase"}),
@@ -147,7 +148,7 @@ try {
 // alle knoppen in de kop en de bibliotheek
 for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
-                  "libExportBtn","readBtn","pushBtn"]) {
+                  "libExportBtn","readBtn","pushBtn","autoBtn"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");

@@ -85,6 +85,9 @@ public class MainActivity extends Activity {
             @Override
             public void onProgramChange(int ch, int program) {
                 lib.handleProgramChange(-1, program);
+                // op de synth is een ander programma gekozen: nieuwe waarden ophalen
+                session.sendSysEx(SysexLibrary.reqEditBuffer(
+                        lib.deviceId >= 0 ? lib.deviceId : 0));
             }
         });
 
@@ -356,7 +359,14 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String libStatus() {
-            return lib.statusJson();
+            String s = lib.statusJson();
+            // diagnose van de ontvangstkant erbij, zodat de UI kan tonen wat er aankomt
+            return s.substring(0, s.length() - 1)
+                    + ",\"pkts\":" + session.midiPackets
+                    + ",\"sysex\":" + session.sysexCount
+                    + ",\"sysexLen\":" + session.lastSysexLen
+                    + ",\"segs\":" + session.sysexSegments
+                    + ",\"framing\":" + session.framingErrors + "}";
         }
 
         @JavascriptInterface
