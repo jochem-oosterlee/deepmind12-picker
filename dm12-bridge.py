@@ -69,7 +69,7 @@ class AppleMIDISession:
         self.lock = threading.Lock()
         self.stop_flag = False
         self.connected = False
-        self.status = "wacht op verbinding"
+        self.status = "waiting for a connection"
         self.last_rx = 0.0
         self.last_sync = 0.0
         self.last_invite = 0.0
@@ -114,7 +114,7 @@ class AppleMIDISession:
             self.phase = 0
             self.invites = 0
             self.last_invite = 0.0
-            self.status = "wacht op verbinding"
+            self.status = "waiting for a connection"
 
     # ---------- pakketten ----------
 
@@ -137,7 +137,7 @@ class AppleMIDISession:
         elif self.phase == 2:
             self.data.sendto(self._cmd(b"IN", self.token), (self.peer_ip, self.peer_port + 1))
         if not self.connected:
-            self.status = "zoekt %s (poging %d)" % (self.peer_ip, self.invites)
+            self.status = "looking for %s (attempt %d)" % (self.peer_ip, self.invites)
 
     def _send_bye(self):
         if self.connected or self.phase > 0:
@@ -170,7 +170,7 @@ class AppleMIDISession:
                         self.connected = False
                         self.phase = 0
                         self.last_invite = 0.0
-                        self.status = "verbinding verloren, opnieuw verbinden"
+                        self.status = "connection lost, reconnecting"
             try:
                 readable, _, _ = select.select([self.ctrl, self.data], [], [], 0.5)
             except OSError:
@@ -198,11 +198,11 @@ class AppleMIDISession:
                 elif self.phase == 2 and sock is self.data:
                     self.connected = True
                     peer = pkt[16:].split(b"\x00")[0].decode("utf-8", "replace")
-                    self.status = "verbonden met " + (peer or self.peer_ip)
+                    self.status = "connected to " + (peer or self.peer_ip)
                     self.last_sync = time.monotonic()
                     self._send_ck(0, ts_now(), 0, 0)
             elif cmd == b"NO":
-                self.status = "verbinding geweigerd door het apparaat"
+                self.status = "connection refused by the device"
                 self.phase = 0
             elif cmd == b"IN" and len(pkt) >= 16:
                 token = struct.unpack(">I", pkt[8:12])[0]
@@ -218,7 +218,7 @@ class AppleMIDISession:
                 self.connected = False
                 self.phase = 0
                 self.last_invite = 0.0
-                self.status = "het apparaat verbrak de verbinding"
+                self.status = "the device closed the connection"
         else:
             self._parse_rtp_midi(pkt)
 
@@ -436,14 +436,14 @@ class Handler(BaseHTTPRequestHandler):
     def _start_discovery(self):
         if Handler.discovery["running"]:
             return
-        Handler.discovery = {"running": True, "found": [], "status": "zoeken…"}
+        Handler.discovery = {"running": True, "found": [], "status": "searching…"}
 
         def run():
             found = discover()
             Handler.discovery = {
                 "running": False, "found": found,
-                "status": ("%d apparaat/apparaten gevonden" % len(found)) if found
-                          else "niets gevonden op dit netwerk",
+                "status": ("%d device(s) found" % len(found)) if found
+                          else "nothing found on this network",
             }
         threading.Thread(target=run, daemon=True).start()
 
@@ -454,8 +454,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if url.path == "/":
             if not os.path.exists(APP_FILE):
-                self.send_error(500, "dm12-web.html ontbreekt — voer eerst "
-                                     "'node web/build-web.js' uit")
+                self.send_error(500, "dm12-web.html is missing - run "
+                                     "'node web/build-web.js' first")
                 return
             with open(APP_FILE, "rb") as f:
                 body = f.read()
@@ -536,24 +536,24 @@ def main():
     if args:
         ip = args[0]
     else:
-        print("Zoeken naar de synth op het netwerk…")
+        print("Looking for the synth on the network...")
         found = discover()
         for f in found:
-            print("  gevonden:", f)
+            print("  found:", f)
         ip = found[0].split(" ")[0] if found else (local_ipv4() or "192.168.4.1")
         if not found:
-            print("  niets gevonden; probeer het IP mee te geven als argument")
+            print("  nothing found; try passing the IP address as an argument")
 
     session = AppleMIDISession(ip)
     Handler.session = session
     server = ThreadingHTTPServer(("0.0.0.0", http_port), Handler)
     own = local_ipv4() or "localhost"
 
-    print("DeepMind 12 — netwerkbrug")
+    print("DeepMind 12 - network bridge")
     print("  synth      : %s" % ip)
-    print("  op deze pc : http://localhost:%d" % http_port)
-    print("  op tablet  : http://%s:%d" % (own, http_port))
-    print("  stoppen    : Ctrl+C")
+    print("  this pc    : http://localhost:%d" % http_port)
+    print("  tablet     : http://%s:%d" % (own, http_port))
+    print("  stop       : Ctrl+C")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

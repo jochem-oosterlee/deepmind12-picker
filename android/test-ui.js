@@ -135,7 +135,8 @@ const bankTabs = document.getElementById("bankTabs");
 console.log("tabs:", tabs.children.length, "| bankknoppen:", bankTabs.children.length,
             "| presets:", grid.children.length);
 if (tabs.children.length < 5) { console.error("FOUT: tabs niet opgebouwd"); process.exit(1); }
-if (!tabs.children.some(t => t.textContent === "Global")) {
+if (!tabs.children.some(t => t.textContent === "Global")
+    || !tabs.children.some(t => t.textContent === "Library")) {
   console.error("FOUT: Global-tab ontbreekt"); process.exit(1);
 }
 if (grid.children.length !== 128) { console.error("FOUT: presetraster niet opgebouwd"); process.exit(1); }
@@ -240,7 +241,8 @@ function testLabels() {
   if (inputs.length < 2) { console.error("FOUT: labelregels ontbreken"); failures++; return; }
   inputs[0].value = "Rx";
   inputs[1].value = "Tx";
-  const save = findIn(card2, e => e.textContent === "Opslaan");
+  const save = findIn(card2, e => e.textContent === "Save");
+  if (!save) { console.error("FOUT: opslaanknop ontbreekt"); failures++; return; }
   save.fire("click");
 
   const stored = JSON.parse(localStorage.getItem("dm12.gmeta"));

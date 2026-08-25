@@ -33,7 +33,7 @@
     102:202, 103:203, 104:204};
 
   const S = {
-    status: "MIDI wordt geladen…", connected: false, portName: "",
+    status: "loading MIDI…", connected: false, portName: "",
     names: {}, cats: {}, patches: {},
     editBuffer: null, globals: null, prevGlobals: null, globalsPacked: null,
     paramRev: 0, globalRev: 0, nameDumps: 0, patchDumps: 0, badNames: 0,
@@ -132,8 +132,8 @@
       }
       S.nameDumps++;
       S.badNames += bad;
-      S.info = "bank " + BANKS[bank] + ": " + good + " namen"
-             + (bad ? ", " + bad + " onleesbaar" : "");
+      S.info = "bank " + BANKS[bank] + ": " + good + " names"
+             + (bad ? ", " + bad + " unreadable" : "");
     } else if (cmd === 0x02) {                // programma-dump
       const bank = d[8] & 7, prog = d[9] & 0x7F;
       S.patches[bank + "-" + prog] = Array.from(d.slice(10, end));
@@ -144,24 +144,24 @@
         S.cats[BANKS[bank] + "-" + prog] = data[CATEGORY_OFFSET];
       }
       S.patchDumps++;
-      S.info = "patch " + BANKS[bank] + (prog + 1) + " ontvangen";
+      S.info = "patch " + BANKS[bank] + (prog + 1) + " received";
     } else if (cmd === 0x04) {                // edit buffer
       S.editBuffer = unpack7(d, 8, end, PROGRAM_BYTES);
       S.paramRev++;
-      S.info = "edit buffer ontvangen (" + S.editBuffer.length + " bytes)";
+      S.info = "edit buffer received (" + S.editBuffer.length + " bytes)";
     } else if (cmd === 0x06) {                // globale instellingen
       S.prevGlobals = S.globals;
       S.globals = unpack7(d, 8, end, GLOBAL_BYTES);
       S.globalsPacked = Array.from(d.slice(8, end));
       S.globalRev++;
-      S.info = "globale instellingen ontvangen (" + S.globals.length + " bytes)";
+      S.info = "global settings received (" + S.globals.length + " bytes)";
     } else if (cmd === 0x10) {                // aanmelding bevestigd
       S.iface = d[9] & 0x7F;
       S.curBank = d[10] & 7;
       S.curProg = d[11] & 0x7F;
-      S.info = "synth meldt zich: bank " + BANKS[S.curBank] + (S.curProg + 1);
+      S.info = "synth reports: bank " + BANKS[S.curBank] + (S.curProg + 1);
     } else {
-      S.info = "SysEx 0x" + cmd.toString(16) + " ontvangen";
+      S.info = "SysEx 0x" + cmd.toString(16) + " received";
     }
   }
 
@@ -185,15 +185,15 @@
     for (const i of midi.inputs.values()) i.onmidimessage = onMessage;
     S.connected = !!out;
     S.portName = out ? out.name : "";
-    S.status = out ? "verbonden: " + out.name
-                   : "geen MIDI-uitgang gevonden — sluit de DeepMind aan via USB of start rtpMIDI";
+    S.status = out ? "connected: " + out.name
+                   : "no MIDI output found — connect the DeepMind over USB, or start rtpMIDI";
   }
 
   function initWebMidi() {
     mode = "midi";
     if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
-      S.status = "deze browser ondersteunt geen Web MIDI — gebruik Chrome of Edge,"
-               + " of start dm12-bridge.py";
+      S.status = "this browser has no Web MIDI — use Chrome or Edge,"
+               + " or start dm12-bridge.py";
       return;
     }
     navigator.requestMIDIAccess({sysex: true}).then(access => {
@@ -201,7 +201,7 @@
       midi.onstatechange = pickPorts;
       pickPorts();
     }, () => {
-      S.status = "MIDI-toegang geweigerd (SysEx moet toegestaan zijn)";
+      S.status = "MIDI access denied (SysEx must be allowed)";
     });
   }
 
@@ -209,7 +209,7 @@
 
   function startBridge() {
     mode = "bridge";
-    S.status = "netwerkbrug gevonden";
+    S.status = "network bridge found";
     (async () => {
       for (;;) {
         try {
@@ -218,10 +218,10 @@
           S.status = d.status;
           S.portName = d.ip;
           S.pkts = d.packets || 0;
-          S.info = d.framing ? "uitlijnfouten: " + d.framing : S.info;
+          S.info = d.framing ? "framing errors: " + d.framing : S.info;
         } catch {
           S.connected = false;
-          S.status = "netwerkbrug niet bereikbaar";
+          S.status = "network bridge unreachable";
         }
         await sleep(1500);
       }
@@ -378,7 +378,7 @@
     },
 
     // op de pc bewaart de browser zelf; de bibliotheek gaat mee via de back-up
-    libSave: () => { S.info = "op de pc bewaart de browser dit zelf"; },
+    libSave: () => { S.info = "on a PC the browser stores this itself"; },
 
     // via de brug: het IP van de synth. Via Web MIDI: een deel van de poortnaam.
     setIp: t => {
@@ -394,13 +394,13 @@
     /** Zoekt de synth op het netwerk (alleen via de brug). */
     discover: () => {
       if (mode !== "bridge") {
-        disco.status = "zoeken werkt via dm12-bridge.py; via Web MIDI kies je een poort";
+        disco.status = "searching needs dm12-bridge.py; with Web MIDI you pick a port";
         return;
       }
       disco.running = true;
-      disco.status = "zoeken…";
+      disco.status = "searching…";
       fetch("/discover?start=1").then(r => r.json()).then(d => Object.assign(disco, d))
-        .catch(() => { disco.running = false; disco.status = "zoeken mislukt"; });
+        .catch(() => { disco.running = false; disco.status = "search failed"; });
       const tick = () => fetch("/discover").then(r => r.json()).then(d => {
         Object.assign(disco, d);
         if (d.running) setTimeout(tick, 700);
@@ -409,8 +409,8 @@
     },
     discovered: () => JSON.stringify(disco),
     getWifiCreds: () => JSON.stringify({ssid: "", pw: ""}),
-    connectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
-    disconnectWifi: () => { S.info = "op de pc loopt de verbinding via USB of rtpMIDI"; },
+    connectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
+    disconnectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
 
     copyToClipboard: clip,
     readClipboard: () => (navigator.clipboard && navigator.clipboard.readText)
