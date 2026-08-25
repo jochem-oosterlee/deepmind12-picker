@@ -1946,15 +1946,32 @@ function showValue(i, v) {
   const m = gmeta.bytes[i] || {};
   if (m.labels && m.labels[v]) return m.labels[v];
   if (m.type === "range") {
-    const from = m.from || 0;
-    const d = v + from;
-    return (from < 0 && d > 0 ? "+" : "") + d + (m.unit ? " " + m.unit : "");
+    const d = rawToShown(i, v);
+    return (d > 0 && (m.from < 0 || m.signed) ? "+" : "") + d
+           + (m.unit ? " " + m.unit : "");
   }
   return String(v);
 }
 
 function isRange(i) { return (gmeta.bytes[i] || {}).type === "range"; }
-function rangeFrom(i) { return (gmeta.bytes[i] || {}).from || 0; }
+
+/** Bytewaarde naar het getal dat de synth toont. */
+function rawToShown(i, v) {
+  const m = gmeta.bytes[i] || {};
+  if (m.type !== "range") return v;
+  let raw = v;
+  // negatieve waardes zitten meestal boven 127 (0 = 0, 255 = -1)
+  if (m.signed && raw > 127) raw -= 256;
+  return raw + (m.from || 0);
+}
+
+/** En terug: het ingetikte getal naar de byte die de synth wil. */
+function shownToRaw(i, shown) {
+  const m = gmeta.bytes[i] || {};
+  let raw = shown - (m.from || 0);
+  if (m.signed && raw < 0) raw += 256;
+  return Math.max(0, Math.min(255, raw));
+}
 
 /** Alle labelsets die al ergens gebruikt worden, plus de bewaarde sets. */
 function knownSets() {
@@ -2015,31 +2032,61 @@ function labelEditor(i) {
     const fromLab = document.createElement("span");
     fromLab.className = "labnum"; fromLab.textContent = "0 =";
     fromLab.title = "what the synth shows when this byte is 0";
+    // gewoon tekst: een getalveld geeft halverwege een min-teken een lege
+    // waarde terug, en dan zou de invoer terugspringen naar 0
     const from = document.createElement("input");
-    from.type = "number"; from.className = "v"; from.value = m.from || 0;
+    from.type = "text"; from.className = "v"; from.inputMode = "numeric";
+    from.value = m.from === undefined ? "0" : String(m.from);
     const unit = document.createElement("input");
     unit.type = "text"; unit.className = "l"; unit.placeholder = "unit (cents, semitones, %)";
     unit.value = m.unit || "";
-    const save = document.createElement("button");
-    save.className = "mini"; save.textContent = "Save";
-    save.addEventListener("click", () => {
-      m.from = parseInt(from.value, 10) || 0;
+    const hint = document.createElement("div");
+    hint.style.cssText = "font-size:11px;color:var(--muted);padding:2px 0";
+    const showHint = () => {
+      hint.textContent = "Byte value " + cur + " now reads as " + showValue(i, cur)
+        + ". Exceptions like 0 = off can still be named under ‘named steps’.";
+    };
+    showHint();
+
+    // meteen bewaren tijdens het typen: dan kan de invoer niet meer verdwijnen
+    let saveTimer = null;
+    const apply = () => {
+      const n = parseInt(from.value, 10);
+      if (!isNaN(n)) m.from = n;
       const u = unit.value.trim();
       if (u) m.unit = u; else delete m.unit;
+      showHint();
+      updateGlobalsInPlace();          // kaartje bijwerken, editor onaangeroerd
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveMeta, 400);
+    };
+    from.addEventListener("input", apply);
+    unit.addEventListener("input", apply);
+
+    const signed = document.createElement("button");
+    signed.className = "mini" + (m.signed ? " on" : "");
+    signed.textContent = "±";
+    signed.title = "negative values sit above 127 (255 = -1). Try it and see which "
+                 + "reading matches the synth.";
+    signed.addEventListener("click", () => {
+      if (m.signed) delete m.signed; else m.signed = true;
+      signed.classList.toggle("on", !!m.signed);
+      showHint();
+      updateGlobalsInPlace();
+      saveMeta();
+    });
+
+    const done = document.createElement("button");
+    done.className = "mini"; done.textContent = "Close";
+    done.addEventListener("click", () => {
+      apply();
       saveMeta();
       gOpen[i] = null;
       renderGlobals();
     });
-    const close = document.createElement("button");
-    close.className = "mini"; close.textContent = "Close";
-    close.addEventListener("click", () => { gOpen[i] = null; renderGlobals(); });
     r1.appendChild(fromLab); r1.appendChild(from); r1.appendChild(unit);
-    r1.appendChild(save); r1.appendChild(close);
+    r1.appendChild(signed); r1.appendChild(done);
     box.appendChild(r1);
-    const hint = document.createElement("div");
-    hint.style.cssText = "font-size:11px;color:var(--muted);padding:2px 0";
-    hint.textContent = "The synth now shows " + showValue(i, cur) + " for byte value " + cur
-      + ". Exceptions like 0 = off can still be named under ‘named steps’.";
     box.appendChild(hint);
     return box;
   }
@@ -2356,16 +2403,16 @@ function byteCard(i) {
     ctlInput = sel;
   } else {
     // bij een bereik tikt de gebruiker het getal dat de synth toont
-    const from = isRange(i) ? rangeFrom(i) : 0;
     const inp = document.createElement("input");
-    inp.type = "number"; inp.min = from; inp.max = 255 + from; inp.value = v + from;
+    inp.type = "text"; inp.inputMode = "numeric"; inp.value = rawToShown(i, v);
     if (m.unit) inp.title = m.unit;
     const set = document.createElement("button");
     set.className = "mini"; set.textContent = "Set";
     set.title = "send this value to the synth";
     set.addEventListener("click", () => {
       const typed = parseInt(inp.value, 10);
-      writeByte(i, Math.max(0, Math.min(255, typed - from)), set, gData.bytes[i]);
+      if (isNaN(typed)) return;
+      writeByte(i, shownToRaw(i, typed), set, gData.bytes[i]);
     });
     ctl.appendChild(inp);
     ctl.appendChild(set);
@@ -2462,7 +2509,7 @@ function updateGlobalsInPlace() {
     c.card.className = "gcard" + (mine ? " justset" : (isRecent(i) ? " changed" : ""));
     if (!m.name && c.nmEl) c.nmEl.textContent = isRecent(i) ? "just changed" : "unknown";
     // een regelaar niet bijwerken terwijl de gebruiker er in bezig is
-    const shown = c.isSelect ? v : v + (isRange(i) ? rangeFrom(i) : 0);
+    const shown = c.isSelect ? v : rawToShown(i, v);
     if (c.ctlEl && document.activeElement !== c.ctlEl
         && String(c.ctlEl.value) !== String(shown)) {
       c.ctlEl.value = shown;

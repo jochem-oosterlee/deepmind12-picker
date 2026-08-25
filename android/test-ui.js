@@ -156,6 +156,8 @@ if (!tabs.children.some(t => t.textContent === "Global")
 }
 if (grid.children.length !== 128) { console.error("FOUT: presetraster niet opgebouwd"); process.exit(1); }
 
+let rangeField = null;
+
 // kaartjes zitten nu in rasters per menu, dus recursief tellen
 function countCards(el) {
   let n = String(el.className || "").includes("gcard") ? 1 : 0;
@@ -292,6 +294,29 @@ setTimeout(() => {
     }
   }
 
+  // bereik instellen: -48 intikken mag niet terugspringen naar 0
+  const byteCardOf = n => findIn(document.getElementById("gList"),
+    e => e.dataset && String(e.dataset.byte) === String(n));
+  let rc = byteCardOf(5);
+  findIn(rc, e => e.textContent === "abc").fire("click");
+  rc = byteCardOf(5);
+  const modeBtn = findIn(rc, e => e.textContent === "number range");
+  if (!modeBtn) { console.error("FOUT: bereik-knop ontbreekt"); failures++; }
+  else {
+    modeBtn.fire("click");
+    rc = byteCardOf(5);
+    rangeField = findIn(rc, e => e.className === "v");
+    rangeField.value = "-48";
+    rangeField.fire("input");
+    const shown = findIn(byteCardOf(5), e => e.className === "val").textContent;
+    console.log("bereik ingevuld: veld", JSON.stringify(rangeField.value),
+                "| kaartje toont", JSON.stringify(shown));
+    if (shown !== "-33") {
+      console.error("FOUT: kaartje volgt de verschuiving niet (verwacht -33)");
+      failures++;
+    }
+  }
+
   // logboek openen en een regel uitklappen
   document.getElementById("logBtn").fire("click");
   const logList = document.getElementById("logList");
@@ -322,6 +347,19 @@ setTimeout(() => {
     if (valEl.textContent !== "99") {
       console.error("FOUT: waarde niet bijgewerkt zonder herbouw");
       failures++;
+    }
+
+    // het bereik-veld moet de lezing overleven, en bewaard zijn
+    if (rangeField) {
+      const stored = JSON.parse(localStorage.getItem("dm12.gmeta"));
+      const from = stored.bytes && stored.bytes["5"] && stored.bytes["5"].from;
+      console.log("bereik na een lezing: veld", JSON.stringify(rangeField.value),
+                  "| bewaard als", from);
+      if (rangeField.value !== "-48") {
+        console.error("FOUT: ingevulde verschuiving teruggesprongen");
+        failures++;
+      }
+      if (from !== -48) { console.error("FOUT: verschuiving niet bewaard"); failures++; }
     }
 
     if (global.__onerror && errors.length) console.log("meldingen:", errors);
