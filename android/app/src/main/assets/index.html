@@ -2035,9 +2035,17 @@ function updateGStat() {
   }
 
   document.getElementById("gUndoBtn").style.display = gUndo ? "inline-block" : "none";
+  // hoeveel er nog te benoemen zijn, en welke: dat is de vraag tijdens dit werk
+  let left = "";
+  if (gData) {
+    const un = gData.bytes.map((_, i) => i).filter(i => !(gmeta.bytes[i] || {}).name);
+    left = " · " + (gData.bytes.length - un.length) + "/" + gData.bytes.length + " named"
+         + (un.length ? " · left: " + un.map(i => "#" + String(i).padStart(2, "0")).join(" ")
+                      : " · all named");
+  }
   stat.textContent = !gData
     ? "Not read yet — tap ‘Read from synth’. You can already create menus."
-    : `${gData.bytes.length} settings`
+    : `${gData.bytes.length} settings` + left
       + (gWatch ? " · following the synth" : " · read " + gData.rev)
       + (gLastChanged ? " · last changed: " + gLastChanged : "")
       + (gWriteIgnored ? " · note: the synth accepts some settings and refuses"
