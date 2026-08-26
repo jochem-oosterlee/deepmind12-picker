@@ -200,8 +200,10 @@
     font-family:ui-monospace,Consolas,"Courier New",monospace; }
 
   /* ---- LFO-paneel ---- */
-  .lfo { background:var(--panel); border:1px solid var(--border); border-radius:12px;
-    padding:8px 10px 10px; margin-bottom:8px; box-shadow:var(--shadow); }
+  /* zo breed als de inhoud, en naast elkaar zodra er ruimte is */
+  .lfo { display:inline-block; vertical-align:top; background:var(--panel);
+    border:1px solid var(--border); border-radius:12px;
+    padding:8px 10px 10px; margin:0 8px 8px 0; box-shadow:var(--shadow); }
   .lfo .head { display:flex; align-items:center; gap:8px; margin-bottom:6px;
     font-size:11px; font-weight:700; letter-spacing:1.1px; text-transform:uppercase;
     color:var(--accent); }
@@ -210,7 +212,7 @@
   .lfo .wave { display:block; width:100%; height:84px; background:var(--wave-bg);
     border:1px solid var(--border); border-radius:8px; }
   .lfobody { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
-  .lfomid { flex:1; min-width:0; }
+  .lfomid { flex:none; width:260px; max-width:100%; }
   .vfgroup { display:flex; gap:5px; }
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
@@ -239,8 +241,8 @@
     border:1px solid rgba(0,0,0,.55);
     background:linear-gradient(90deg,#5b5852,#26241f 62%,#3d3a35); }
   /* raster met draaiknoppen, als de skin een knop-filmstrip aanbiedt */
-  .knobgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr));
-    gap:6px; margin-bottom:6px; }
+  .knobgrid { display:grid; grid-template-columns:repeat(auto-fill,84px);
+    justify-content:start; gap:6px; margin-bottom:6px; }
   .knobcell { display:flex; flex-direction:column; align-items:center; gap:2px;
     background:var(--panel); border:1px solid var(--border); border-radius:8px;
     padding:6px 4px; box-shadow:var(--shadow); }
@@ -251,6 +253,17 @@
     font-variant-numeric:tabular-nums; }
   .knobcell.changed { border-color:var(--active); background:var(--active-soft); }
   .knobcell select { width:100%; padding:2px 4px; font-size:10px; }
+
+  /* Gleuf achter een fader-filmstrip. Arturia-achtige strips bevatten alleen
+     het kapje; de gleuf hoort bij de paneelplaat, dus die tekenen we zelf. */
+  .sgroove { position:relative; display:flex; align-items:center;
+    justify-content:center; }
+  .sgroove::before { content:""; position:absolute; left:50%; top:5%; bottom:5%;
+    width:5px; transform:translateX(-50%); border-radius:3px;
+    background:linear-gradient(90deg,rgba(0,0,0,.4),rgba(0,0,0,.14) 45%,
+                               rgba(255,255,255,.07));
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.45); }
+  .sgroove .sprite { position:relative; }
 
   /* regelaar met een filmstrip uit een eigen skin */
   .sprite { background-repeat:no-repeat; touch-action:none; cursor:ns-resize;
@@ -1873,7 +1886,12 @@ function vFader(label, value, max, onMove, onDone) {
     const sc = spriteControl(strip, value, max,
       v => { num.textContent = v; onMove(v); },
       v => { num.textContent = v; onDone(v); });
-    box.appendChild(num); box.appendChild(sc.el); box.appendChild(cap);
+    const groove = document.createElement("div");
+    groove.className = "sgroove";
+    groove.style.width = sc.el.style.width;
+    groove.style.height = sc.el.style.height;
+    groove.appendChild(sc.el);
+    box.appendChild(num); box.appendChild(groove); box.appendChild(cap);
     box.style.width = "auto";
     return {box: box, num: num, setValue: v => { num.textContent = v; sc.setValue(v); }};
   }
