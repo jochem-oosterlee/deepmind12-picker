@@ -77,6 +77,16 @@ global.localStorage = {
   getItem(k) { return this._d[k] === undefined ? null : this._d[k]; },
   setItem(k, v) { this._d[k] = String(v); },
 };
+// een skin met filmstrips nabootsen: dan gebruikt de app het spritepad
+const SKIN_VARS = {
+  "--sprite-scale": "1.4",
+  "--fader-img": 'url("fader.png")', "--fader-frames": "99",
+  "--fader-w": "36px", "--fader-h": "75px",
+};
+global.getComputedStyle = () => ({
+  getPropertyValue: k => SKIN_VARS[k] || "",
+});
+
 global.alert = m => errors.push("alert: " + m);
 global.confirm = () => true;
 global.Blob = class {};
@@ -366,6 +376,24 @@ setTimeout(() => {
       console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
       failures++;
     }
+    // met een skin die filmstrips aanbiedt moeten het sprites zijn
+    const sprites = [];
+    (function walk(e) {
+      if (String(e.className || "") === "sprite") sprites.push(e);
+      for (const c of e.children || []) walk(c);
+    })(plist);
+    console.log("filmstrip-regelaars:", sprites.length);
+    if (sprites.length !== 8) { console.error("FOUT: verwacht 8 sprites"); failures++; }
+    else {
+      sent = [];
+      sprites[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
+      sprites[0].fire("pointermove", {clientY: 130, preventDefault() {}, shiftKey: false});
+      sprites[0].fire("pointerup", {});
+      const nrpn = sent.filter(x => x[0] === "nrpn" && x[1] === 0);
+      console.log("sprite gesleept ->", JSON.stringify(nrpn[nrpn.length - 1]));
+      if (!nrpn.length) { console.error("FOUT: slepen stuurt geen parameter 0"); failures++; }
+    }
+
     // verticale faders: vier per paneel (rate, slew, delay, spread)
     const vfs = [];
     (function walk(e) {
@@ -374,12 +402,15 @@ setTimeout(() => {
     })(plist);
     console.log("verticale faders:", vfs.length);
     if (vfs.length !== 8) { console.error("FOUT: verwacht 8 faders"); failures++; }
-    // rate-fader van LFO 1 verzetten moet parameter 0 sturen
-    sent = [];
+    // met de getekende regelaar (geen skin) hoort er een range-invoer te zijn
     const rateInput = findIn(vfs[0], e => e.type === "range");
-    rateInput.value = 200;
-    rateInput.fire("input");
-    setTimeout(() => {}, 0);
+    if (rateInput) {
+      sent = [];
+      rateInput.value = 200;
+      rateInput.fire("input");
+    } else {
+      console.log("(skin met filmstrips actief, dus geen range-invoer)");
+    }
   }
 
   // terug naar de Global-tab: de controles hieronder gaan daarover
