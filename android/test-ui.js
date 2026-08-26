@@ -414,37 +414,47 @@ setTimeout(() => {
   };
 
   const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
-  const rows = collect(plist, e => String(e.className || "") === "shaperow");
+  const combos = collect(plist, e => String(e.className || "") === "combo");
   console.log("LFO-panelen:", plist.children.length, "| faderbanen:", lanes.length,
-              "| vormrijen:", rows.length);
-  if (plist.children.length !== 2 || lanes.length !== 8 || rows.length !== 2) {
+              "| vormvakken:", combos.length);
+  if (plist.children.length !== 2 || lanes.length !== 8 || combos.length !== 2) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
-    // alle zeven vormen staan als badge in beeld, geen menu meer
-    const badges = rows.map(r => collect(r, e => e.tagName === "BUTTON"));
-    console.log("vormbadges:", badges[0].length,
-                "| verdeeld over rijen:", rows[0].children.map(r => r.children.length).join("+"));
-    if (badges[0].length !== 7
-        || rows[0].children.map(r => r.children.length).join("+") !== "4+3") {
-      console.error("FOUT: er staan geen zeven vormbadges");
+    // eigen uitklapper: openen, een vorm aanwijzen, en weer dicht
+    const pops = collect(plist, e => String(e.className || "") === "shapepop");
+    console.log("uitklapvensters:", pops.length,
+                "| vormen per venster:", pops[0] ? pops[0].children.length : 0);
+    if (pops.length !== 2 || pops[0].children.length !== 7) {
+      console.error("FOUT: uitklapper met zeven vormen ontbreekt");
       failures++;
     } else {
+      combos[0].fire("click");
+      const opened = pops[0].style.display;
       sent = [];
-      badges[0][2].fire("click");                  // blokgolf
-      const lit = badges[0].filter(b => b.classList.contains("on"));
-      console.log("vorm gekozen:", JSON.stringify(sent[0]),
-                  "| opgelicht:", lit.length === 1 ? "de gekozen" : lit.length + " badges");
+      pops[0].children[2].fire("click");          // blokgolf
+      console.log("uitklapper:", opened, "-> vorm gekozen",
+                  JSON.stringify(sent[0]), "-> nu", pops[0].style.display);
+      if (opened !== "grid") { console.error("FOUT: uitklapper ging niet open"); failures++; }
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
         console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
         failures++;
       }
-      if (lit.length !== 1 || badges[0][2] !== lit[0]) {
+      if (pops[0].style.display !== "none") {
+        console.error("FOUT: uitklapper bleef open na kiezen");
+        failures++;
+      }
+      const lit = pops[0].children.filter(b => b.classList.contains("on"));
+      console.log("opgelicht in het menu:",
+                  lit.length === 1 && lit[0] === pops[0].children[2]
+                    ? "de gekozen vorm" : lit.length + " badges");
+      if (lit.length !== 1 || lit[0] !== pops[0].children[2]) {
         console.error("FOUT: de gekozen vorm licht niet als enige op");
         failures++;
       }
       sent = [];
-      badges[1][3].fire("click");
+      combos[1].fire("click");
+      pops[1].children[3].fire("click");
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
         console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
         failures++;
