@@ -362,74 +362,53 @@ setTimeout(() => {
     }
   }
 
-  // LFO-paneel: vormknoppen en regelaars moeten de juiste parameters sturen
+  // LFO-paneel: vormmenu, lange faders en het knoppenblok
   const lfoTab = [...document.getElementById("tabs").children]
     .find(t => t.textContent === "LFO");
   lfoTab.fire("click");
   const plist = document.getElementById("paramList");
-  const shapeBtns = [];
-  (function walk(e) {
-    if (e.dataset && e.dataset.shape !== undefined) shapeBtns.push(e);
-    for (const c of e.children || []) walk(c);
-  })(plist);
-  console.log("LFO-panelen:", plist.children.length, "| vormknoppen:", shapeBtns.length);
-  if (plist.children.length !== 2 || shapeBtns.length !== 14) {
+
+  const collect = (root, pred) => {
+    const out = [];
+    (function walk(e) {
+      if (pred(e)) out.push(e);
+      for (const c of e.children || []) walk(c);
+    })(root);
+    return out;
+  };
+
+  const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
+  const combos = collect(plist, e => String(e.className || "") === "combo");
+  const selects = combos.flatMap(c => collect(c, e => e.tagName === "SELECT"));
+  console.log("LFO-panelen:", plist.children.length, "| faderbanen:", lanes.length,
+              "| vormvakken:", combos.length);
+  if (plist.children.length !== 2 || lanes.length !== 8 || combos.length !== 2) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
     sent = [];
-    shapeBtns[2].fire("click");             // blokgolf op LFO 1 = parameter 2
+    selects[0].value = "2";
+    selects[0].fire("change");
     console.log("vorm gekozen ->", JSON.stringify(sent[0]));
-    if (!sent.some(s => s[0] === "nrpn" && s[1] === 2 && s[2] === 2)) {
+    if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
       console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
       failures++;
     }
     sent = [];
-    shapeBtns[9].fire("click");             // tweede paneel: parameter 9
-    console.log("vorm op LFO 2 ->", JSON.stringify(sent[0]));
-    if (!sent.some(s => s[0] === "nrpn" && s[1] === 9)) {
+    selects[1].value = "3";
+    selects[1].fire("change");
+    if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
       console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
       failures++;
     }
-    // met een skin die filmstrips aanbiedt moeten het sprites zijn
-    const sprites = [];
-    (function walk(e) {
-      if (String(e.className || "") === "sprite") sprites.push(e);
-      for (const c of e.children || []) walk(c);
-    })(plist);
-    console.log("filmstrip-regelaars:", sprites.length,
-                NO_SKIN ? "(geen skin, dus verwacht 0)" : "(skin actief, verwacht 8)");
-    if (sprites.length !== (NO_SKIN ? 0 : 8)) {
-      console.error("FOUT: onverwacht aantal sprites");
-      failures++;
-    }
-    if (!NO_SKIN) {
-      sent = [];
-      sprites[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
-      sprites[0].fire("pointermove", {clientY: 130, preventDefault() {}, shiftKey: false});
-      sprites[0].fire("pointerup", {});
-      const nrpn = sent.filter(x => x[0] === "nrpn" && x[1] === 0);
-      console.log("sprite gesleept ->", JSON.stringify(nrpn[nrpn.length - 1]));
-      if (!nrpn.length) { console.error("FOUT: slepen stuurt geen parameter 0"); failures++; }
-    }
-
-    // verticale faders: vier per paneel (rate, slew, delay, spread)
-    const vfs = [];
-    (function walk(e) {
-      if (String(e.className || "") === "vf") vfs.push(e);
-      for (const c of e.children || []) walk(c);
-    })(plist);
-    console.log("verticale faders:", vfs.length);
-    if (vfs.length !== 8) { console.error("FOUT: verwacht 8 faders"); failures++; }
-    // met de getekende regelaar (geen skin) hoort er een range-invoer te zijn
-    const rateInput = findIn(vfs[0], e => e.type === "range");
-    if (rateInput) {
-      sent = [];
-      rateInput.value = 200;
-      rateInput.fire("input");
-    } else {
-      console.log("(skin met filmstrips actief, dus geen range-invoer)");
-    }
+    // slepen aan de eerste faderbaan moet parameter 0 sturen
+    sent = [];
+    lanes[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
+    lanes[0].fire("pointermove", {clientY: 140, preventDefault() {}, shiftKey: false});
+    lanes[0].fire("pointerup", {});
+    const moved = sent.filter(x => x[0] === "nrpn" && x[1] === 0);
+    console.log("fader gesleept ->", JSON.stringify(moved[moved.length - 1]));
+    if (!moved.length) { console.error("FOUT: slepen stuurt geen parameter 0"); failures++; }
   }
 
   // terug naar de Global-tab: de controles hieronder gaan daarover

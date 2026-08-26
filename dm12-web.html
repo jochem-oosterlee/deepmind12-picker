@@ -254,6 +254,43 @@
   .knobcell.changed { border-color:var(--active); background:var(--active-soft); }
   .knobcell select { width:100%; padding:2px 4px; font-size:10px; }
 
+  /* lange fader: gleuf van elke hoogte met een los kapje eroverheen */
+  .lfader { position:relative; }
+  .lfader .slot { position:absolute; left:50%; top:0; bottom:0; width:6px;
+    transform:translateX(-50%); border-radius:3px;
+    background:linear-gradient(90deg,rgba(0,0,0,.45),rgba(0,0,0,.18) 45%,
+                               rgba(255,255,255,.06));
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.5); }
+  /* streepjes naast de gleuf, zoals op een paneel */
+  .lfader .ticks { position:absolute; left:0; right:0; top:4px; bottom:4px;
+    background-image:linear-gradient(180deg,var(--border) 1px,transparent 1px);
+    background-size:100% 12.5%; opacity:.5; }
+  .lfader .cap { position:absolute; left:50%; background-repeat:no-repeat;
+    background-size:100% 100%; touch-action:none; cursor:ns-resize; }
+  .lfader.off { opacity:.4; pointer-events:none; }
+
+  /* kop en middenblok van een paneel */
+  .lfo .titlebar { text-align:center; font-size:11px; font-weight:700;
+    letter-spacing:1.2px; text-transform:uppercase; color:var(--text);
+    background:var(--panel2); border:1px solid var(--border); border-radius:5px;
+    padding:3px 0; margin-bottom:7px; }
+  .combo { background:var(--panel2); border:1px solid var(--border);
+    border-radius:5px; padding:3px 8px; text-align:center; flex:1; min-width:0;
+    cursor:pointer; }
+  .combo .clab { font-size:9px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.8px; }
+  .combo .cval { font-size:12px; color:var(--text); overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .combo { position:relative; }
+  .combo select { position:absolute; left:0; top:0; width:100%; height:100%;
+    opacity:0; cursor:pointer; }
+  .btngrid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; }
+  .btngrid button { padding:9px 4px; font-size:11px; line-height:1.15; }
+  .btnstack { display:grid; gap:0; }
+  .btnstack button:first-child { border-radius:var(--radius) var(--radius) 0 0; }
+  .btnstack button:last-child { border-radius:0 0 var(--radius) var(--radius);
+    border-top:none; }
+
   /* Gleuf achter een fader-filmstrip. Arturia-achtige strips bevatten alleen
      het kapje; de gleuf hoort bij de paneelplaat, dus die tekenen we zelf. */
   .sgroove { position:relative; display:flex; align-items:center;
@@ -1869,6 +1906,102 @@ function spriteControl(strip, value, max, onMove, onDone) {
   return {el: el, setValue: v => { val = v; paint(); }};
 }
 
+/**
+ * Lange fader: een gleuf van instelbare hoogte met een kapje dat eroverheen
+ * schuift. Werkt met een kapje uit de skin en anders met een getekend kapje,
+ * en is daardoor niet gebonden aan de hoogte van een filmstrip-frame.
+ */
+function longFader(label, value, max, height, onMove, onDone, disabled) {
+  const cap = skinStrip("fadercap");
+  const capW = cap ? Math.round(cap.w * cap.scale) : 26;
+  const capH = cap ? Math.round(cap.h * cap.scale) : 14;
+
+  const box = document.createElement("div");
+  box.className = "vf";
+  box.style.width = Math.max(38, capW + 6) + "px";
+
+  const num = document.createElement("div");
+  num.className = "vnum";
+  num.textContent = value;
+
+  const lane = document.createElement("div");
+  lane.className = "lfader" + (disabled ? " off" : "");
+  lane.style.height = height + "px";
+  lane.style.width = Math.max(capW, 22) + "px";
+  const slot = document.createElement("div");
+  slot.className = "slot";
+  const ticks = document.createElement("div");
+  ticks.className = "ticks";
+  const knobEl = document.createElement("div");
+  knobEl.className = "cap";
+  knobEl.style.width = capW + "px";
+  knobEl.style.height = capH + "px";
+  knobEl.style.marginLeft = (-capW / 2) + "px";
+  if (cap) {
+    knobEl.style.backgroundImage = cap.img;
+  } else {
+    knobEl.style.background =
+      "linear-gradient(180deg,#5b5852,#26241f 62%,#3d3a35)";
+    knobEl.style.borderRadius = "3px";
+    knobEl.style.boxShadow = "0 1px 3px rgba(0,0,0,.45)";
+  }
+  lane.appendChild(slot);
+  lane.appendChild(ticks);
+  lane.appendChild(knobEl);
+
+  const capName = document.createElement("div");
+  capName.className = "vcap";
+  capName.textContent = label;
+
+  box.appendChild(num); box.appendChild(lane); box.appendChild(capName);
+
+  let val = value;
+  const travel = height - capH;
+  const paint = () => {
+    knobEl.style.top = Math.round((1 - val / (max || 1)) * travel) + "px";
+    num.textContent = val;
+  };
+  paint();
+  const set = (v, done) => {
+    v = Math.max(0, Math.min(max, Math.round(v)));
+    if (v === val && !done) return;
+    val = v;
+    paint();
+    (done ? onDone : onMove)(val);
+  };
+
+  let from = null, startVal = 0;
+  const grab = e => {
+    from = e.clientY;
+    startVal = val;
+    markDragging();
+    if (lane.setPointerCapture && e.pointerId !== undefined) {
+      try { lane.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    if (e.preventDefault) e.preventDefault();
+  };
+  lane.addEventListener("pointerdown", grab);
+  lane.addEventListener("pointermove", e => {
+    if (from === null) return;
+    markDragging();
+    set(startVal + ((from - e.clientY) / travel) * max * (e.shiftKey ? 0.25 : 1));
+  });
+  const end = () => {
+    if (from === null) return;
+    from = null;
+    dragging = false;
+    set(val, true);
+  };
+  lane.addEventListener("pointerup", end);
+  lane.addEventListener("pointercancel", end);
+  lane.addEventListener("wheel", e => {
+    if (e.preventDefault) e.preventDefault();
+    set(val + (e.deltaY < 0 ? 1 : -1) * Math.max(1, Math.round(max / 64)), true);
+  });
+
+  return {box: box, num: num, setValue: v => { val = v; paint(); }};
+}
+
 /** Verticale fader met de waarde erboven en het label eronder. */
 function vFader(label, value, max, onMove, onDone) {
   const box = document.createElement("div");
@@ -1926,15 +2059,10 @@ function renderLfo(base, title) {
   const box = document.createElement("div");
   box.className = "lfo";
 
-  const head = document.createElement("div");
-  head.className = "head";
-  const hTitle = document.createElement("span");
-  hTitle.textContent = title;
-  const hNow = document.createElement("span");
-  hNow.className = "now";
-  head.appendChild(hTitle);
-  head.appendChild(hNow);
-  box.appendChild(head);
+  const bar = document.createElement("div");
+  bar.className = "titlebar";
+  bar.textContent = title;
+  box.appendChild(bar);
 
   const body = document.createElement("div");
   body.className = "lfobody";
@@ -1950,48 +2078,81 @@ function renderLfo(base, title) {
   const waveBox = document.createElement("div");
   mid.appendChild(waveBox);
 
-  const shapes = document.createElement("div");
-  shapes.className = "shapes";
-  mid.appendChild(shapes);
+  // rij met het vormvak, zoals op het paneel
+  const comboRow = document.createElement("div");
+  comboRow.className = "row";
+  comboRow.style.margin = "6px 0 0";
+  mid.appendChild(comboRow);
 
-  const pills = document.createElement("div");
-  pills.className = "pills";
-  mid.appendChild(pills);
+  const grid = document.createElement("div");
+  grid.className = "btngrid";
+  mid.appendChild(grid);
+
+  const hNow = document.createElement("span");   // wordt in de titelbalk gezet
 
   const draw = () => {
     const shape = Math.min(6, get(2)), mono = get(5);
     waveBox.innerHTML = lfoWaveSvg(shape, get(0), get(1), get(6), mono);
-    hNow.textContent = SHAPE_NAMES[shape] + " · rate " + get(0)
-      + (get(1) ? " · delay " + get(1) : "")
-      + (get(6) ? " · slew " + get(6) : "")
-      + (mono === 0 ? " · poly" : mono === 1 ? " · mono" : " · spread " + (mono - 1));
-    for (const b of Array.from(shapes.children)) {
-      b.classList.toggle("on", +b.dataset.shape === shape);
-      b.innerHTML = lfoGlyph(+b.dataset.shape,
-        +b.dataset.shape === shape ? "var(--accent)" : "var(--muted)");
-    }
+    hNow.textContent = SHAPE_NAMES[shape];
   };
 
-  SHAPE_NAMES.forEach((nm, s) => {
-    const b = document.createElement("button");
-    b.dataset.shape = s;
-    b.title = nm;
-    b.addEventListener("click", () => { doSend(P(base + 2), s); draw(); });
-    shapes.appendChild(b);
+  // ---- faders: buitenste lang, binnenste iets lager, zoals op het paneel ----
+  const OUTER = 168, INNER = 124, DROP = 44;
+  const mk = (off, label, height, drop, col, disabled) => {
+    const f = longFader(label, get(off), 255, height,
+      v => { doSend(P(base + off), v); draw(); },
+      v => { sendParam(P(base + off), v); draw(); }, disabled);
+    if (drop) f.box.style.marginTop = drop + "px";
+    col.appendChild(f.box);
+    return f;
+  };
+  mk(0, "Rate", OUTER, 0, leftCol);
+  mk(6, "Slew", INNER, DROP, leftCol);
+
+  // rechts-binnen: spread als die aan staat, anders de stand die de synth
+  // Phase noemt en waarvan we het parameternummer niet kennen
+  const spreadOn = get(5) >= 2;
+  const spread = spreadOn
+    ? longFader("Spread", Math.max(1, get(5) - 1), 254, INNER,
+        v => doSend(P(base + 5), v + 1),
+        v => { sendParam(P(base + 5), v + 1); draw(); })
+    : longFader("Phase", 0, 255, INNER, () => {}, () => {}, true);
+  spread.box.style.marginTop = DROP + "px";
+  if (!spreadOn) {
+    spread.box.title = "Phase is not in the manual's parameter table — turn it "
+      + "on the synth once with the log open and the number shows up";
+  }
+  rightCol.appendChild(spread.box);
+  mk(1, "Delay", OUTER, 0, rightCol);
+
+  // ---- vormvak met een onzichtbaar menu erover ----
+  const combo = document.createElement("div");
+  combo.className = "combo";
+  const cl = document.createElement("div");
+  cl.className = "clab";
+  cl.textContent = "Shape";
+  const cv = document.createElement("div");
+  cv.className = "cval";
+  const sel = document.createElement("select");
+  SHAPE_NAMES.forEach((nm, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = nm;
+    sel.appendChild(o);
   });
+  sel.value = Math.min(6, get(2));
+  sel.addEventListener("change", () => {
+    sendParam(P(base + 2), +sel.value);
+    cv.textContent = SHAPE_NAMES[+sel.value];
+    cv.appendChild(lfoGlyphEl(+sel.value));
+    draw();
+  });
+  combo.appendChild(cl); combo.appendChild(cv); combo.appendChild(sel);
+  comboRow.appendChild(combo);
 
-  // Rate en Slew links, Delay rechts — zoals op het paneel van de synth
-  [[0, "Rate", leftCol], [6, "Slew", leftCol], [1, "Delay", rightCol]]
-    .forEach(([off, nm, col]) => {
-      const f = vFader(nm, get(off), 255,
-        v => { doSend(P(base + off), v); draw(); },
-        v => { sendParam(P(base + off), v); draw(); });
-      col.appendChild(f.box);
-    });
-
-  [[3, "Key sync"], [4, "Arp sync"]].forEach(([off, nm]) => {
+  // ---- 2x2 blok met de schakelaars ----
+  const pill = (label, off) => {
     const b = document.createElement("button");
-    b.textContent = nm;
+    b.innerHTML = label;
     const paint = () => b.classList.toggle("on", get(off) > 0);
     paint();
     b.addEventListener("click", () => {
@@ -1999,42 +2160,56 @@ function renderLfo(base, title) {
       paint();
       draw();
     });
-    pills.appendChild(b);
-  });
-
-  // poly / mono / spread is één parameter: spread gebruikt de waardes 2 tot 255,
-  // dus de hoeveelheid verschijnt als fader zodra spread gekozen is
-  const spread = vFader("Spread", Math.max(1, get(5) - 1), 254,
-    v => doSend(P(base + 5), v + 1),
-    v => { sendParam(P(base + 5), v + 1); draw(); });
-  spread.box.style.display = "none";
-  rightCol.appendChild(spread.box);
-
-  const seg = document.createElement("div");
-  seg.className = "seg";
-  const paintSeg = () => {
-    const m = get(5);
-    Array.from(seg.children).forEach((b, n) => {
-      b.classList.toggle("on", n === (m === 0 ? 0 : m === 1 ? 1 : 2));
-    });
-    spread.box.style.display = m >= 2 ? "flex" : "none";
-    if (m >= 2) spread.setValue(m - 1);
+    return b;
   };
-  [["Poly", 0], ["Mono", 1], ["Spread", 2]].forEach(([nm, val]) => {
+  grid.appendChild(pill("Arp<br>sync", 4));
+  grid.appendChild(pill("Key<br>sync", 3));
+
+  const phase = document.createElement("button");
+  phase.textContent = "Phase";
+  phase.disabled = true;
+  phase.style.opacity = ".45";
+  phase.title = spread.box.title || "";
+  grid.appendChild(phase);
+
+  const stack = document.createElement("div");
+  stack.className = "btnstack";
+  const segBtns = [];
+  [["Poly", 0], ["Mono", 1]].forEach(([nm, val]) => {
     const b = document.createElement("button");
     b.textContent = nm;
     b.addEventListener("click", () => {
-      doSend(P(base + 5), val === 2 ? Math.max(2, get(5)) : val);
-      paintSeg();
-      draw();
+      sendParam(P(base + 5), val);
+      renderParams();          // spread-fader verschijnt of verdwijnt
     });
-    seg.appendChild(b);
+    segBtns.push(b);
+    stack.appendChild(b);
   });
-  pills.appendChild(seg);
+  const sp = document.createElement("button");
+  sp.textContent = "Spread";
+  sp.addEventListener("click", () => {
+    sendParam(P(base + 5), Math.max(2, get(5)));
+    renderParams();
+  });
+  stack.appendChild(sp);
+  const m = get(5);
+  segBtns[0].classList.toggle("on", m === 0);
+  segBtns[1].classList.toggle("on", m === 1);
+  sp.classList.toggle("on", m >= 2);
+  grid.appendChild(stack);
 
-  paintSeg();
   draw();
+  cv.textContent = SHAPE_NAMES[Math.min(6, get(2))];
+  cv.appendChild(lfoGlyphEl(Math.min(6, get(2))));
   return box;
+}
+
+/** Kleine tekening van een golfvorm als element, voor naast de naam. */
+function lfoGlyphEl(shape) {
+  const w = document.createElement("span");
+  w.style.cssText = "display:inline-block;vertical-align:middle;margin-left:6px";
+  w.innerHTML = lfoGlyph(shape, "var(--accent)");
+  return w;
 }
 
 /**

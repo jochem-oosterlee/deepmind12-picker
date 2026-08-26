@@ -74,6 +74,27 @@ def build_strip(src, dest):
     return w, h, len(pngs)
 
 
+def crop_cap(src, dest):
+    """Snijdt het kapje uit een fader-filmstrip.
+
+    In zulke strips is alleen het kapje getekend en staat de gleuf op de
+    paneelplaat. Met het kapje als losse afbeelding kan de app een gleuf van
+    elke lengte tekenen en het kapje erlangs schuiven, in plaats van vast te
+    zitten aan de hoogte van een frame.
+    """
+    import io
+    w, h, pngs = frames(src)
+    if not pngs:
+        return None
+    mid = Image.open(io.BytesIO(pngs[len(pngs) // 2])).convert("RGBA")
+    box = mid.split()[3].getbbox()
+    if not box:
+        return None
+    cap = mid.crop(box)
+    cap.save(dest)
+    return cap.size
+
+
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SRC
     if not os.path.isdir(src):
@@ -93,6 +114,15 @@ def main():
         if r:
             print("  %-28s -> %-14s %d frames van %dx%d" % (rel, name, r[2], r[0], r[1]))
             made.append((name, r))
+    # los kapje uit de faderstrip, voor gleuven van elke lengte
+    fader = os.path.join(src, "Faders", "SideFaders.astr")
+    if os.path.isfile(fader):
+        size = crop_cap(fader, os.path.join(OUT, "fader-cap.png"))
+        if size:
+            print("  %-28s -> %-14s kapje van %dx%d"
+                  % ("Faders/SideFaders.astr", "fader-cap.png", size[0], size[1]))
+            made.append(("fadercap.png", (size[0], size[1], 1)))
+
     for rel, name in COPIES:
         path = os.path.join(src, rel)
         if os.path.isfile(path):
