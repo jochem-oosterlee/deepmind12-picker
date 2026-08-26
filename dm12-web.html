@@ -209,10 +209,14 @@
     color:var(--accent); }
   .lfo .head .now { margin-left:auto; color:var(--muted); font-weight:400;
     letter-spacing:0; text-transform:none; font-size:10px; }
-  .lfo .wave { display:block; width:100%; height:84px; background:var(--wave-bg);
+  .lfo .wave { display:block; width:100%; height:100%; background:var(--wave-bg);
     border:1px solid var(--border); border-radius:8px; }
-  .lfobody { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
-  .lfomid { flex:none; width:300px; max-width:100%; }
+  /* de golfvorm rekt mee met de hoogte die de buitenste faders bepalen, zodat
+     er onder het knoppenblok geen ruimte overblijft */
+  .wavebox { flex:1; min-height:96px; display:flex; }
+  .lfobody { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; }
+  .lfomid { flex:none; width:300px; max-width:100%; display:flex;
+    flex-direction:column; }
   /* binnenste faders staan naast het middenblok, onder de golfvorm */
   .lfoinner { display:flex; gap:6px; align-items:flex-start; margin-top:6px; }
   .lfocentre { flex:1; min-width:0; }
@@ -2124,6 +2128,7 @@ function renderLfo(base, title) {
   box.appendChild(body);
 
   const waveBox = document.createElement("div");
+  waveBox.className = "wavebox";
   mid.appendChild(waveBox);
 
   // onder de golfvorm: binnenste fader, middenblok, binnenste fader
@@ -2154,7 +2159,7 @@ function renderLfo(base, title) {
   };
 
   // ---- faders: buitenste lang, binnenste iets lager, zoals op het paneel ----
-  const OUTER = 196, INNER = 104;
+  const OUTER = 196, INNER = 76;
   const mk = (off, label, height, col, disabled) => {
     const f = longFader(label, get(off), 255, height,
       v => { doSend(P(base + off), v); draw(); },
