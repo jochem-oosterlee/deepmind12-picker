@@ -212,7 +212,10 @@
   .lfo .wave { display:block; width:100%; height:84px; background:var(--wave-bg);
     border:1px solid var(--border); border-radius:8px; }
   .lfobody { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
-  .lfomid { flex:none; width:260px; max-width:100%; }
+  .lfomid { flex:none; width:300px; max-width:100%; }
+  /* binnenste faders staan naast het middenblok, onder de golfvorm */
+  .lfoinner { display:flex; gap:6px; align-items:flex-start; margin-top:6px; }
+  .lfocentre { flex:1; min-width:0; }
   .vfgroup { display:flex; gap:5px; }
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
@@ -282,8 +285,15 @@
   .combo .cval { font-size:12px; color:var(--text); overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; }
   .combo { position:relative; }
-  .combo select { position:absolute; left:0; top:0; width:100%; height:100%;
-    opacity:0; cursor:pointer; }
+  /* eigen uitklapvenster met de golfvormen als tekeningen */
+  .shapepop { position:absolute; left:0; top:calc(100% + 4px); z-index:30;
+    min-width:224px; background:var(--panel); border:1px solid var(--accent);
+    border-radius:8px; padding:5px; display:grid;
+    grid-template-columns:repeat(4,1fr); gap:4px;
+    box-shadow:0 8px 20px rgba(0,0,0,.35); }
+  .shapepop button { display:flex; flex-direction:column; align-items:center;
+    gap:3px; padding:5px 2px; font-size:9px; line-height:1.1; text-align:center; }
+  .shapepop button svg { display:block; }
   .btngrid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; }
   .btngrid button { padding:9px 4px; font-size:11px; line-height:1.15; }
   .btnstack { display:grid; gap:0; }
@@ -2078,15 +2088,24 @@ function renderLfo(base, title) {
   const waveBox = document.createElement("div");
   mid.appendChild(waveBox);
 
-  // rij met het vormvak, zoals op het paneel
+  // onder de golfvorm: binnenste fader, middenblok, binnenste fader
+  const inner = document.createElement("div");
+  inner.className = "lfoinner";
+  mid.appendChild(inner);
+  const innerLeft = document.createElement("div");
+  const centre = document.createElement("div");
+  centre.className = "lfocentre";
+  const innerRight = document.createElement("div");
+  inner.appendChild(innerLeft); inner.appendChild(centre); inner.appendChild(innerRight);
+
   const comboRow = document.createElement("div");
   comboRow.className = "row";
-  comboRow.style.margin = "6px 0 0";
-  mid.appendChild(comboRow);
+  comboRow.style.margin = "0";
+  centre.appendChild(comboRow);
 
   const grid = document.createElement("div");
   grid.className = "btngrid";
-  mid.appendChild(grid);
+  centre.appendChild(grid);
 
   const hNow = document.createElement("span");   // wordt in de titelbalk gezet
 
@@ -2097,17 +2116,17 @@ function renderLfo(base, title) {
   };
 
   // ---- faders: buitenste lang, binnenste iets lager, zoals op het paneel ----
-  const OUTER = 168, INNER = 124, DROP = 44;
-  const mk = (off, label, height, drop, col, disabled) => {
+  const OUTER = 196, INNER = 104;
+  const mk = (off, label, height, col, disabled) => {
     const f = longFader(label, get(off), 255, height,
       v => { doSend(P(base + off), v); draw(); },
       v => { sendParam(P(base + off), v); draw(); }, disabled);
-    if (drop) f.box.style.marginTop = drop + "px";
     col.appendChild(f.box);
     return f;
   };
-  mk(0, "Rate", OUTER, 0, leftCol);
-  mk(6, "Slew", INNER, DROP, leftCol);
+  mk(0, "Rate", OUTER, leftCol);
+  mk(1, "Delay", OUTER, rightCol);
+  mk(6, "Slew", INNER, innerLeft);
 
   // rechts-binnen: spread als die aan staat, anders de stand die de synth
   // Phase noemt en waarvan we het parameternummer niet kennen
@@ -2117,13 +2136,11 @@ function renderLfo(base, title) {
         v => doSend(P(base + 5), v + 1),
         v => { sendParam(P(base + 5), v + 1); draw(); })
     : longFader("Phase", 0, 255, INNER, () => {}, () => {}, true);
-  spread.box.style.marginTop = DROP + "px";
   if (!spreadOn) {
     spread.box.title = "Phase is not in the manual's parameter table — turn it "
       + "on the synth once with the log open and the number shows up";
   }
-  rightCol.appendChild(spread.box);
-  mk(1, "Delay", OUTER, 0, rightCol);
+  innerRight.appendChild(spread.box);
 
   // ---- vormvak met een onzichtbaar menu erover ----
   const combo = document.createElement("div");
@@ -2133,20 +2150,51 @@ function renderLfo(base, title) {
   cl.textContent = "Shape";
   const cv = document.createElement("div");
   cv.className = "cval";
-  const sel = document.createElement("select");
+  const pop = document.createElement("div");
+  pop.className = "shapepop";
+  pop.style.display = "none";
+
+  const showShape = () => {
+    const cur = Math.min(6, get(2));
+    cv.textContent = SHAPE_NAMES[cur];
+    cv.appendChild(lfoGlyphEl(cur));
+    Array.from(pop.children).forEach((b, i) => {
+      b.classList.toggle("on", i === cur);
+      b.innerHTML = lfoGlyph(i, i === cur ? "var(--accent)" : "var(--muted)")
+        + "<span>" + SHAPE_NAMES[i] + "</span>";
+    });
+  };
+
+  let closer = null;
+  const closePop = () => {
+    pop.style.display = "none";
+    if (closer) { document.removeEventListener("click", closer); closer = null; }
+  };
+  const openPop = () => {
+    pop.style.display = "grid";
+    closer = e => { if (!combo.contains || !combo.contains(e.target)) closePop(); };
+    document.addEventListener("click", closer);
+  };
+
   SHAPE_NAMES.forEach((nm, i) => {
-    const o = document.createElement("option");
-    o.value = i; o.textContent = nm;
-    sel.appendChild(o);
+    const b = document.createElement("button");
+    b.title = nm;
+    b.addEventListener("click", e => {
+      if (e.stopPropagation) e.stopPropagation();
+      sendParam(P(base + 2), i);
+      showShape();
+      draw();
+      closePop();
+    });
+    pop.appendChild(b);
   });
-  sel.value = Math.min(6, get(2));
-  sel.addEventListener("change", () => {
-    sendParam(P(base + 2), +sel.value);
-    cv.textContent = SHAPE_NAMES[+sel.value];
-    cv.appendChild(lfoGlyphEl(+sel.value));
-    draw();
+
+  combo.addEventListener("click", e => {
+    if (e.stopPropagation) e.stopPropagation();
+    if (pop.style.display === "none") openPop(); else closePop();
   });
-  combo.appendChild(cl); combo.appendChild(cv); combo.appendChild(sel);
+
+  combo.appendChild(cl); combo.appendChild(cv); combo.appendChild(pop);
   comboRow.appendChild(combo);
 
   // ---- 2x2 blok met de schakelaars ----
@@ -2199,8 +2247,7 @@ function renderLfo(base, title) {
   grid.appendChild(stack);
 
   draw();
-  cv.textContent = SHAPE_NAMES[Math.min(6, get(2))];
-  cv.appendChild(lfoGlyphEl(Math.min(6, get(2))));
+  showShape();
   return box;
 }
 

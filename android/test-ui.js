@@ -52,6 +52,11 @@ function makeEl(id) {
     },
     getBoundingClientRect() { return {top: 0, left: 0, width: 100, height: 20}; },
     setAttribute() {}, getAttribute() { return null; },
+    contains(other) {
+      if (other === this) return true;
+      for (const c of this.children || []) if (c.contains && c.contains(other)) return true;
+      return false;
+    },
   };
   return el;
 }
@@ -379,27 +384,42 @@ setTimeout(() => {
 
   const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
   const combos = collect(plist, e => String(e.className || "") === "combo");
-  const selects = combos.flatMap(c => collect(c, e => e.tagName === "SELECT"));
   console.log("LFO-panelen:", plist.children.length, "| faderbanen:", lanes.length,
               "| vormvakken:", combos.length);
   if (plist.children.length !== 2 || lanes.length !== 8 || combos.length !== 2) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
-    sent = [];
-    selects[0].value = "2";
-    selects[0].fire("change");
-    console.log("vorm gekozen ->", JSON.stringify(sent[0]));
-    if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
-      console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
+    // eigen uitklapper: openen, een vorm aanwijzen, en weer dicht
+    const pops = collect(plist, e => String(e.className || "") === "shapepop");
+    console.log("uitklapvensters:", pops.length,
+                "| vormen per venster:", pops[0] ? pops[0].children.length : 0);
+    if (pops.length !== 2 || pops[0].children.length !== 7) {
+      console.error("FOUT: uitklapper met zeven vormen ontbreekt");
       failures++;
-    }
-    sent = [];
-    selects[1].value = "3";
-    selects[1].fire("change");
-    if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
-      console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
-      failures++;
+    } else {
+      combos[0].fire("click");
+      const opened = pops[0].style.display;
+      sent = [];
+      pops[0].children[2].fire("click");          // blokgolf
+      console.log("uitklapper:", opened, "-> vorm gekozen",
+                  JSON.stringify(sent[0]), "-> nu", pops[0].style.display);
+      if (opened !== "grid") { console.error("FOUT: uitklapper ging niet open"); failures++; }
+      if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
+        console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
+        failures++;
+      }
+      if (pops[0].style.display !== "none") {
+        console.error("FOUT: uitklapper bleef open na kiezen");
+        failures++;
+      }
+      sent = [];
+      combos[1].fire("click");
+      pops[1].children[3].fire("click");
+      if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
+        console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
+        failures++;
+      }
     }
     // slepen aan de eerste faderbaan moet parameter 0 sturen
     sent = [];
