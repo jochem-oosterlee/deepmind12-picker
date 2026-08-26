@@ -73,9 +73,15 @@ global.document = {
   activeElement: null,
   body: makeEl("body"),
 };
+global.location = {protocol: "http:", hash: "#lfo"};
+global.history = {
+  replaceState(_a, _b, url) { global.location.hash = String(url); },
+};
 global.window = {
   set onerror(fn) { global.__onerror = fn; },
   get onerror() { return global.__onerror; },
+  addEventListener() {},
+  location: global.location,
 };
 global.localStorage = {
   _d: {},
@@ -171,6 +177,17 @@ try {
 }
 console.log("opstarten: ok");
 
+// de tab uit de url moet gekozen zijn, zodat F5 op dezelfde pagina blijft
+{
+  const sel = document.getElementById("tabs").children.find(t =>
+    String(t.className || "").includes("sel"));
+  console.log("tab uit de url (#lfo):", sel ? sel.textContent : "geen");
+  if (!sel || sel.textContent !== "LFO") {
+    console.error("FOUT: tab niet uit de url overgenomen");
+    process.exit(1);
+  }
+}
+
 // controleer dat de interface daadwerkelijk is opgebouwd
 const tabs = document.getElementById("tabs");
 const grid = document.getElementById("grid");
@@ -182,6 +199,8 @@ if (!tabs.children.some(t => t.textContent === "Global")
     || !tabs.children.some(t => t.textContent === "Library")) {
   console.error("FOUT: Global-tab ontbreekt"); process.exit(1);
 }
+// de url zette ons op de LFO-tab; voor de rest van de controles naar Presets
+tabs.children.find(t => t.textContent === "Presets").fire("click");
 if (grid.children.length !== 128) { console.error("FOUT: presetraster niet opgebouwd"); process.exit(1); }
 
 let rangeField = null;

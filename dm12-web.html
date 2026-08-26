@@ -1537,12 +1537,32 @@ function buildTabs() {
     const b = document.createElement("button");
     b.className = "tab" + (tab === p.id ? " sel" : "");
     b.textContent = p.name;
-    b.addEventListener("click", () => { tab = p.id; showTab(); });
+    b.addEventListener("click", () => { tab = p.id; setUrlTab(); showTab(); });
     t.appendChild(b);
   }
 }
 
 function isParamTab() { return PAGES.some(p => p.id === tab); }
+
+/** Welke tab staat er in de url? Zo blijft F5 op dezelfde pagina. */
+function tabFromUrl() {
+  if (typeof location === "undefined" || !location.hash) return null;
+  const want = String(location.hash).replace(/^#/, "");
+  const all = ["presets", "lib", "global"].concat(PAGES.map(p => p.id));
+  return all.indexOf(want) >= 0 ? want : null;
+}
+
+function setUrlTab() {
+  if (typeof location === "undefined") return;
+  try {
+    // replaceState, zodat de terugknop niet volloopt met tabwissels
+    if (typeof history !== "undefined" && history.replaceState) {
+      history.replaceState(null, "", "#" + tab);
+    } else {
+      location.hash = tab;
+    }
+  } catch (e) { /* geen url om bij te houden */ }
+}
 
 function showTab() {
   buildTabs();
@@ -3692,6 +3712,14 @@ document.getElementById("libExportBtn").addEventListener("click", () => {
 
 // eerst de interface opbouwen, daarna pas verbinding en status
 applyTheme();
+tab = tabFromUrl() || tab;
+setUrlTab();
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("hashchange", () => {
+    const t = tabFromUrl();
+    if (t && t !== tab) { tab = t; showTab(); }
+  });
+}
 showTab();
 poll();
 setInterval(poll, 1500);
