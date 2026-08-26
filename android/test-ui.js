@@ -205,7 +205,7 @@ try {
 for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
                   "libExportBtn","readBtn","pushBtn","autoBtn","gReadBtn","gHelpBtn",
-                  "findBtn","gWatchBtn","gExportBtn","gSnapBtn","gSnapRestore"]) {
+                  "findBtn","gWatchBtn","gExportBtn","gSnapBtn","gSnapRestore","themeBtn"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");
