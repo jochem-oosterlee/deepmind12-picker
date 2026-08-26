@@ -1242,6 +1242,26 @@ function renderLog(force) {
 const THEMES = ["light", "juno", "dark"];
 let theme = store.load("dm12.theme", "light");
 
+// Eigen stijl: staat er een local-assets/skin.css naast de app, dan wordt die
+// erbij geladen en komt er een vierde skin. Zo kun je eigen afbeeldingen en
+// kleuren gebruiken zonder dat die in het project terechtkomen.
+(function loadLocalSkin() {
+  if (!document.head || !document.createElement) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "local-assets/skin.css";
+  link.onload = () => {
+    if (!THEMES.includes("local")) THEMES.push("local");
+    const b = document.getElementById("themeBtn");
+    if (b) b.title = "switch the look (local skin found)";
+  };
+  link.onerror = () => {
+    // geen eigen stijl aanwezig; dat is de normale situatie
+    if (theme === "local") { theme = "light"; applyTheme(); }
+  };
+  document.head.appendChild(link);
+})();
+
 function applyTheme() {
   if (theme === "light") delete document.body.dataset.theme;
   else document.body.dataset.theme = theme;

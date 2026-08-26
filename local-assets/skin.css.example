@@ -1,0 +1,68 @@
+/*
+ * Example of your own skin. Copy this file to skin.css in the same folder and
+ * reload; the skin button then offers a fourth option called "local".
+ *
+ * Scoped to that skin, so the other three stay as they are. Drop the scope if
+ * you want a change everywhere.
+ */
+
+body[data-theme="local"] {
+  /* the whole app is built on these, so a palette is enough for a new look */
+  --bg:#21201c;
+  --panel:#32302c;
+  --panel2:#3b3934;
+  --border:#4b4842;
+  --text:#ece8e1;
+  --muted:#a29c92;
+  --accent:#cf4b33;
+  --accent-soft:#3b2a25;
+  --active:#d98a2b;
+  --active-soft:#3a2f1e;
+  --ok:#84b25e;
+  --ok-soft:#2b3925;
+  --bad:#dc6552;
+  --wave-bg:#26241f;
+  --wave-grid:#3a3833;
+  --wave-axis:#4b4842;
+  --radius:6px;
+}
+
+/* A panel photo or texture behind everything. Put the file next to this one. */
+/*
+body[data-theme="local"] {
+  background-image:url("panel.png");
+  background-size:cover;
+}
+*/
+
+/* Your own fader cap instead of the drawn one. The vertical faders are rotated
+   a quarter turn, so a cap that should look wide on screen is tall here. */
+/*
+body[data-theme="local"] .vtrack input::-webkit-slider-thumb {
+  width:13px; height:26px; border:none; border-radius:0; background:none;
+  background-image:url("fader-cap.png");
+  background-size:100% 100%;
+  box-shadow:none;
+}
+*/
+
+/* A lit LED for buttons that are on. */
+/*
+body[data-theme="local"] button.on {
+  background-image:url("led-on.png");
+  background-repeat:no-repeat;
+  background-position:6px center;
+  padding-left:22px;
+}
+*/
+
+/* A knob from a filmstrip: one image with all the frames stacked vertically.
+   Pick the frame with background-position; the app does not do that for you
+   yet, so ask if you want it wired to the value. */
+/*
+body[data-theme="local"] .knob {
+  width:48px; height:48px;
+  background-image:url("knob-strip.png");
+  background-size:100% 6400%;   /* 64 frames */
+}
+*/

@@ -14,3 +14,8 @@ DM12-Picker.apk
 *.pdf
 
 __pycache__/
+
+# Eigen afbeeldingen en stijl: blijven op je eigen machine
+local-assets/*
+!local-assets/README.md
+!local-assets/skin.css.example

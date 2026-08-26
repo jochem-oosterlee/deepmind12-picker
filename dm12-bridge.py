@@ -466,6 +466,28 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif url.path.startswith("/local-assets/"):
+            # Eigen afbeeldingen en stijl van de gebruiker. Blijft buiten het
+            # project; alleen bestanden binnen deze map worden geserveerd.
+            rel = url.path[len("/local-assets/"):]
+            base = os.path.join(HERE, "local-assets")
+            target = os.path.abspath(os.path.join(base, rel))
+            if not target.startswith(os.path.abspath(base) + os.sep)                     or not os.path.isfile(target):
+                self.send_error(404, "not found")
+                return
+            ext = os.path.splitext(target)[1].lower()
+            types = {".css": "text/css", ".png": "image/png", ".jpg": "image/jpeg",
+                     ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
+                     ".webp": "image/webp", ".woff2": "font/woff2"}
+            with open(target, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", types.get(ext, "application/octet-stream"))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         elif url.path == "/status":
             self._json({
                 "connected": s.connected, "status": s.status, "ip": s.peer_ip,
