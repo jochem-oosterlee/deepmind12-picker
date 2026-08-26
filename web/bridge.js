@@ -50,7 +50,13 @@
   // "midi"   = rechtstreeks via Web MIDI (USB of rtpMIDI)
   // "bridge" = via dm12-bridge.py, die de RTP-MIDI-sessie over het netwerk doet
   let mode = "";
-  let bridgeSeq = 0, pending = [], flushTimer = null, chain = Promise.resolve();
+  let bridgeSeq = 0;
+  // Uitgaand naar de brug: losse berichten op volgorde, plus per parameter
+  // alleen de laatste waarde. Tijdens het slepen ontstaan er tientallen
+  // waarden per seconde; die stuk voor stuk in een rij zetten liep achter,
+  // waardoor een wijziging pas seconden later aankwam.
+  let pendingRaw = [], pendingNrpn = new Map();
+  let flushTimer = null, inFlight = false;
   const disco = {running: false, found: [], status: ""};
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const hex = b => Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
@@ -347,12 +353,32 @@
     })();
   }
 
+  function scheduleFlush() {
+    if (flushTimer || inFlight) return;
+    flushTimer = setTimeout(flushPending, 30);
+  }
+
   function flushPending() {
-    const body = pending.join("\n");
-    pending = [];
-    if (!body) return;
-    // aan elkaar geregen, zodat de volgorde van berichten gegarandeerd blijft
-    chain = chain.then(() => fetch("/midi", {method: "POST", body}).catch(() => {}));
+    flushTimer = null;
+    if (inFlight) return;
+    const lines = pendingRaw;
+    pendingRaw = [];
+    pendingNrpn.forEach(n => {
+      const st = 0xB0 | n.ch;
+      lines.push(hex([st, 99, (n.p >> 7) & 0x7F]), hex([st, 98, n.p & 0x7F]),
+                 hex([st, 6, (n.v >> 7) & 0x7F]), hex([st, 38, n.v & 0x7F]));
+    });
+    pendingNrpn.clear();
+    if (!lines.length) return;
+    // Eén verzoek onderweg; wat er tijdens het wachten bijkomt gaat mee in de
+    // volgende, waarbij alleen de nieuwste waarde per parameter overblijft.
+    inFlight = true;
+    fetch("/midi", {method: "POST", body: lines.join(String.fromCharCode(10))})
+      .catch(() => {})
+      .then(() => {
+        inFlight = false;
+        if (pendingRaw.length || pendingNrpn.size) scheduleFlush();
+      });
   }
 
   function init() {
@@ -374,10 +400,8 @@
       if (d) logAdd("out", d[0], bytes, d[1]);
     }
     if (mode === "bridge") {
-      pending.push(hex(bytes));
-      if (!flushTimer) {
-        flushTimer = setTimeout(() => { flushTimer = null; flushPending(); }, 8);
-      }
+      pendingRaw.push(hex(bytes));
+      scheduleFlush();
       return S.connected;
     }
     if (!out) return false;
@@ -452,10 +476,18 @@
     send: (bank, prog, ch) => send([0xB0 | ch, 0x00, 0x00])
         && send([0xB0 | ch, 0x20, bank]) && send([0xC0 | ch, prog]),
     sendCC: (cc, v, ch) => send([0xB0 | ch, cc & 0x7F, v & 0x7F]),
-    sendNRPN: (p, v, ch) => send([0xB0 | ch, 99, (p >> 7) & 0x7F])
-        && send([0xB0 | ch, 98, p & 0x7F])
-        && send([0xB0 | ch, 6, (v >> 7) & 0x7F])
-        && send([0xB0 | ch, 38, v & 0x7F]),
+    sendNRPN: (p, v, ch) => {
+      if (mode === "bridge") {
+        // alleen de nieuwste waarde per parameter haalt de brug
+        pendingNrpn.set(p + ":" + ch, {p: p, v: v, ch: ch});
+        scheduleFlush();
+        return S.connected;
+      }
+      return send([0xB0 | ch, 99, (p >> 7) & 0x7F])
+          && send([0xB0 | ch, 98, p & 0x7F])
+          && send([0xB0 | ch, 6, (v >> 7) & 0x7F])
+          && send([0xB0 | ch, 38, v & 0x7F]);
+    },
     panic: ch => send([0xB0 | ch, 123, 0]) && send([0xB0 | ch, 120, 0]),
 
     appNotify: dev => {

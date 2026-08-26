@@ -479,6 +479,7 @@ let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
 let dragging = false, readWaiting = 0, dragTimer = null;
+let popOpen = false;   // een open uitklapper mag niet weggegooid worden
 let settingsOpened = false;
 const started = Date.now();
 
@@ -730,7 +731,7 @@ function loadSynthParams() {
       for (let i = 0; i < p.length; i++) if (p[i] !== synthParams[i]) pRecent[i] = now;
     }
     synthParams = p;
-    if (!dragging && isParamTab()) renderParams();
+    if (!dragging && !popOpen && isParamTab()) renderParams();
   } catch {}
 }
 
@@ -1661,10 +1662,12 @@ function renderLfo(base, title) {
   let closer = null;
   const closePop = () => {
     pop.style.display = "none";
+    popOpen = false;
     if (closer) { document.removeEventListener("click", closer); closer = null; }
   };
   const openPop = () => {
     pop.style.display = "grid";
+    popOpen = true;
     closer = e => { if (!combo.contains || !combo.contains(e.target)) closePop(); };
     document.addEventListener("click", closer);
   };
