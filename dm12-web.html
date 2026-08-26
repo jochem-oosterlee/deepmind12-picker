@@ -281,23 +281,17 @@
     letter-spacing:1.2px; text-transform:uppercase; color:var(--text);
     background:var(--panel2); border:1px solid var(--border); border-radius:5px;
     padding:3px 0; margin-bottom:7px; }
-  .combo { background:var(--panel2); border:1px solid var(--border);
-    border-radius:5px; padding:3px 8px; text-align:center; flex:1; min-width:0;
-    cursor:pointer; }
-  .combo .clab { font-size:9px; color:var(--muted); text-transform:uppercase;
-    letter-spacing:.8px; }
-  .combo .cval { font-size:12px; color:var(--text); overflow:hidden;
-    text-overflow:ellipsis; white-space:nowrap; }
-  .combo { position:relative; }
   /* eigen uitklapvenster met de golfvormen als tekeningen */
-  .shapepop { position:absolute; left:0; top:calc(100% + 4px); z-index:30;
-    min-width:224px; background:var(--panel); border:1px solid var(--accent);
-    border-radius:8px; padding:5px; display:grid;
-    grid-template-columns:repeat(4,1fr); gap:4px;
-    box-shadow:0 8px 20px rgba(0,0,0,.35); }
-  .shapepop button { display:flex; flex-direction:column; align-items:center;
-    gap:3px; padding:5px 2px; font-size:9px; line-height:1.1; text-align:center; }
-  .shapepop button svg { display:block; }
+  /* de zeven golfvormen staan gewoon naast elkaar: één tik, geen menu */
+  .shaperow { display:flex; gap:4px; align-items:stretch; }
+  .shaperow button { flex:1; min-width:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2px; padding:4px 1px;
+    font-size:8px; line-height:1.1; text-align:center; letter-spacing:.2px;
+    text-transform:uppercase; color:var(--muted); overflow:hidden; }
+  .shaperow button svg { display:block; }
+  .shaperow button.on { color:var(--text); }
+  .shaperow button span { white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; max-width:100%; }
   /* schakelaars op één rij: scheelt hoogte in het middenblok */
   .btngrid { display:flex; gap:5px; align-items:stretch; margin-top:6px; }
   .btngrid button { flex:1; min-width:0; padding:7px 3px; font-size:11px;
@@ -1061,7 +1055,6 @@ let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
 let dragging = false, readWaiting = 0, dragTimer = null;
-let popOpen = false;   // een open uitklapper mag niet weggegooid worden
 let settingsOpened = false;
 const started = Date.now();
 
@@ -1322,7 +1315,7 @@ function loadSynthParams() {
     synthParams = p;
     // Alleen herbouwen als er iets veranderde dat geen regelaar bijhoudt; de
     // rest werkt zichzelf bij, dus een open menu of een sleep blijft intact.
-    if (structural && !dragging && !popOpen && isParamTab()) renderParams();
+    if (structural && !dragging && isParamTab()) renderParams();
   } catch {}
 }
 
@@ -1904,6 +1897,8 @@ function sendParam(p, v) {
 // poly-mono 5/12, slew 6/13).
 const SHAPE_NAMES = ["Sine", "Triangle", "Square", "Ramp up", "Ramp down",
                      "Sample & Hold", "Sample & Glide"];
+// wat er onder een badge past
+const SHAPE_SHORT = ["Sine", "Tri", "Sqr", "Up", "Down", "S&H", "S&G"];
 const SHAPE_GLYPH = [
   'M1 8C5 1 9 1 13 8 17 15 21 15 25 8 27 4.5 29 3 31 3',
   'M1 14 8 2 15 14 22 2 29 14',
@@ -2240,10 +2235,10 @@ function renderLfo(base, title) {
   const innerRight = document.createElement("div");
   inner.appendChild(innerLeft); inner.appendChild(centre); inner.appendChild(innerRight);
 
-  const comboRow = document.createElement("div");
-  comboRow.className = "row";
-  comboRow.style.margin = "0";
-  centre.appendChild(comboRow);
+  const shapeRow = document.createElement("div");
+  shapeRow.className = "row";
+  shapeRow.style.margin = "0";
+  centre.appendChild(shapeRow);
 
   const grid = document.createElement("div");
   grid.className = "btngrid";
@@ -2288,62 +2283,30 @@ function renderLfo(base, title) {
   }
   innerRight.appendChild(spread.box);
 
-  // ---- vormvak met een onzichtbaar menu erover ----
-  const combo = document.createElement("div");
-  combo.className = "combo";
-  const cl = document.createElement("div");
-  cl.className = "clab";
-  cl.textContent = "Shape";
-  const cv = document.createElement("div");
-  cv.className = "cval";
-  const pop = document.createElement("div");
-  pop.className = "shapepop";
-  pop.style.display = "none";
+  // ---- de golfvormen als badges: alle zeven in beeld, één tik om te kiezen ----
+  const shapes = document.createElement("div");
+  shapes.className = "shaperow";
 
   const showShape = () => {
     const cur = Math.min(6, get(2));
-    cv.textContent = SHAPE_NAMES[cur];
-    cv.appendChild(lfoGlyphEl(cur));
-    Array.from(pop.children).forEach((b, i) => {
+    Array.from(shapes.children).forEach((b, i) => {
       b.classList.toggle("on", i === cur);
       b.innerHTML = lfoGlyph(i, i === cur ? "var(--accent)" : "var(--muted)")
-        + "<span>" + SHAPE_NAMES[i] + "</span>";
+        + "<span>" + SHAPE_SHORT[i] + "</span>";
     });
-  };
-
-  let closer = null;
-  const closePop = () => {
-    pop.style.display = "none";
-    popOpen = false;
-    if (closer) { document.removeEventListener("click", closer); closer = null; }
-  };
-  const openPop = () => {
-    pop.style.display = "grid";
-    popOpen = true;
-    closer = e => { if (!combo.contains || !combo.contains(e.target)) closePop(); };
-    document.addEventListener("click", closer);
   };
 
   SHAPE_NAMES.forEach((nm, i) => {
     const b = document.createElement("button");
     b.title = nm;
-    b.addEventListener("click", e => {
-      if (e.stopPropagation) e.stopPropagation();
+    b.addEventListener("click", () => {
       sendParam(P(base + 2), i);
       showShape();
       draw();
-      closePop();
     });
-    pop.appendChild(b);
+    shapes.appendChild(b);
   });
-
-  combo.addEventListener("click", e => {
-    if (e.stopPropagation) e.stopPropagation();
-    if (pop.style.display === "none") openPop(); else closePop();
-  });
-
-  combo.appendChild(cl); combo.appendChild(cv); combo.appendChild(pop);
-  comboRow.appendChild(combo);
+  shapeRow.appendChild(shapes);
 
   // ---- 2x2 blok met de schakelaars ----
   const pill = (label, off) => {
