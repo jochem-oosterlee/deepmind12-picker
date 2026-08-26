@@ -1307,13 +1307,22 @@ function loadSynthParams() {
   try {
     const p = JSON.parse(AndroidBridge.libParams());
     if (!Array.isArray(p)) return;
-    // markeren wat er sinds de vorige lezing veranderde, zodat je het ziet
-    if (synthParams) {
-      const now = Date.now();
-      for (let i = 0; i < p.length; i++) if (p[i] !== synthParams[i]) pRecent[i] = now;
+    const now = Date.now();
+    let structural = false;
+    for (let i = 0; i < p.length; i++) {
+      const had = params.val[i];
+      if (params.fromSynth(i, p[i])) {
+        if (had !== undefined) pRecent[i] = now;   // markeren wat bewoog
+        // heeft niemand zich hiervoor aangemeld, dan staat het niet in beeld
+        // staat hij in beeld maar houdt geen regelaar hem bij, dan moet de
+        // pagina wel opnieuw; wat niet in beeld staat laat de pagina met rust
+        if (shownParams.has(i) && !(params.subs[i] || []).length) structural = true;
+      }
     }
     synthParams = p;
-    if (!dragging && !popOpen && isParamTab()) renderParams();
+    // Alleen herbouwen als er iets veranderde dat geen regelaar bijhoudt; de
+    // rest werkt zichzelf bij, dus een open menu of een sleep blijft intact.
+    if (structural && !dragging && !popOpen && isParamTab()) renderParams();
   } catch {}
 }
 
@@ -1809,12 +1818,67 @@ function updateParamNote() {
 }
 
 function pkey(p) { return p.n !== undefined ? "n" + p.n : "c" + p.cc; }
+/**
+ * Parameterwinkel: de enige plek die weet wat een parameter op dit moment is.
+ *
+ * Zonder dit had de app twee waarheden: wat de gebruiker het laatst stuurde en
+ * wat de synth het laatst meldde, met de eerste die altijd voorging. Gevolg:
+ * zodra je een regelaar aanraakte volgde die de synth niet meer.
+ *
+ * Nu komen beide richtingen hier binnen. Een lezing van de synth die ouder is
+ * dan een wijziging van jou wordt genegeerd (anders springt een regelaar terug
+ * naar de vorige waarde), en regelaars melden zich aan voor de parameters die
+ * ze tonen, zodat alleen die bijgewerkt worden in plaats van de hele pagina.
+ */
+const params = {
+  val: {},          // laatst bekende waarde per parameternummer
+  pend: {},         // wat wij zelf net stuurden, met tijdstip
+  subs: {},         // parameternummer -> functies die bijgewerkt willen worden
+  ECHO_MS: 3000,
+
+  get(n, fallback) {
+    return this.val[n] === undefined ? fallback : this.val[n];
+  },
+
+  subscribe(n, fn) {
+    (this.subs[n] = this.subs[n] || []).push(fn);
+  },
+
+  /** Bij het herbouwen van een pagina zijn de oude aanmeldingen niets meer. */
+  clearSubs() { this.subs = {}; },
+
+  /** Waarde zoals de synth hem meldt, uit een dump of een NRPN-bericht. */
+  fromSynth(n, v) {
+    const p = this.pend[n];
+    if (p) {
+      if (p.v === v) delete this.pend[n];                       // bevestigd
+      else if (Date.now() - p.ms < this.ECHO_MS) return false;  // onze is nieuwer
+    }
+    if (this.val[n] === v) return false;
+    this.val[n] = v;
+    for (const fn of this.subs[n] || []) {
+      try { fn(v); } catch (e) { /* een regelaar die weg is */ }
+    }
+    return true;
+  },
+
+  /** Waarde die de gebruiker zet: meteen zichtbaar en meteen onderweg. */
+  fromUi(n, v, ch) {
+    this.val[n] = v;
+    this.pend[n] = {v: v, ms: Date.now()};
+    return AndroidBridge.sendNRPN(n, v, ch);
+  },
+};
+
+// Welke parameternummers staan er op de pagina die nu in beeld is? Alleen
+// daarvoor hoeft een onverwachte wijziging tot een herbouw te leiden.
+let shownParams = new Set();
+
 function pval(p) {
-  if (p.n !== undefined && synthParams && p.n < synthParams.length && vals[pkey(p)] === undefined) {
-    return synthParams[p.n];
-  }
-  const v = vals[pkey(p)];
-  return v === undefined ? (p.k === "s" ? Math.round(p.max / 2) : 0) : v;
+  const dflt = p.k === "s" ? Math.round(p.max / 2) : 0;
+  if (p.n !== undefined) { shownParams.add(p.n); return params.get(p.n, dflt); }
+  const v = vals[pkey(p)];          // parameters die alleen een CC hebben
+  return v === undefined ? dflt : v;
 }
 function fmt(p, v) {
   if (p.k === "e") return p.o[v] !== undefined ? p.o[v] : v;
@@ -1823,12 +1887,9 @@ function fmt(p, v) {
   return String(v);
 }
 function doSend(p, v) {
-  vals[pkey(p)] = v;
-  const ok = p.n !== undefined
-    ? AndroidBridge.sendNRPN(p.n, v, channel)
-    : AndroidBridge.sendCC(p.cc, v, channel);
-  if (synthParams && p.n !== undefined && p.n < synthParams.length) synthParams[p.n] = v;
-  return ok;
+  if (p.n !== undefined) return params.fromUi(p.n, v, channel);
+  vals[pkey(p)] = v;                // alleen-CC parameters houden hun eigen plek
+  return AndroidBridge.sendCC(p.cc, v, channel);
 }
 let saveTimer = null;
 function sendParam(p, v) {
@@ -2078,7 +2139,12 @@ function longFader(label, value, max, height, onMove, onDone, disabled) {
     set(val + (e.deltaY < 0 ? 1 : -1) * Math.max(1, Math.round(max / 64)), true);
   });
 
-  return {box: box, num: num, setValue: v => { val = v; paint(); }};
+  return {
+    box: box, num: num,
+    setValue: v => { val = v; paint(); },
+    // van de synth: niet ingrijpen terwijl de gebruiker sleept
+    fromSynth: v => { if (from === null) { val = v; paint(); } },
+  };
 }
 
 /** Verticale fader met de waarde erboven en het label eronder. */
@@ -2198,6 +2264,10 @@ function renderLfo(base, title) {
       v => { doSend(P(base + off), v); draw(); },
       v => { sendParam(P(base + off), v); draw(); }, disabled);
     col.appendChild(f.box);
+    if (!disabled) {
+      // meebewegen als de synth deze parameter meldt
+      params.subscribe(base + off, v => { f.fromSynth(v); draw(); });
+    }
     return f;
   };
   mk(0, "Rate", OUTER, leftCol);
@@ -2278,6 +2348,7 @@ function renderLfo(base, title) {
   // ---- 2x2 blok met de schakelaars ----
   const pill = (label, off) => {
     const b = document.createElement("button");
+    b.dataset.off = off;
     b.innerHTML = label;
     const paint = () => b.classList.toggle("on", get(off) > 0);
     paint();
@@ -2320,6 +2391,17 @@ function renderLfo(base, title) {
     lamps.appendChild(l);
   });
   grid.appendChild(lamps);
+
+  // vorm en stand komen ook van de synth
+  params.subscribe(base + 2, () => { showShape(); draw(); });
+  params.subscribe(base + 5, () => renderParams());
+  [3, 4].forEach(off => params.subscribe(base + off, () => {
+    Array.from(grid.children).forEach(b => {
+      if (b.dataset && b.dataset.off !== undefined) {
+        b.classList.toggle("on", get(+b.dataset.off) > 0);
+      }
+    });
+  }));
 
   draw();
   showShape();
@@ -2381,6 +2463,12 @@ function knobCell(p, knob, sw) {
       nv => { val.textContent = fmt(p, nv); doSend(p, nv); },
       nv => { val.textContent = fmt(p, nv); sendParam(p, nv); });
     cell.appendChild(c.el);
+    if (p.n !== undefined) {
+      params.subscribe(p.n, nv => {
+        c.setValue(nv);
+        val.textContent = fmt(p, nv);
+      });
+    }
   }
 
   const nm = document.createElement("div");
@@ -2396,6 +2484,8 @@ function renderParams() {
   const page = PAGES.find(x => x.id === tab);
   const wrap = document.getElementById("paramList");
   updateParamNote();
+  params.clearSubs();
+  shownParams = new Set();
   wrap.innerHTML = "";
   if (!page) return;
   if (page.custom === "lfo") {

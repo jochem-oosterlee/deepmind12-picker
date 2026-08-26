@@ -113,12 +113,14 @@ global.URL = {createObjectURL: () => "blob:x", revokeObjectURL() {}};
 // nagebootste native laag
 let sent = [];
 let globalRev = 1, globalChanged = [6];
+let paramRev = 7;
+const paramBytes = Array.from({length: 242}, (_, i) => (i * 7) & 0xFF);
 const globalBytes = Array.from({length: 45}, (_, i) => (i * 3) & 0xFF);
 global.AndroidBridge = {
   getStatus: () => JSON.stringify({connected: true, status: "verbonden met FakeDM12",
     event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
-    badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: 7,
+    badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: paramRev,
     info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0,
     globalRev: globalRev, rxCC: 12, rxPar: 3, rxLast: "par 39 = 200"}),
   globals: () => JSON.stringify({rev: globalRev, hadPrevious: true, changed: globalChanged,
@@ -136,11 +138,14 @@ global.AndroidBridge = {
   writeGlobal: (i, v, d) => { sent.push(["writeGlobal", i, v, d]); return true; },
   writeGlobalBlock: (json, d) => { sent.push(["writeGlobalBlock", JSON.parse(json).length, d]); return true; },
   libNames: () => JSON.stringify({"A-0": ["Blue Dolphin", 2, 1], "A-1": ["Bass Pong", 1, 0]}),
-  libParams: () => JSON.stringify(Array.from({length: 242}, (_, i) => (i * 7) & 0xFF)),
+  libParams: () => JSON.stringify(paramBytes),
   getWifiCreds: () => JSON.stringify({ssid: "Deepmind12", pw: "Passphrase"}),
   send: (b, p, c) => { sent.push(["prog", b, p, c]); return true; },
   sendCC: (cc, v, c) => { sent.push(["cc", cc, v, c]); return true; },
-  sendNRPN: (n, v, c) => { sent.push(["nrpn", n, v, c]); return true; },
+  // de nagebootste synth neemt over wat de app stuurt, net als het apparaat
+  sendNRPN: (n, v, c) => { sent.push(["nrpn", n, v, c]);
+    if (n < paramBytes.length) { paramBytes[n] = v & 0xFF; paramRev++; }
+    return true; },
   appNotify: d => { sent.push(["notify", d]); return true; },
   panic: c => { sent.push(["panic", c]); return true; },
   setIp: ip => sent.push(["ip", ip]),
@@ -523,8 +528,73 @@ setTimeout(() => {
       if (from !== -48) { console.error("FOUT: verschuiving niet bewaard"); failures++; }
     }
 
-    if (global.__onerror && errors.length) console.log("meldingen:", errors);
-    console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
-    process.exit(failures ? 1 : 0);
+    // ---- houdt de tussenlaag beide kanten bij? ----
+    const tabsNow = [...document.getElementById("tabs").children];
+    tabsNow.find(t => t.textContent === "LFO").fire("click");
+    const findAll = (root, pred) => {
+      const out = [];
+      (function walk(e) {
+        if (pred(e)) out.push(e);
+        for (const c of e.children || []) walk(c);
+      })(root);
+      return out;
+    };
+    paramRev++;                        // eerst laten uitrusten: standen gelijktrekken
+    setTimeout(() => syncTest(findAll), 1700);
   }, 1800);
+
+  function syncTest(findAll) {
+    const plist2 = document.getElementById("paramList");
+    // de faders op naam pakken: de kolomvolgorde in het paneel is niet die van de code
+    const fader = name => {
+      const box = findAll(plist2, e => String(e.className || "") === "vf")
+        .find(b => findAll(b, x => String(x.className || "") === "vcap")
+                     .some(c => c.textContent === name));
+      return {
+        box: box,
+        num: findAll(box, e => String(e.className || "") === "vnum")[0],
+        lane: findAll(box, e => String(e.className || "").includes("lfader"))[0],
+      };
+    };
+    const rate = fader("Rate"), slew = fader("Slew");
+
+    // 1. wat jij zet mag niet terugspringen door een verouderde lezing:
+    // de synth is nog niet bij, dus de volgende lezing geeft de oude stand
+    const rateWas = paramBytes[0];
+    rate.lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 7});
+    rate.lane.fire("pointermove", {clientY: 200, preventDefault() {}, shiftKey: false});
+    rate.lane.fire("pointerup", {});
+    const setByUi = rate.num.textContent;
+
+    paramBytes[0] = rateWas;           // achterlopende lezing
+
+    // 2. wat de synth meldt moet zichtbaar worden zonder herbouw
+    paramBytes[6] = 91;
+    paramRev++;
+
+    setTimeout(() => {
+      const live = e => findAll(document.getElementById("paramList"), x => x === e).length === 1;
+      console.log("na een verouderde lezing staat rate op", rate.num.textContent,
+                  "(door de gebruiker gezet op " + setByUi + ")",
+                  live(rate.lane) ? "" : "(HERBOUWD)");
+      if (rate.num.textContent !== setByUi || !live(rate.lane)) {
+        console.error("FOUT: eigen wijziging overschreven door een oude lezing");
+        failures++;
+      }
+      console.log("na een melding van de synth staat slew op", slew.num.textContent,
+                  live(slew.lane) ? "(zelfde regelaar, geen herbouw)" : "(HERBOUWD)");
+      if (slew.num.textContent !== "91") {
+        console.error("FOUT: melding van de synth niet overgenomen");
+        failures++;
+      }
+      if (!live(slew.lane)) {
+        console.error("FOUT: pagina herbouwd voor een waardewijziging");
+        failures++;
+      }
+
+      if (global.__onerror && errors.length) console.log("meldingen:", errors);
+      console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
+      process.exit(failures ? 1 : 0);
+    }, 1700);
+  }
 }, 20);
