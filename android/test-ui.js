@@ -422,26 +422,29 @@ setTimeout(() => {
     failures++;
   } else {
     // alle zeven vormen staan als badge in beeld, geen menu meer
-    console.log("vormen per rij:", rows[0].children.length);
-    if (rows[0].children.length !== 7) {
+    const badges = rows.map(r => collect(r, e => e.tagName === "BUTTON"));
+    console.log("vormbadges:", badges[0].length,
+                "| verdeeld over rijen:", rows[0].children.map(r => r.children.length).join("+"));
+    if (badges[0].length !== 7
+        || rows[0].children.map(r => r.children.length).join("+") !== "4+3") {
       console.error("FOUT: er staan geen zeven vormbadges");
       failures++;
     } else {
       sent = [];
-      rows[0].children[2].fire("click");          // blokgolf
-      const lit = rows[0].children.filter(b => b.classList.contains("on"));
+      badges[0][2].fire("click");                  // blokgolf
+      const lit = badges[0].filter(b => b.classList.contains("on"));
       console.log("vorm gekozen:", JSON.stringify(sent[0]),
                   "| opgelicht:", lit.length === 1 ? "de gekozen" : lit.length + " badges");
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
         console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
         failures++;
       }
-      if (lit.length !== 1 || rows[0].children[2] !== lit[0]) {
+      if (lit.length !== 1 || badges[0][2] !== lit[0]) {
         console.error("FOUT: de gekozen vorm licht niet als enige op");
         failures++;
       }
       sent = [];
-      rows[1].children[3].fire("click");
+      badges[1][3].fire("click");
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
         console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
         failures++;

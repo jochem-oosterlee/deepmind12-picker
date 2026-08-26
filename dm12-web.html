@@ -282,9 +282,10 @@
     background:var(--panel2); border:1px solid var(--border); border-radius:5px;
     padding:3px 0; margin-bottom:7px; }
   /* eigen uitklapvenster met de golfvormen als tekeningen */
-  /* de zeven golfvormen staan gewoon naast elkaar: één tik, geen menu */
-  .shaperow { display:flex; gap:4px; align-items:stretch; }
-  .shaperow button { flex:1; min-width:0; display:flex; flex-direction:column;
+  /* de zeven golfvormen staan in twee gecentreerde rijen: één tik, geen menu */
+  .shaperow { display:grid; gap:4px; }
+  .shaperank { display:flex; gap:4px; justify-content:center; }
+  .shaperow button { width:52px; flex:none; display:flex; flex-direction:column;
     align-items:center; justify-content:center; gap:2px; padding:4px 1px;
     font-size:8px; line-height:1.1; text-align:center; letter-spacing:.2px;
     text-transform:uppercase; color:var(--muted); overflow:hidden; }
@@ -2287,15 +2288,22 @@ function renderLfo(base, title) {
   const shapes = document.createElement("div");
   shapes.className = "shaperow";
 
+  const badges = [];
   const showShape = () => {
     const cur = Math.min(6, get(2));
-    Array.from(shapes.children).forEach((b, i) => {
+    badges.forEach((b, i) => {
       b.classList.toggle("on", i === cur);
       b.innerHTML = lfoGlyph(i, i === cur ? "var(--accent)" : "var(--muted)")
         + "<span>" + SHAPE_SHORT[i] + "</span>";
     });
   };
 
+  // vier boven, drie onder, beide rijen midden onder de golfvorm
+  const rank1 = document.createElement("div");
+  rank1.className = "shaperank";
+  const rank2 = document.createElement("div");
+  rank2.className = "shaperank";
+  shapes.appendChild(rank1); shapes.appendChild(rank2);
   SHAPE_NAMES.forEach((nm, i) => {
     const b = document.createElement("button");
     b.title = nm;
@@ -2304,7 +2312,8 @@ function renderLfo(base, title) {
       showShape();
       draw();
     });
-    shapes.appendChild(b);
+    badges.push(b);
+    (i < 4 ? rank1 : rank2).appendChild(b);
   });
   shapeRow.appendChild(shapes);
 
