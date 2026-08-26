@@ -57,7 +57,9 @@
     font-family:inherit; }
   select:focus, input:focus { border-color:var(--accent); }
   button { cursor:pointer; color:var(--muted);
-    transition:color .08s, border-color .08s, background .08s, transform .08s; }
+    /* alleen de kleur laten overlopen: 'background' zou ook
+       background-position meenemen en een LED naar binnen laten schuiven */
+    transition:color .08s, border-color .08s, background-color .08s, transform .08s; }
   button:hover { color:var(--text); }
   button:active { border-color:var(--accent); color:var(--accent);
     background:var(--accent-soft); transform:scale(.97); }
@@ -207,7 +209,7 @@
     letter-spacing:0; text-transform:none; font-size:10px; }
   .lfo .wave { display:block; width:100%; height:84px; background:var(--wave-bg);
     border:1px solid var(--border); border-radius:8px; }
-  .lfobody { display:flex; gap:8px; align-items:flex-start; }
+  .lfobody { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
   .lfomid { flex:1; min-width:0; }
   .vfgroup { display:flex; gap:5px; }
 
@@ -236,6 +238,20 @@
   .vtrack input::-moz-range-thumb { width:13px; height:26px; border-radius:3px;
     border:1px solid rgba(0,0,0,.55);
     background:linear-gradient(90deg,#5b5852,#26241f 62%,#3d3a35); }
+  /* raster met draaiknoppen, als de skin een knop-filmstrip aanbiedt */
+  .knobgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr));
+    gap:6px; margin-bottom:6px; }
+  .knobcell { display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    padding:6px 4px; box-shadow:var(--shadow); }
+  .knobcell .kname { font-size:10px; color:var(--muted); text-align:center;
+    line-height:1.2; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; width:100%; }
+  .knobcell .kval { font-size:11px; color:var(--accent); font-weight:600;
+    font-variant-numeric:tabular-nums; }
+  .knobcell.changed { border-color:var(--active); background:var(--active-soft); }
+  .knobcell select { width:100%; padding:2px 4px; font-size:10px; }
+
   /* regelaar met een filmstrip uit een eigen skin */
   .sprite { background-repeat:no-repeat; touch-action:none; cursor:ns-resize;
     user-select:none; -webkit-user-select:none; }
@@ -1172,7 +1188,7 @@ function lfoWaveSvg(shape, rate, delay, slew, mono) {
   // vaste reeks, zodat sample & hold niet bij elke tekening verspringt
   const rnd = [0.65, -0.35, 0.9, -0.8, 0.25, -0.6, 0.75, -0.15, 0.5, -0.95, 0.2, -0.7];
   const fade = Math.min(0.85, delay / 255);
-  const k = shape === 6 ? 0.09 : 1 - Math.pow(slew / 255, 0.6) * 0.93;
+  const k = shape === 6 ? 0.12 : 1 - Math.pow(slew / 255, 0.6) * 0.82;
   let prev = 0;
   const pts = [];
   for (let i = 0; i <= n; i++) {
@@ -1216,8 +1232,17 @@ function skinStrip(name) {
   let cs;
   try { cs = getComputedStyle(document.body); } catch { return null; }
   if (!cs || !cs.getPropertyValue) return null;
-  const img = (cs.getPropertyValue("--" + name + "-img") || "").trim();
+  let img = (cs.getPropertyValue("--" + name + "-img") || "").trim();
   if (!img || img === "none") return null;
+  // Een relatief pad in een CSS-variabele rekent de browser niet om naar de
+  // map van het stijlbestand, dus dat doen we hier: skins staan in
+  // local-assets, en daar staan de afbeeldingen ook.
+  const m = img.match(/^url\(\s*['"]?([^'")]+)['"]?\s*\)$/);
+  if (m) {
+    const file = m[1];
+    const abs = /^(https?:|data:|\/|local-assets\/)/.test(file);
+    img = 'url("' + (abs ? file : "local-assets/" + file) + '")';
+  }
   const num = k => parseFloat(cs.getPropertyValue("--" + name + "-" + k)) || 0;
   const w = num("w"), h = num("h"), frames = num("frames") || 1;
   if (!w || !h) return null;
@@ -1444,6 +1469,64 @@ function renderLfo(base, title) {
   return box;
 }
 
+/**
+ * Eén parameter als draaiknop, schakelaar of keuzelijst, voor een skin die
+ * filmstrips aanbiedt. Compacter dan een kaart per parameter, en het is wat een
+ * paneel ook doet: een knop met zijn naam eronder.
+ */
+function knobCell(p, knob, sw) {
+  const v = pval(p);
+  const cell = document.createElement("div");
+  const fresh = p.n !== undefined && pRecent[p.n]
+                && Date.now() - pRecent[p.n] < HILITE_MS;
+  cell.className = "knobcell" + (fresh ? " changed" : "");
+
+  const val = document.createElement("div");
+  val.className = "kval";
+  val.textContent = fmt(p, v);
+
+  if (p.k === "t" && sw) {
+    const c = spriteControl(sw, v, 1,
+      nv => { val.textContent = fmt(p, nv); doSend(p, nv); },
+      nv => { val.textContent = fmt(p, nv); sendParam(p, nv); });
+    // een schakelaar met twee standen: tikken is genoeg
+    c.el.addEventListener("click", () => {
+      const nv = pval(p) > 0 ? 0 : 1;
+      c.setValue(nv);
+      val.textContent = fmt(p, nv);
+      sendParam(p, nv);
+    });
+    cell.appendChild(c.el);
+  } else if (p.k === "e") {
+    const sel = document.createElement("select");
+    p.o.forEach((o, i) => {
+      const opt = document.createElement("option");
+      opt.value = i; opt.textContent = o;
+      sel.appendChild(opt);
+    });
+    sel.value = Math.min(v, p.max);
+    sel.addEventListener("change", () => {
+      const nv = +sel.value;
+      val.textContent = fmt(p, nv);
+      sendParam(p, nv);
+    });
+    cell.appendChild(sel);
+  } else {
+    const c = spriteControl(knob, v, p.max,
+      nv => { val.textContent = fmt(p, nv); doSend(p, nv); },
+      nv => { val.textContent = fmt(p, nv); sendParam(p, nv); });
+    cell.appendChild(c.el);
+  }
+
+  const nm = document.createElement("div");
+  nm.className = "kname";
+  nm.textContent = p.l;
+  nm.title = p.l + (p.n !== undefined ? " (NRPN " + p.n + ")" : "");
+  cell.appendChild(val);
+  cell.appendChild(nm);
+  return cell;
+}
+
 function renderParams() {
   const page = PAGES.find(x => x.id === tab);
   const wrap = document.getElementById("paramList");
@@ -1455,6 +1538,32 @@ function renderParams() {
     wrap.appendChild(renderLfo(7, "LFO 2"));
     return;
   }
+
+  // Biedt de skin een knop-filmstrip aan? Dan een raster met draaiknoppen,
+  // wat een stuk compacter is dan een kaart per parameter.
+  const knob = skinStrip("knob");
+  if (knob) {
+    const sw = skinStrip("switch2");
+    let grid = null;
+    for (const p of page.params) {
+      if (p.k === "h") {
+        const h = document.createElement("div");
+        h.className = "phead";
+        h.textContent = p.l;
+        wrap.appendChild(h);
+        grid = null;
+        continue;
+      }
+      if (!grid) {
+        grid = document.createElement("div");
+        grid.className = "knobgrid";
+        wrap.appendChild(grid);
+      }
+      grid.appendChild(knobCell(p, knob, sw));
+    }
+    return;
+  }
+
   for (const p of page.params) {
     if (p.k === "h") {
       const h = document.createElement("div");

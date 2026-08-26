@@ -82,9 +82,16 @@ const SKIN_VARS = {
   "--sprite-scale": "1.4",
   "--fader-img": 'url("fader.png")', "--fader-frames": "99",
   "--fader-w": "36px", "--fader-h": "75px",
+  "--knob-img": 'url("knob.png")', "--knob-frames": "99",
+  "--knob-w": "45px", "--knob-h": "45px",
+  "--switch2-img": 'url("switch2.png")', "--switch2-frames": "2",
+  "--switch2-w": "30px", "--switch2-h": "45px",
 };
+// met --no-skin draait dezelfde suite zonder filmstrips, zodat beide paden
+// (getekende regelaars en afbeeldingen) gedekt zijn
+const NO_SKIN = process.argv.includes("--no-skin");
 global.getComputedStyle = () => ({
-  getPropertyValue: k => SKIN_VARS[k] || "",
+  getPropertyValue: k => (NO_SKIN ? "" : (SKIN_VARS[k] || "")),
 });
 
 global.alert = m => errors.push("alert: " + m);
@@ -228,13 +235,21 @@ try {
   const tabsArr = [...document.getElementById("tabs").children];
   tabsArr.find(t => t.textContent === "Filter").fire("click");
   const list = document.getElementById("paramList");
-  const box = list.children[0];
-  const range = box.children.find(c => c.type === "range");
   sent = [];
-  range.value = 200;
-  range.fire("input");
-  range.fire("change");
-  console.log("regelaar verzet ->", JSON.stringify(sent));
+  // met een skin zijn het draaiknoppen, zonder skin schuifregelaars
+  const knob = findIn(list, e => String(e.className || "") === "sprite");
+  if (knob) {
+    knob.fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 3});
+    knob.fire("pointermove", {clientY: 150, preventDefault() {}, shiftKey: false});
+    knob.fire("pointerup", {});
+    console.log("draaiknop verzet ->", JSON.stringify(sent[sent.length - 1]));
+  } else {
+    const range = findIn(list, e => e.type === "range");
+    range.value = 200;
+    range.fire("input");
+    range.fire("change");
+    console.log("regelaar verzet ->", JSON.stringify(sent));
+  }
   if (!sent.some(s => s[0] === "nrpn")) { console.error("FOUT: geen NRPN verstuurd"); failures++; }
 } catch (e) { console.error("FOUT bij regelaar:", e.message); failures++; }
 
@@ -382,9 +397,13 @@ setTimeout(() => {
       if (String(e.className || "") === "sprite") sprites.push(e);
       for (const c of e.children || []) walk(c);
     })(plist);
-    console.log("filmstrip-regelaars:", sprites.length);
-    if (sprites.length !== 8) { console.error("FOUT: verwacht 8 sprites"); failures++; }
-    else {
+    console.log("filmstrip-regelaars:", sprites.length,
+                NO_SKIN ? "(geen skin, dus verwacht 0)" : "(skin actief, verwacht 8)");
+    if (sprites.length !== (NO_SKIN ? 0 : 8)) {
+      console.error("FOUT: onverwacht aantal sprites");
+      failures++;
+    }
+    if (!NO_SKIN) {
       sent = [];
       sprites[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
       sprites[0].fire("pointermove", {clientY: 130, preventDefault() {}, shiftKey: false});
