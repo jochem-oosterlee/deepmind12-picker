@@ -1904,6 +1904,31 @@ function sendParam(p, v) {
 // poly-mono 5/12, slew 6/13).
 const SHAPE_NAMES = ["Sine", "Triangle", "Square", "Ramp up", "Ramp down",
                      "Sample & Hold", "Sample & Glide"];
+
+// Staat Arp sync aan, dan is de rate geen vrije waarde meer maar een
+// notewaarde: twintig standen, van vier maten tot een vierenzestigste.
+const SYNC_DIVS = ["4", "3", "2", "1", "1/2", "3/8", "1/3", "1/4", "3/16",
+                   "1/6", "1/8", "3/32", "1/12", "1/16", "3/64", "1/24",
+                   "1/32", "3/128", "1/48", "1/64"];
+// De synth legt die twintig standen in één byte. Verdeeld over het hele
+// bereik (0-255) zoals hieronder, of als 0 t/m 19? Dat eerste past bij een
+// regelaar die ook vrij kan lopen; zet SYNC_SPREAD op false als het apparaat
+// de standen gewoon doornummert. Aan het logboek te zien welke het is: draai
+// in sync de rate op de synth en kijk welke waarde parameter 0 meldt.
+const SYNC_SPREAD = true;
+const SYNC_BAND = 256 / SYNC_DIVS.length;
+
+const syncSnap = {
+  count: SYNC_DIVS.length,
+  label: i => SYNC_DIVS[i],
+  toIndex: v => Math.max(0, Math.min(SYNC_DIVS.length - 1,
+    SYNC_SPREAD ? Math.floor(v / SYNC_BAND) : Math.round(v))),
+  // midden in de band, dan valt een afronding aan de andere kant niet verkeerd
+  toValue: i => {
+    i = Math.max(0, Math.min(SYNC_DIVS.length - 1, i));
+    return SYNC_SPREAD ? Math.round(i * SYNC_BAND + SYNC_BAND / 2) : i;
+  },
+};
 const SHAPE_GLYPH = [
   'M1 8C5 1 9 1 13 8 17 15 21 15 25 8 27 4.5 29 3 31 3',
   'M1 14 8 2 15 14 22 2 29 14',
@@ -2051,7 +2076,7 @@ function spriteControl(strip, value, max, onMove, onDone) {
  * schuift. Werkt met een kapje uit de skin en anders met een getekend kapje,
  * en is daardoor niet gebonden aan de hoogte van een filmstrip-frame.
  */
-function longFader(label, value, max, height, onMove, onDone, disabled) {
+function longFader(label, value, max, height, onMove, onDone, disabled, snap) {
   const cap = skinStrip("fadercap");
   const capW = cap ? Math.round(cap.w * cap.scale) : 26;
   const capH = cap ? Math.round(cap.h * cap.scale) : 14;
@@ -2099,11 +2124,13 @@ function longFader(label, value, max, height, onMove, onDone, disabled) {
   const travel = height - capH;
   const paint = () => {
     knobEl.style.top = Math.round((1 - val / (max || 1)) * travel) + "px";
-    num.textContent = val;
+    num.textContent = snap ? snap.label(snap.toIndex(val)) : val;
   };
   paint();
   const set = (v, done) => {
     v = Math.max(0, Math.min(max, Math.round(v)));
+    // een fader met vaste standen klikt naar de dichtstbijzijnde
+    if (snap) v = snap.toValue(snap.toIndex(v));
     if (v === val && !done) return;
     val = v;
     paint();
@@ -2136,7 +2163,9 @@ function longFader(label, value, max, height, onMove, onDone, disabled) {
   lane.addEventListener("pointercancel", end);
   lane.addEventListener("wheel", e => {
     if (e.preventDefault) e.preventDefault();
-    set(val + (e.deltaY < 0 ? 1 : -1) * Math.max(1, Math.round(max / 64)), true);
+    const dir = e.deltaY < 0 ? 1 : -1;
+    if (snap) set(snap.toValue(snap.toIndex(val) + dir), true);
+    else set(val + dir * Math.max(1, Math.round(max / 64)), true);
   });
 
   return {
@@ -2259,10 +2288,10 @@ function renderLfo(base, title) {
 
   // ---- faders: buitenste lang, binnenste iets lager, zoals op het paneel ----
   const OUTER = 196, INNER = 76;
-  const mk = (off, label, height, col, disabled) => {
+  const mk = (off, label, height, col, disabled, snap) => {
     const f = longFader(label, get(off), 255, height,
       v => { doSend(P(base + off), v); draw(); },
-      v => { sendParam(P(base + off), v); draw(); }, disabled);
+      v => { sendParam(P(base + off), v); draw(); }, disabled, snap);
     col.appendChild(f.box);
     if (!disabled) {
       // meebewegen als de synth deze parameter meldt
@@ -2270,7 +2299,9 @@ function renderLfo(base, title) {
     }
     return f;
   };
-  mk(0, "Rate", OUTER, leftCol);
+  // in sync klikt de rate langs de notewaarden in plaats van vrij te lopen
+  const synced = get(4) > 0;
+  mk(0, synced ? "Rate ♩" : "Rate", OUTER, leftCol, false, synced ? syncSnap : null);
   mk(1, "Delay", OUTER, rightCol);
   mk(6, "Slew", INNER, innerLeft);
 
@@ -2356,6 +2387,8 @@ function renderLfo(base, title) {
       doSend(P(base + off), get(off) > 0 ? 0 : 1);
       paint();
       draw();
+      // met arp sync gaat de rate over op notewaarden: fader opnieuw opbouwen
+      if (off === 4) renderParams();
     });
     return b;
   };
@@ -2395,12 +2428,14 @@ function renderLfo(base, title) {
   // vorm en stand komen ook van de synth
   params.subscribe(base + 2, () => { showShape(); draw(); });
   params.subscribe(base + 5, () => renderParams());
-  [3, 4].forEach(off => params.subscribe(base + off, () => {
+  [3, 4].forEach(off => params.subscribe(base + off, v => {
     Array.from(grid.children).forEach(b => {
       if (b.dataset && b.dataset.off !== undefined) {
         b.classList.toggle("on", get(+b.dataset.off) > 0);
       }
     });
+    // zet de synth arp sync om, dan leest de rate anders
+    if (off === 4 && (v > 0) !== synced) renderParams();
   }));
 
   draw();

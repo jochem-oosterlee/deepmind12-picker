@@ -494,6 +494,58 @@ setTimeout(() => {
     if (!moved.length) { console.error("FOUT: slepen stuurt geen parameter 0"); failures++; }
   }
 
+  // ---- met arp sync is de rate een notewaarde ----
+  const rateText = () => {
+    const pl = document.getElementById("paramList");
+    const box = collect(pl, e => String(e.className || "") === "vf")
+      .find(b => collect(b, x => String(x.className || "") === "vcap")
+                   .some(c => String(c.textContent).indexOf("Rate") === 0));
+    return collect(box, e => String(e.className || "") === "vnum")[0].textContent;
+  };
+  const rateLane = () => {
+    const pl = document.getElementById("paramList");
+    const box = collect(pl, e => String(e.className || "") === "vf")
+      .find(b => collect(b, x => String(x.className || "") === "vcap")
+                   .some(c => String(c.textContent).indexOf("Rate") === 0));
+    return collect(box, e => String(e.className || "").includes("lfader"))[0];
+  };
+  const DIVS = ["4","3","2","1","1/2","3/8","1/3","1/4","3/16","1/6","1/8",
+                "3/32","1/12","1/16","3/64","1/24","1/32","3/128","1/48","1/64"];
+  console.log("arp sync staat aan, rate leest:", rateText());
+  if (DIVS.indexOf(rateText()) === -1) {
+    console.error("FOUT: rate toont geen notewaarde terwijl arp sync aan staat");
+    failures++;
+  } else {
+    // een sleep moet midden in een stand landen, niet ertussen
+    sent = [];
+    rateLane().fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 3});
+    rateLane().fire("pointermove", {clientY: 250, preventDefault() {}, shiftKey: false});
+    rateLane().fire("pointerup", {});
+    const last = sent.filter(x => x[0] === "nrpn" && x[1] === 0).pop();
+    const idx = last ? Math.floor(last[2] / (256 / 20)) : -1;
+    console.log("gesleept ->", JSON.stringify(last), "= stand", DIVS[idx],
+                "| fader leest", rateText());
+    if (!last || DIVS[idx] !== rateText()) {
+      console.error("FOUT: gestuurde waarde hoort niet bij de stand die er staat");
+      failures++;
+    }
+    if (last && last[2] % 1 !== 0) { console.error("FOUT: geen hele waarde"); failures++; }
+
+    // arp sync uit: dan is het weer een gewone waarde
+    const arpBtn = collect(plist, e => e.dataset && String(e.dataset.off) === "4")[0];
+    if (!arpBtn) { console.error("FOUT: arp sync-knop niet gevonden"); failures++; }
+    else {
+      arpBtn.fire("click");
+      console.log("arp sync uit, rate leest:", rateText());
+      if (!/^[0-9]+$/.test(String(rateText()))) {
+        console.error("FOUT: rate toont geen gewone waarde na arp sync uit");
+        failures++;
+      }
+      collect(document.getElementById("paramList"),
+              e => e.dataset && String(e.dataset.off) === "4")[0].fire("click");   // weer aan
+    }
+  }
+
   // terug naar de Global-tab: de controles hieronder gaan daarover
   [...document.getElementById("tabs").children]
     .find(t => t.textContent === "Global").fire("click");
@@ -564,7 +616,7 @@ setTimeout(() => {
     const fader = name => {
       const box = findAll(plist2, e => String(e.className || "") === "vf")
         .find(b => findAll(b, x => String(x.className || "") === "vcap")
-                     .some(c => c.textContent === name));
+                     .some(c => String(c.textContent).indexOf(name) === 0));
       return {
         box: box,
         num: findAll(box, e => String(e.className || "") === "vnum")[0],
