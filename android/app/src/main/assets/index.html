@@ -296,6 +296,15 @@
   .shapepop button svg { display:block; }
   .btngrid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px; }
   .btngrid button { padding:9px 4px; font-size:11px; line-height:1.15; }
+  /* lampjes tonen alleen de stand en zijn geen knoppen */
+  .lamps { display:grid; gap:3px; align-content:center; }
+  .lamp { display:flex; align-items:center; gap:5px; font-size:10px;
+    text-transform:uppercase; letter-spacing:.6px; color:var(--muted);
+    padding:2px 4px; }
+  .lamp i { width:8px; height:8px; border-radius:50%; flex:none;
+    background:var(--border); box-shadow:inset 0 0 0 1px rgba(0,0,0,.4); }
+  .lamp.on { color:var(--active); }
+  .lamp.on i { background:var(--active); box-shadow:0 0 6px -1px var(--active); }
   .btnstack { display:grid; gap:0; }
   .btnstack button:first-child { border-radius:var(--radius) var(--radius) 0 0; }
   .btnstack button:last-child { border-radius:0 0 var(--radius) var(--radius);
@@ -1513,6 +1522,12 @@ function vFader(label, value, max, onMove, onDone) {
           setValue: v => { num.textContent = v; r.value = v; }};
 }
 
+/** Laatst gebruikte faseverschil per LFO, zodat doorstappen daar weer begint. */
+const lastPhaseByBase = {};
+function lastPhase(base) {
+  return lastPhaseByBase[base] || 64;
+}
+
 function renderLfo(base, title) {
   const P = n => ({k: "s", n: n, max: 255});
   const get = off => pval(P(base + off));
@@ -1582,13 +1597,13 @@ function renderLfo(base, title) {
   // Phase noemt en waarvan we het parameternummer niet kennen
   const spreadOn = get(5) >= 2;
   const spread = spreadOn
-    ? longFader("Spread", Math.max(1, get(5) - 1), 254, INNER,
-        v => doSend(P(base + 5), v + 1),
-        v => { sendParam(P(base + 5), v + 1); draw(); })
-    : longFader("Phase", 0, 255, INNER, () => {}, () => {}, true);
+    ? longFader("Phase", Math.max(1, get(5) - 1), 254, INNER,
+        v => { doSend(P(base + 5), v + 1); draw(); },
+        v => { lastPhaseByBase[base] = v + 1; sendParam(P(base + 5), v + 1); draw(); })
+    : longFader("Phase", 0, 254, INNER, () => {}, () => {}, true);
   if (!spreadOn) {
-    spread.box.title = "Phase is not in the manual's parameter table — turn it "
-      + "on the synth once with the log open and the number shows up";
+    spread.box.title = "press Phase to use this: the LFO of each voice is then "
+      + "offset, instead of all voices running together (poly) or as one (mono)";
   }
   innerRight.appendChild(spread.box);
 
@@ -1663,38 +1678,35 @@ function renderLfo(base, title) {
   grid.appendChild(pill("Arp<br>sync", 4));
   grid.appendChild(pill("Key<br>sync", 3));
 
+  // Eén parameter met drie standen: poly (0), mono (1) en een faseverschil per
+  // stem (2 tot 255). De Phase-knop stapt daardoor, en poly en mono zijn
+  // lampjes die tonen waar je staat — net als op het paneel.
+  const mode = get(5);
   const phase = document.createElement("button");
   phase.textContent = "Phase";
-  phase.disabled = true;
-  phase.style.opacity = ".45";
-  phase.title = spread.box.title || "";
+  phase.title = "steps through poly, mono and phase; in phase the fader sets "
+    + "how far the phase of each voice is offset";
+  phase.classList.toggle("on", mode >= 2);
+  phase.addEventListener("click", () => {
+    const m = get(5);
+    const next = m === 0 ? 1 : (m === 1 ? Math.max(2, lastPhase(base)) : 0);
+    sendParam(P(base + 5), next);
+    renderParams();            // de fader wordt actief of juist grijs
+  });
   grid.appendChild(phase);
 
-  const stack = document.createElement("div");
-  stack.className = "btnstack";
-  const segBtns = [];
+  const lamps = document.createElement("div");
+  lamps.className = "lamps";
   [["Poly", 0], ["Mono", 1]].forEach(([nm, val]) => {
-    const b = document.createElement("button");
-    b.textContent = nm;
-    b.addEventListener("click", () => {
-      sendParam(P(base + 5), val);
-      renderParams();          // spread-fader verschijnt of verdwijnt
-    });
-    segBtns.push(b);
-    stack.appendChild(b);
+    const l = document.createElement("div");
+    l.className = "lamp" + (mode === val ? " on" : "");
+    const dot = document.createElement("i");
+    const txt = document.createElement("span");
+    txt.textContent = nm;
+    l.appendChild(dot); l.appendChild(txt);
+    lamps.appendChild(l);
   });
-  const sp = document.createElement("button");
-  sp.textContent = "Spread";
-  sp.addEventListener("click", () => {
-    sendParam(P(base + 5), Math.max(2, get(5)));
-    renderParams();
-  });
-  stack.appendChild(sp);
-  const m = get(5);
-  segBtns[0].classList.toggle("on", m === 0);
-  segBtns[1].classList.toggle("on", m === 1);
-  sp.classList.toggle("on", m >= 2);
-  grid.appendChild(stack);
+  grid.appendChild(lamps);
 
   draw();
   showShape();

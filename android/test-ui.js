@@ -421,6 +421,30 @@ setTimeout(() => {
         failures++;
       }
     }
+    // Phase-knop stapt door poly, mono en faseverschil; poly en mono zijn
+    // lampjes en mogen dus niet aanklikbaar zijn
+    const lamps = collect(plist, e => String(e.className || "").split(" ").includes("lamp"));
+    const phaseBtn = collect(plist, e => e.textContent === "Phase"
+                                    && String(e.className || "").includes("mini") === false
+                                    && e.tagName === "BUTTON")[0];
+    console.log("lampjes:", lamps.length, "| phase-knop:", phaseBtn ? "ja" : "nee");
+    if (lamps.length !== 4 || !phaseBtn) {
+      console.error("FOUT: lampjes of Phase-knop ontbreken");
+      failures++;
+    } else {
+      if (lamps.some(l => (l.handlers.click || []).length)) {
+        console.error("FOUT: een lampje is aanklikbaar");
+        failures++;
+      }
+      sent = [];
+      phaseBtn.fire("click");
+      console.log("phase-knop ->", JSON.stringify(sent[0]));
+      if (!sent.some(x => x[0] === "nrpn" && x[1] === 5)) {
+        console.error("FOUT: Phase-knop stuurt niet naar parameter 5");
+        failures++;
+      }
+    }
+
     // slepen aan de eerste faderbaan moet parameter 0 sturen
     sent = [];
     lanes[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
