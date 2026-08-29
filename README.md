@@ -68,6 +68,10 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
   app uses.
 - SysEx command `0x17` (11 bytes) is sent when a setting is changed on the panel;
   it does not appear for changes made over MIDI. Undocumented, and not needed.
+- **VCA-MODE is global byte 47** (so NRPN 347), with 1 for transparent and 0 for
+  ballsy - the louder VCA characteristic from before firmware 1.0.5. It arrived
+  in 1.1.0 and is in neither the 2016 manual nor its parameter table; found by
+  switching it on the instrument and watching which number came past.
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 

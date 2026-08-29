@@ -722,6 +722,27 @@ setTimeout(() => {
       console.error("FOUT: de filterpanelen staan er niet zoals ontworpen");
       failures++;
     } else {
+      // VCA-MODE is een globale instelling: byte 47, dus NRPN 347
+      {
+        const bar = collect(vca, e => String(e.className || "").split(" ").includes("seg"))[0];
+        sent = [];
+        bar.children[1].fire("click");                 // BALLSY
+        const m = sent.filter(x => x[0] === "nrpn").pop();
+        console.log("VCA-mode ->", JSON.stringify(m),
+                    "(" + bar.children.map(c => c.textContent).join(" | ") + ")");
+        if (!m || m[1] !== 347 || m[2] !== 0) {
+          console.error("FOUT: VCA-mode stuurt niet NRPN 347");
+          failures++;
+        }
+        sent = [];
+        bar.children[0].fire("click");                 // en terug
+        const back = sent.filter(x => x[0] === "nrpn").pop();
+        if (!back || back[2] !== 1) {
+          console.error("FOUT: VCA-mode gaat niet terug naar transparent");
+          failures++;
+        }
+      }
+
       // envelope omkeren is de omgekeerde parameter: aan is nul
       const invCell = collect(panel, e => String(e.className || "").split(" ").includes("cell"))
         .find(c => collect(c, l => String(l.className || "") === "lbl")

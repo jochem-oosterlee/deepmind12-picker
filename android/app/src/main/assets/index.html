@@ -1922,30 +1922,45 @@ function renderEnv(base, title) {
 // ================== filterpaneel ==================
 
 /**
- * Schakelaar op een CC in plaats van een parameter.
+ * Balk voor een globale instelling.
  *
- * Analog thru gaat als control change over de lijn en komt niet terug van de
- * synth, dus deze hangt niet aan de waardenopslag.
+ * Globals staan niet in de parameteropslag van een programma: ze komen uit
+ * het instellingenblok en gaan als NRPN 300 + bytepositie de deur uit.
  */
-function ccSeg(cc, options, dflt) {
+function globalSeg(idx, options) {
   const row = document.createElement("div");
   row.className = "seg";
-  const p = {k: "t", cc: cc, max: 1};
-  if (dflt !== undefined && vals[pkey(p)] === undefined) vals[pkey(p)] = dflt;
+  // Wat je zet is meteen te zien, maar het blok met instellingen blijft van de
+  // synth: zodra die zich meldt telt zijn waarde weer.
+  let want;
+  const value = () => {
+    const have = gData && gData.bytes ? gData.bytes[idx] : undefined;
+    if (want !== undefined && have === want) want = undefined;
+    return want !== undefined ? want : have;
+  };
   const spans = options.map(o => {
     const sp = document.createElement("span");
     sp.textContent = o.l;
-    sp.addEventListener("click", () => { doSend(p, o.v); show(); });
+    sp.addEventListener("click", () => {
+      want = o.v;
+      AndroidBridge.sendNRPN(globalNrpn(idx), o.v, channel);
+      show();
+      setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
+    });
     row.appendChild(sp);
     return sp;
   });
   const show = () => {
-    const v = pval(p);
+    const v = value();
     spans.forEach((sp, i) => sp.classList.toggle("on", options[i].v === v));
   };
   show();
+  globalWatchers.push(show);
   return row;
 }
+
+/** Panelen die een globale instelling tonen, willen het horen als die verandert. */
+let globalWatchers = [];
 
 // ================== versterker en high-pass ==================
 
@@ -1954,10 +1969,12 @@ function renderVca() {
   const boost = cell("BASS BOOST");
   boost.appendChild(swPill(52));
 
-  // TRANSPARENT/RELAY staat in het ontwerp maar niet in de handleiding; het
-  // enige wat erop lijkt is de analoge doorlus (CC 113).
-  const thru = ccSeg(113, [{l: "TRANSPARENT", v: 1}, {l: "RELAY", v: 0}], 1);
+  // VCA-MODE kwam in firmware 1.1.0 en staat niet in de handleiding van 2016:
+  // "Ballsy" is de oude karakteristiek van voor 1.0.5, "Transparent" de nieuwe.
+  // Het is een globale instelling, byte 47, dus NRPN 347.
+  const thru = globalSeg(VCA_MODE_BYTE, [{l: "TRANSPARENT", v: 1}, {l: "BALLSY", v: 0}]);
   thru.className += " auto";
+  thru.title = "VCA mode: transparent, or the older and louder ballsy";
 
   return panelBox(380, "VCA / HPF", [thru],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
@@ -2495,6 +2512,7 @@ function renderParams() {
   const wrap = document.getElementById("paramList");
   updateParamNote();
   params.clearSubs();
+  globalWatchers = [];
   shownParams = new Set();
   wrap.innerHTML = "";
   if (!page) return;
@@ -2995,6 +3013,9 @@ function isRange(i) { return (gmeta.bytes[i] || {}).type === "range"; }
  * dat de app zag langskomen krijgt voorrang.
  */
 const GLOBAL_NRPN_BASE = 300;
+// VCA-MODE zit op bytepositie 47: gemeten door hem op het apparaat om te
+// zetten en te kijken welk nummer voorbijkwam (347).
+const VCA_MODE_BYTE = 47;
 function globalNrpn(i) {
   const m = gmeta.bytes[i] || {};
   return m.nrpn !== undefined ? m.nrpn : GLOBAL_NRPN_BASE + i;
@@ -3694,6 +3715,7 @@ function loadGlobals() {
     const g = JSON.parse(AndroidBridge.globals());
     if (g && Array.isArray(g.bytes)) {
       gData = g;
+      globalWatchers.forEach(fn => { try { fn(); } catch (e) {} });
       if (tab !== "global") return true;
       // Staan de kaartjes er al? Dan alleen bijwerken, niet herbouwen. Niet
       // tellen hoeveel kaartjes er zijn: bij een ingeklapt menu zijn dat er
