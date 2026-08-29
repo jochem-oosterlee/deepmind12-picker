@@ -2408,23 +2408,33 @@ function renderLfo(base, title) {
  */
 function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   const W = 264, H = 46, top = 4, bot = 44;
-  const ax = 2 + (a / 255) * 70;
-  const dx = ax + 6 + (d / 255) * 90;
+  // De tekening vult altijd het hele vak: de vier fasen verdelen de breedte
+  // naar verhouding van hun tijden, en samen zijn ze precies zo breed als het
+  // kader. Elke fase houdt een beetje breedte over, anders verdwijnt ze.
+  const share = t => 12 + (t / 255) * 100;
+  const wa = share(a), wd = share(d), ws = 55, wr = share(r);
+  const k = W / (wa + wd + ws + wr);
+  const ax = wa * k;
+  const dx = ax + wd * k;
+  const sx = dx + ws * k;
   const ys = bot - (sus / 255) * (bot - top);
-  const sx = Math.max(dx + 10, W - 68);
-  // Een curve buigt het stuk tussen twee punten, maar blijft binnen de hoeken
-  // ervan: hoog tegen de ene rand (eerst snel, dan vlak), laag tegen de andere
-  // (eerst vlak, dan snel). Halverwege is het een rechte lijn.
+  // Een curve buigt het stuk tussen twee punten, en gebruikt daarbij altijd
+  // de volle breedte en hoogte van dat stuk: hij begint en eindigt precies op
+  // de hoeken. In het midden is het een rechte lijn, naar de uitersten toe
+  // kruipt hij tegen de ene of de andere hoek aan. Een bézier zou de hoek
+  // afsnijden, vandaar een machtsfunctie die we uittekenen.
   const bend = (x1, y1, x2, y2, c) => {
-    const t = Math.max(-1, Math.min(1, (c - 128) / 127));
-    const p = t >= 0 ? 1 / 3 + t * (2 / 3) : (1 + t) / 3;
-    const q = t >= 0 ? (1 - t) / 3 : 1 / 3 - t * (2 / 3);
+    const g = Math.pow(8, (c - 128) / 128);
     const dx = x2 - x1, dy = y2 - y1;
-    const n = v => v.toFixed(1);
-    return "C" + n(x1 + dx * p) + "," + n(y1 + dy * q) + " "
-               + n(x2 - dx * q) + "," + n(y2 - dy * p) + " "
-               + n(x2) + "," + n(y2);
+    let out = "";
+    for (let i = 1; i <= 18; i++) {
+      const t = i / 18;
+      out += "L" + (x1 + dx * t).toFixed(1) + ","
+                 + (y1 + dy * Math.pow(t, g)).toFixed(1);
+    }
+    return out;
   };
+
   // Het houdstuk is geen bocht maar een rechte lijn, en altijd even lang:
   // vlak in het midden, naar de uitersten toe 45 graden omlaag of omhoog.
   // Komt hij tegen de boven- of onderrand, dan loopt hij van daaraf vlak
@@ -2435,7 +2445,7 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   else if (hy > bot) { hx = dx + (bot - ys) / Math.abs(tilt); hy = bot; }
   const hold = "L" + hx.toFixed(1) + "," + hy.toFixed(1)
              + (hx < sx - 0.5 ? "L" + sx.toFixed(1) + "," + hy.toFixed(1) : "");
-  const rx = sx + 6 + (r / 255) * (W - 12 - sx);
+  const rx = W;
 
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)

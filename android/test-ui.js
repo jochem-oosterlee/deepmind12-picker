@@ -602,7 +602,21 @@ setTimeout(() => {
         });
       });
       envChecks.push(() => {
-        console.log("tekening buiten het vak bij de uiterste curves:",
+        // en hij hoort het vak ook helemaal te vullen
+      const span = () => {
+        const d = (svg().match(/ d="([^"]+)"/) || ["", ""])[1];
+        const n = (d.match(/-?[0-9.]+/g) || []).map(Number);
+        const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
+        return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      };
+      const [x0, x1, y0, y1] = span();
+      console.log("tekening vult het vak: x", x0.toFixed(0) + "-" + x1.toFixed(0),
+                  "y", y0.toFixed(0) + "-" + y1.toFixed(0));
+      if (x0 > 0.5 || x1 < 263.5 || y0 > 4.5 || y1 < 43.5) {
+        console.error("FOUT: de tekening gebruikt niet de volle breedte of hoogte");
+        failures++;
+      }
+      console.log("tekening buiten het vak bij de uiterste curves:",
                     worst.length ? worst.slice(0, 4).join(", ") : "nee");
         if (worst.length) {
           console.error("FOUT: de curve trekt de lijn buiten het vak");
