@@ -284,6 +284,10 @@
     if (d[0] === 0xF0) handleSysEx(d);
     else if ((d[0] & 0xF0) === 0xB0) onCC(d[1], d[2]);
     else if ((d[0] & 0xF0) === 0xC0) { S.curProg = d[1]; }
+    // De pagina hoeft niet te wachten tot haar volgende tik: er is nieuws.
+    if (typeof window !== "undefined" && typeof window.dm12Push === "function") {
+      window.dm12Push();
+    }
   }
 
   function onMessage(e) { handleBytes(e.data); }

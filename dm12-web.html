@@ -753,6 +753,10 @@
     if (d[0] === 0xF0) handleSysEx(d);
     else if ((d[0] & 0xF0) === 0xB0) onCC(d[1], d[2]);
     else if ((d[0] & 0xF0) === 0xC0) { S.curProg = d[1]; }
+    // De pagina hoeft niet te wachten tot haar volgende tik: er is nieuws.
+    if (typeof window !== "undefined" && typeof window.dm12Push === "function") {
+      window.dm12Push();
+    }
   }
 
   function onMessage(e) { handleBytes(e.data); }
@@ -4140,8 +4144,17 @@ if (typeof window !== "undefined" && window.addEventListener) {
 }
 showTab();
 poll();
-// De brug weet meteen wat de synth stuurt; deze tik bepaalt hoe snel de
-// pagina het laat zien. Kost niets: het is een lokale aanroep, geen verkeer.
+// Kan de verbindingslaag zeggen wanneer er nieuws is, dan kijkt de pagina op
+// dat moment en niet op een vast ritme. Even samenvoegen, want tijdens het
+// draaien aan een knop komen er tientallen berichten per seconde binnen.
+let pushTimer = null;
+window.dm12Push = () => {
+  if (pushTimer) return;
+  pushTimer = setTimeout(() => { pushTimer = null; poll(); }, 16);
+};
+
+// En een eigen tik als vangnet: voor de verbindingsstatus, en voor een
+// verbinding die niet kan duwen.
 setInterval(poll, 250);
 </script>
 </body>

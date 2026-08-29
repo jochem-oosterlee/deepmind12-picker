@@ -85,6 +85,18 @@ function nameBlock(names) {
   check(st.connected === true, "poort gevonden: " + st.status);
   check(typeof input.onmidimessage === "function", "ingang wordt beluisterd");
 
+  console.log("de pagina wordt gewekt bij binnenkomend bericht:");
+  let woken = 0;
+  global.window.dm12Push = () => { woken++; };
+  feed([0xB0, 99, 0]);
+  feed([0xB0, 98, 6]);
+  feed([0xB0, 6, 0]);
+  feed([0xB0, 38, 91]);
+  check(woken === 4, "elk bericht wekt de pagina (" + woken + "x)");
+  delete global.window.dm12Push;
+  feed([0xB0, 99, 0]);            // zonder haak mag het niet stukgaan
+  check(true, "zonder haak gaat het gewoon door");
+
   console.log("preset kiezen:");
   sent = [];
   B().send(3, 41, 0);
