@@ -722,6 +722,20 @@ setTimeout(() => {
       console.error("FOUT: de filterpanelen staan er niet zoals ontworpen");
       failures++;
     } else {
+      // faders lijnen uit, ook als het ene label langer is dan het andere:
+      // de labelruimte staat vast, anders zakt zo'n kolom omlaag
+      {
+        const css = require("fs").readFileSync(process.argv[2], "utf8").split("</style>")[0];
+        const rule = (css.match(/\.vcap \{[^}]*\}/) || [""])[0];
+        const cellRule = (css.match(/\.cell \.lbl \{[^}]*\}/) || [""])[0];
+        console.log("labelruimte vast:", /min-height/.test(rule) ? "fader ja" : "fader NEE",
+                    "|", /min-height/.test(cellRule) ? "cel ja" : "cel NEE");
+        if (!/min-height/.test(rule) || !/min-height/.test(cellRule)) {
+          console.error("FOUT: zonder vaste labelruimte lijnen de faders niet uit");
+          failures++;
+        }
+      }
+
       // pan spread is bipolair: de synth toont -128 tot +127
       {
         const box = collect(vca, e => String(e.className || "") === "vf")

@@ -329,7 +329,8 @@
     max-width:100%; }
   .cell.wide { grid-column:1 / -1; width:60%; }
   .cell .lbl { color:var(--label); font-size:8px; letter-spacing:1px;
-    text-align:center; }
+    text-align:center; line-height:1.2; min-height:2.4em; display:flex;
+    align-items:flex-end; justify-content:center; }
   .cell .num { color:var(--label); font-weight:700; font-size:11px; }
 
   /* keuze uit een handvol standen, naast elkaar */
@@ -400,9 +401,13 @@
   /* regelaar met een filmstrip uit een eigen skin */
   .sprite { background-repeat:no-repeat; touch-action:none; cursor:ns-resize;
     user-select:none; -webkit-user-select:none; }
-  /* label boven de fader: klein, oranje, met ruimte tussen de letters */
+  /* Label boven de fader: klein, oranje, met ruimte tussen de letters. De
+     hoogte staat vast op twee regels, zodat de gleuven van een rij faders op
+     dezelfde lijn beginnen — of het label nu een of twee regels beslaat. */
   .vcap { font-size:8px; color:var(--label); text-transform:uppercase;
-    letter-spacing:1px; text-align:center; line-height:1.2; }
+    letter-spacing:1px; text-align:center; line-height:1.2;
+    min-height:2.4em; display:flex; align-items:flex-end;
+    justify-content:center; }
 
   .shapes { display:flex; gap:3px; margin:5px 0 0; flex-wrap:wrap; }
   .shapes button { padding:2px 4px; line-height:0; }
