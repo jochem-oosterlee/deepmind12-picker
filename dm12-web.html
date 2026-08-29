@@ -2441,11 +2441,15 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
     + bend(0, bot, ax, top, ac)
     + bend(ax, top, dx, ys, dc)
     + hold
-    + bend(sx, hy, rx, bot, rc)
-    + " Z";
+    + bend(sx, hy, rx, bot, rc);
+  // Twee keer hetzelfde pad: gesloten om te vullen, open om te trekken. Anders
+  // krijg je onderlangs een streep die niet bij de envelope hoort, en die valt
+  // op zodra een curve vlak boven de bodem langs scheert.
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H
-    + '" class="wave"><path d="' + path + '" fill="var(--accent)" '
-    + 'fill-opacity="0.22" stroke="var(--accent)" stroke-width="1.5"/></svg>';
+    + '" class="wave">'
+    + '<path d="' + path + ' Z" fill="var(--accent)" fill-opacity="0.22" stroke="none"/>'
+    + '<path d="' + path + '" fill="none" stroke="var(--accent)" stroke-width="1.5" '
+    + 'stroke-linejoin="round"/></svg>';
 }
 
 /** Eén envelope: tijden als faders, curves als knoppen, met de vorm erboven. */
