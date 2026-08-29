@@ -80,6 +80,16 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### Bipolar parameters, and one number that means two things
+
+Ten parameters run from -128 to +127 while the wire carries 0-255: pan spread
+(83), OSC portamento balance (91) and the eight mod depths (95, 98, 101, 104,
+107, 110, 113, 116). The app shows them signed, the way the instrument does.
+
+Note 113 in that list. As an NRPN it is Mod 7 Depth; as a control change it is
+Analog Thru. Same number, different namespace - the two are unrelated and both
+mappings in the app are correct.
+
 ### Two parameters the manual files under the oscillators
 
 Numbers 91 and 92 are named "OSC Portamento Balance" and "OSC Key Down Reset"

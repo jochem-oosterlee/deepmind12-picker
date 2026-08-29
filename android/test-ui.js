@@ -722,6 +722,26 @@ setTimeout(() => {
       console.error("FOUT: de filterpanelen staan er niet zoals ontworpen");
       failures++;
     } else {
+      // pan spread is bipolair: de synth toont -128 tot +127
+      {
+        const box = collect(vca, e => String(e.className || "") === "vf")
+          .find(b => collect(b, x => String(x.className || "") === "vcap")
+                       .some(c => c.textContent === "PAN SPREAD"));
+        const num = collect(box, e => String(e.className || "") === "vnum")[0];
+        const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
+        sent = [];
+        lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 4});
+        lane.fire("pointermove", {clientY: -900, preventDefault() {}, shiftKey: false});
+        lane.fire("pointerup", {});
+        const top = sent.filter(x => x[0] === "nrpn" && x[1] === 83).pop();
+        console.log("pan spread helemaal open ->", JSON.stringify(top),
+                    "toont", num.textContent);
+        if (!top || top[2] !== 255 || num.textContent !== "+127") {
+          console.error("FOUT: pan spread toont niet +127 bij 255");
+          failures++;
+        }
+      }
+
       // VCA-MODE is een globale instelling: byte 47, dus NRPN 347
       {
         const bar = collect(vca, e => String(e.className || "").split(" ").includes("seg"))[0];

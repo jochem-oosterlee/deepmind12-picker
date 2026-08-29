@@ -2565,7 +2565,8 @@ function renderVca() {
 
   return panelBox(380, "VCA / HPF", [thru],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
-     panelFader(82, "VEL > SENS", H), panelFader(83, "PAN SPREAD", H),
+     panelFader(82, "VEL > SENS", H),
+     panelFader(83, "PAN SPREAD", H, {fmt: v => fmt({k: "b"}, v)}),
      panelFader(40, "HPF FREQ", H)],
     [], {side: [boost]});
 }
