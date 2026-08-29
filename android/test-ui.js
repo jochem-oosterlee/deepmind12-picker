@@ -411,6 +411,7 @@ setTimeout(() => {
 
   const lfoTab = [...document.getElementById("tabs").children]
     .find(t => t.textContent === "LFO");
+  const pwmChecks = [];
 
   // ---- oscillatorpanelen, volgens het ontwerp ----
   {
@@ -496,6 +497,32 @@ setTimeout(() => {
         console.error("FOUT: de draaiknop komt niet van zijn plaats");
         failures++;
       }
+
+      // de pulsknop tekent de breedte die PWM nu heeft
+      const pulseBtn = () => collect(document.getElementById("paramList"),
+        e => String(e.className || "").split(" ").includes("hbtn"))
+        .find(b => String(b.title).indexOf("Pulse") === 0);
+      const edges = () => {
+        const m = String(pulseBtn()._html || "").match(/points="([^"]+)"/g) || [];
+        return m.map(g => g.match(/([0-9.]+),1 /) ? RegExp.$1 : "?");
+      };
+      paramBytes[25] = 0; paramBytes[16] = 0; paramRev++;
+      const wide = () => String(pulseBtn()._html || "");
+      const before = wide();
+      paramBytes[25] = 250; paramRev++;
+      pwmChecks.push(() => {
+        const after = wide();
+        console.log("pulsknop: bij PWM 0 en bij PWM 250 dezelfde tekening?",
+                    after === before ? "ja (FOUT)" : "nee");
+        if (after === before) {
+          console.error("FOUT: de pulsknop volgt de PWM-waarde niet");
+          failures++;
+        }
+        if ((after.match(/polyline/g) || []).length !== 1) {
+          console.error("FOUT: met bron Manual hoort er één blokgolf te staan");
+          failures++;
+        }
+      });
 
       // wat in een paneel staat, hoort er niet nog eens onder te staan
       const doubles = collect(op, e => panels.indexOf(e) === -1
@@ -824,6 +851,7 @@ setTimeout(() => {
       paramBytes[19] = wasOn ? 0 : 1;
       paramRev++;
       setTimeout(() => {
+        pwmChecks.forEach(fn => fn());
         const nowOn = sawOf().classList.contains("on");
         console.log("golfvormknop na een melding van de synth:",
                     nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");

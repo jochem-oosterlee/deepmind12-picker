@@ -1842,17 +1842,50 @@ function waveIcon(points) {
     + 'stroke-width="2"/></svg>';
 }
 const ICON_SAW = "1,13 12,1 12,13 24,1 24,13";
-const ICON_PULSE = "1,13 1,1 8,1 8,13 14,13 14,1 21,1 21,13";
+
+/**
+ * Blokgolf met de breedte die de synth nu heeft.
+ *
+ * De pulsbreedte is het enige aan een oscillator dat je nergens kunt aflezen:
+ * PWM is een getal, maar het verschil tussen een blok en een dunne spriet hoor
+ * je meteen. Vandaar dat de knop zijn eigen vorm laat zien.
+ *
+ * `swing` tekent er een tweede flank bij: staat de bron niet op Manual, dan
+ * zet PWM niet de breedte maar hoe ver die heen en weer beweegt.
+ */
+function pulseIcon(duty, swing) {
+  const top = 1, bot = 13, x0 = 1, per = 12;
+  const line = (d, extra) => {
+    const e1 = (x0 + per * d).toFixed(1), e2 = (x0 + per * (1 + d)).toFixed(1);
+    return '<polyline points="' + x0 + "," + bot + " " + x0 + "," + top + " "
+      + e1 + "," + top + " " + e1 + "," + bot + " "
+      + (x0 + per) + "," + bot + " " + (x0 + per) + "," + top + " "
+      + e2 + "," + top + " " + e2 + "," + bot + " " + (x0 + per * 2) + "," + bot
+      + '" fill="none" stroke="currentColor" stroke-width="2"' + (extra || "") + "/>";
+  };
+  const clip = d => Math.max(0.08, Math.min(0.92, d));
+  return '<svg width="20" height="11" viewBox="0 0 26 14" aria-hidden="true">'
+    + (swing === undefined ? "" : line(clip(swing), ' stroke-opacity=".35"'))
+    + line(clip(duty)) + "</svg>";
+}
+
+/** Van PWM-waarde naar breedte: 0 is een blok, hoog is een smalle puls. */
+function pwmDuty(v) { return 0.5 - (v / 255) * 0.42; }
 
 /** Knop in de kop van een paneel: een golfvorm of een woord. */
-function headBtn(num, title, inner) {
+function headBtn(num, title, inner, watch) {
   const b = document.createElement("span");
   b.className = "hbtn";
   b.title = title;
-  b.innerHTML = inner;
-  const show = () => b.classList.toggle("on", params.get(num, 0) > 0);
+  const show = () => {
+    b.classList.toggle("on", params.get(num, 0) > 0);
+    // een tekening die van andere parameters afhangt, tekent zichzelf opnieuw
+    if (typeof inner === "function") b.innerHTML = inner();
+  };
+  if (typeof inner !== "function") b.innerHTML = inner;
   show();
   params.subscribe(num, show);
+  (watch || []).forEach(n => params.subscribe(n, show));
   b.addEventListener("click", () => paramSet(num, params.get(num, 0) > 0 ? 0 : 1));
   return b;
 }
@@ -2148,7 +2181,12 @@ function renderOsc1() {
 
   return panelBox(300, "OSC 1",
     [headBtn(19, "Sawtooth", waveIcon(ICON_SAW)),
-     headBtn(18, "Pulse", waveIcon(ICON_PULSE))],
+     headBtn(18, "Pulse width follows PWM", () => {
+       const w = pwmDuty(params.get(25, 0));
+       // met een andere bron dan Manual beweegt de breedte; dan staat er een
+       // blok met de uiterste stand er doorheen
+       return params.get(16, 0) === 0 ? pulseIcon(w) : pulseIcon(0.5, w);
+     }, [25, 16])],
     [panelFader(21, "PITCH MOD", FADER_H), panelFader(25, "PWM", FADER_H)],
     [range, pmodSrc, pwmSrc, aft, wheel, keyReset, mode]);
 }
