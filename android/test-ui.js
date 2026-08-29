@@ -730,15 +730,15 @@ setTimeout(() => {
         const m = sent.filter(x => x[0] === "nrpn").pop();
         console.log("VCA-mode ->", JSON.stringify(m),
                     "(" + bar.children.map(c => c.textContent).join(" | ") + ")");
-        if (!m || m[1] !== 347 || m[2] !== 0) {
-          console.error("FOUT: VCA-mode stuurt niet NRPN 347");
+        if (!m || m[1] !== 347 || m[2] !== 1) {
+          console.error("FOUT: ballsy stuurt niet NRPN 347 = 1");
           failures++;
         }
         sent = [];
         bar.children[0].fire("click");                 // en terug
         const back = sent.filter(x => x[0] === "nrpn").pop();
-        if (!back || back[2] !== 1) {
-          console.error("FOUT: VCA-mode gaat niet terug naar transparent");
+        if (!back || back[2] !== 0) {
+          console.error("FOUT: transparent stuurt niet NRPN 347 = 0");
           failures++;
         }
       }

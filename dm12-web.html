@@ -2557,8 +2557,9 @@ function renderVca() {
 
   // VCA-MODE kwam in firmware 1.1.0 en staat niet in de handleiding van 2016:
   // "Ballsy" is de oude karakteristiek van voor 1.0.5, "Transparent" de nieuwe.
-  // Het is een globale instelling, byte 47, dus NRPN 347.
-  const thru = globalSeg(VCA_MODE_BYTE, [{l: "TRANSPARENT", v: 1}, {l: "BALLSY", v: 0}]);
+  // Het is een globale instelling, byte 47, dus NRPN 347. Nul is transparent,
+  // een is ballsy — nagekeken op het apparaat.
+  const thru = globalSeg(VCA_MODE_BYTE, [{l: "TRANSPARENT", v: 0}, {l: "BALLSY", v: 1}]);
   thru.className += " auto";
   thru.title = "VCA mode: transparent, or the older and louder ballsy";
 

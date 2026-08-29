@@ -54,6 +54,11 @@ Two details cost real debugging time and are worth knowing:
 
 ### Global settings (measured, not in the manual)
 
+Everything below was measured on a DeepMind 12 running firmware **1.1.2-619**
+(host, voice and DSP), boot 23, WiFi module 2.7.0.0 - worth knowing, because
+some of it does not exist in earlier firmware and none of it is in the 2016
+manual.
+
 The manual documents 24 global settings and a 45-byte block. Neither still holds:
 
 - The block is **56 bytes**. A DeepMind 12 answers a Global Parameter Dump Request
@@ -68,10 +73,10 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
   app uses.
 - SysEx command `0x17` (11 bytes) is sent when a setting is changed on the panel;
   it does not appear for changes made over MIDI. Undocumented, and not needed.
-- **VCA-MODE is global byte 47** (so NRPN 347), with 1 for transparent and 0 for
-  ballsy - the louder VCA characteristic from before firmware 1.0.5. It arrived
-  in 1.1.0 and is in neither the 2016 manual nor its parameter table; found by
-  switching it on the instrument and watching which number came past.
+- **VCA-MODE is global byte 47** (so NRPN 347): 0 is transparent, 1 is ballsy -
+  the louder VCA characteristic from before firmware 1.0.5. It arrived in 1.1.0
+  and is in neither the 2016 manual nor its parameter table; found by switching
+  it on the instrument and watching which number came past.
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
