@@ -111,10 +111,14 @@ Working: presets and banks, the editor, the library (read names, fetch patches,
 write back), global settings over NRPN with your own labels and menus, the LFO
 panels, discovery, and the readable SysEx log.
 
+The **Panel** tab holds every panel at once, in signal order: LFO 1 and 2, OSC
+1 and 2, VCF, VCA, HPF, and the three envelopes. The separate tabs still exist
+and render the same panels.
+
 Open threads:
 
-- Merging the editor tabs (OSC, Filter, Env, Voice, LFO, Arp/Seq, FX, Mod) into
-  one scrolling page with sections — the reason the styling was made compact.
-- The other parameter pages have not had the "panel" treatment the LFO got.
+- Voice, Arp/Seq, FX and Mod are still plain cards; no design for them yet.
+- Whether the separate per-section tabs are still worth keeping now that the
+  Panel tab shows everything.
 - 18 global settings are still unnamed, and the user's own Global layout has not
   been committed as a shared mapping file.

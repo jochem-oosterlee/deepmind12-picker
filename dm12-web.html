@@ -1316,6 +1316,17 @@ const PAGES = [
   ]},
 ];
 
+// Eén tab met alle panelen naast elkaar, in de volgorde van het signaal. De
+// parameterlijst is die van de losse tabs bij elkaar, zodat het logboek en
+// "alles versturen" ook hier weten waar het over gaat.
+PAGES.unshift({
+  id: "panel", name: "Panel", panel: "all",
+  params: ["lfo", "osc", "vcf", "env"]
+    .map(id => PAGES.find(pg => pg.id === id))
+    .filter(Boolean)
+    .reduce((all, pg) => all.concat(pg.params), []),
+});
+
 // ================== verbinding & status ==================
 const led = document.getElementById("led");
 const statusText = document.getElementById("statusText");
@@ -3121,6 +3132,14 @@ function renderParams() {
   // Een pagina kan bovenaan een paneel hebben; wat daarin staat hoeft er
   // daaronder niet nog eens als losse regelaar bij.
   let list = page.params;
+  if (page.panel === "all") {
+    [renderLfo(0, "LFO 1"), renderLfo(7, "LFO 2"),
+     renderOsc1(), renderOsc2(),
+     renderVcf(), renderVca(), renderHpf(),
+     renderEnv(53, "VCA ENV"), renderEnv(62, "VCF ENV"), renderEnv(71, "MOD ENV"),
+    ].forEach(el => wrap.appendChild(el));
+    return;
+  }
   if (page.panel === "osc") {
     wrap.appendChild(renderOsc1());
     wrap.appendChild(renderOsc2());

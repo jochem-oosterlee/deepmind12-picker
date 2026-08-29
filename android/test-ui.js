@@ -538,6 +538,29 @@ setTimeout(() => {
     }
     lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
   }
+  // ---- alles op een tab ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Panel").fire("click");
+    const ap = document.getElementById("paramList");
+    const names = ap.children.map(pn => {
+      const n = collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "?";
+    });
+    console.log("paneeltab:", names.join(" "));
+    const want = "LFO 1 LFO 2 OSC 1 OSC 2 VCF VCA HPF VCA ENV VCF ENV MOD ENV";
+    if (names.join(" ") !== want) {
+      console.error("FOUT: de panelen staan niet in de volgorde van het signaal");
+      failures++;
+    }
+    const lanes = collect(ap, e => String(e.className || "").includes("lfader")).length;
+    console.log("faders op de paneeltab:", lanes);
+    if (lanes < 30) {
+      console.error("FOUT: er ontbreken faders op de paneeltab");
+      failures++;
+    }
+  }
+
   // ---- envelopepanelen ----
   {
     [...document.getElementById("tabs").children]
