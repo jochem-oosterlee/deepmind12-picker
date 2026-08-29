@@ -137,6 +137,15 @@ Then open `http://localhost:8080` on that computer, or
 library only, no installation. The page notices it is being served by the bridge
 and uses it instead of Web MIDI.
 
+The bridge listens on IPv4 **and** IPv6. That is not a nicety: Windows resolves
+`localhost` to `::1` first, and if nothing answers there the browser waits about
+two seconds before trying IPv4 — for every single request. Measured on this
+machine: 2026 ms per request against `localhost`, 4 ms against `127.0.0.1`.
+Listening on both, and keeping the connection open with HTTP/1.1, brought that
+down to about 1 ms. If the app ever feels sluggish again, time a plain
+`/status` request before blaming the WiFi.
+
+
 ## Tests
 
 Three suites, none of which need an emulator or a device.

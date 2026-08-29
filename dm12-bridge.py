@@ -544,8 +544,36 @@ def discover(timeout=2.5):
 #  Webserver
 # ======================================================================
 
+class DualStackServer(ThreadingHTTPServer):
+    """Luistert op IPv4 en IPv6 tegelijk.
+
+    Windows zoekt bij "localhost" eerst ::1 op. Luistert er niets, dan wacht
+    de browser twee seconden voor hij IPv4 probeert — per verzoek. Dat was
+    veruit de traagste schakel tussen een schuif en de synth.
+    """
+    address_family = socket.AF_INET6
+    daemon_threads = True
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except OSError:
+            pass
+        ThreadingHTTPServer.server_bind(self)
+
+
+def make_server(port):
+    try:
+        return DualStackServer(("::", port), Handler)
+    except OSError:
+        return ThreadingHTTPServer(("0.0.0.0", port), Handler)   # zonder IPv6
+
+
 class Handler(BaseHTTPRequestHandler):
     session = None
+    # Verbinding openhouden: anders zet de browser voor elk bericht een nieuwe
+    # TCP-verbinding op, en dat telt op bij een schuif die je heen en weer haalt.
+    protocol_version = "HTTP/1.1"
     discovery = {"running": False, "found": [], "status": ""}
 
     def _json(self, obj, code=200):
@@ -693,7 +721,7 @@ def main():
 
     session = AppleMIDISession(ip)
     Handler.session = session
-    server = ThreadingHTTPServer(("0.0.0.0", http_port), Handler)
+    server = make_server(http_port)
     own = local_ipv4() or "localhost"
 
     print("DeepMind 12 - network bridge")
