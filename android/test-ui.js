@@ -770,26 +770,26 @@ setTimeout(() => {
       console.log("keuzelijst met", pop.children.length, "effecten");
       sent = [];
       box.fire("click");
-      pop.children[21].fire("click");                 // Delay
+      pop.children[13].fire("click");                 // Delay
       const m = sent.filter(x => x[0] === "nrpn" && x[1] === 166).pop();
       const after = labels(document.getElementById("paramList").children[0]);
       console.log("gekozen:", JSON.stringify(m), "-> namen:", after.slice(0, 4).join(", "));
-      if (!m || m[2] !== 21) {
+      if (!m || m[2] !== 13) {
         console.error("FOUT: het effecttype gaat niet naar parameter 166");
         failures++;
       }
-      if (pop.children.length !== 34 || after.indexOf("FACTORL") === -1) {
+      if (pop.children.length !== 36 || after.indexOf("FACTORL") === -1) {
         console.error("FOUT: de namen volgen het gekozen effect niet");
         failures++;
       }
 
       // en als de synth vier andere effecten meldt (nieuw programma), moeten
       // alle vier de slots meegaan
-      // let op: de handleiding nummert de effecten vanaf 1, de parameter vanaf 0
+      // waarden zoals de synth ze nummert, gemeten op het apparaat
       [[166, 1], [179, 13], [192, 26], [205, 29]].forEach(([n, v]) => { paramBytes[n] = v; });
       paramRev++;
       fxCheck = () => {
-        const want = ["AmbVerb", "MidasEQ", "ModDlyRev", "Flanger"];
+        const want = ["HallRev", "Delay", "ChamberRev", "DualPitch"];
         const shown = collect(document.getElementById("paramList"),
           e => String(e.className || "").split(" ").includes("pick"))
           .map(b => {

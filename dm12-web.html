@@ -1235,15 +1235,17 @@ const ETRIG = ["Mono","Re-trigger","Legato","One-shot"];
 const AMODE = ["Up","Down","Up & down","Up inv","Down inv","Up & down inv","Up alt","Down alt",
                "Random","As played","Chord"];
 const ACLK  = ["1/2","3/8","1/3","1/4","3/16","1/6","1/8","3/32","1/12","1/16","1/24","1/32","1/48"];
-// LET OP: deze volgorde is die van de handleiding (hoofdstuk 9.1) en klopt
-// niet met wat de synth stuurt. Gemeten op het apparaat: 10 = Chorus,
-// 20 = AutoPan, 21 = T-RayDelay, 31 = FairComp. Zodra de echte volgorde
-// bekend is hoeft alleen deze lijst om; de parameternamen hangen aan de naam.
-const FXT   = ["TC-DeepVRB","AmbVerb","RoomRev","VintageRev","HallRev","ChamberRev","PlateRev",
-               "RichPltRev","GatedRev","Reverse","ChorusVerb","DelayVerb","FlangVerb","MidasEQ",
-               "Enhancer","FairComp","MulBndDist","RackAmp","EdisonEX1","AutoPan","NoiseGate","Delay",
-               "3TapDelay","4TapDelay","T-RayDelay","DecimDelay","ModDlyRev","Chorus","Chorus-D",
-               "Flanger","Phaser","MoodFilter","DualPitch","RotarySpkr"];
+// De volgorde van de effectlijst is uitgemeten op een DeepMind 12 (firmware
+// 1.1.2): waarde voor waarde gezet en in de editor afgelezen. Hij heeft niets
+// te maken met de volgorde van de Effects Table in de handleiding, begint met
+// een lege stand, en loopt door tot 35 - een effect verder dan het boek kent.
+const FXT   = ["None","HallRev","PlateRev","RichPltRev","AmbVerb","GatedRev",
+               "Reverse","RackAmp","MoodFilter","Phaser","Chorus","Flanger",
+               "ModDlyRev","Delay","3TapDelay","4TapDelay","RotarySpkr",
+               "Chorus-D","Enhancer","EdisonEX1","AutoPan","T-RayDelay",
+               "TC-DeepVRB","FlangVerb","ChorusVerb","DelayVerb","ChamberRev",
+               "RoomRev","VintageRev","DualPitch","MidasEQ","FairComp",
+               "MulBndDist","NoiseGate","DecimDelay","VintagePitch"];
 
 // Hoe de twaalf regelaars van een effect heten hangt af van welk effect er
 // geladen is. Overgenomen uit hoofdstuk 9.3 van de handleiding, in dezelfde
@@ -2592,7 +2594,11 @@ function renderEnv(base, title) {
 
 function renderFx(nr, typeN, p1, gainN) {
   const kind = Math.min(FXT.length - 1, params.get(typeN, 0));
-  const names = FXP[FXT[kind]] || [];
+  const eff = FXT[kind];
+  // Zonder effect valt er niets te regelen; kennen we het effect wel maar zijn
+  // handleiding niet (VintagePitch kwam na 2016), dan maar genummerd.
+  const names = eff === "None" ? []
+              : (FXP[eff] || Array.from({length: 12}, (_, i) => "Param " + (i + 1)));
 
   const cells = [];
   names.forEach((nm, i) => {

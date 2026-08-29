@@ -80,6 +80,29 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### The effect list, measured (it is not the manual's)
+
+The FX type parameters (166, 179, 192, 205) do not index the manual's Effects
+Table, and no regrouping of that table fits. Measured on the instrument by
+setting each value and reading the name back:
+
+```
+ 0 None          9 Phaser      18 Enhancer     27 RoomRev
+ 1 HallRev      10 Chorus      19 EdisonEX1    28 VintageRev
+ 2 PlateRev     11 Flanger     20 AutoPan      29 DualPitch
+ 3 RichPltRev   12 ModDlyRev   21 T-RayDelay   30 MidasEQ
+ 4 AmbVerb      13 Delay       22 TC-DeepVRB   31 FairComp
+ 5 GatedRev     14 3TapDelay   23 FlangVerb    32 MulBndDist
+ 6 Reverse      15 4TapDelay   24 ChorusVerb   33 NoiseGate
+ 7 RackAmp      16 RotarySpkr  25 DelayVerb    34 DecimDelay
+ 8 MoodFilter   17 Chorus-D    26 ChamberRev   35 VintagePitch
+```
+
+Two things the manual does not have: an empty slot at 0, and **VintagePitch at
+35** - a 35th effect that is in no edition of the book we have. Values above 35
+are ignored. Since the parameter tables of chapter 9.3 stop at the effects of
+2016, that one's twelve knobs are numbered rather than named.
+
 ### The effects have no panel on the instrument
 
 There are no knobs for them: the FX menu shows an overview of the four slots
