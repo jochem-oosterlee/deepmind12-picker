@@ -1838,13 +1838,18 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   // kruipt hij tegen de ene of de andere hoek aan. Een bézier zou de hoek
   // afsnijden, vandaar een machtsfunctie die we uittekenen.
   const bend = (x1, y1, x2, y2, c) => {
-    const g = Math.pow(8, (c - 128) / 128);
+    // Een e-macht: hij begint en eindigt op de hoeken, en heeft aan beide
+    // kanten een eindige helling. Een gewone macht staat aan het begin
+    // loodrecht, en dat geeft precies de knik die er niet hoort.
+    const k = ((128 - c) / 128) * 5;
+    const denom = Math.abs(k) < 0.001 ? 0 : 1 - Math.exp(-k);
+    const ease = t => (denom === 0 ? t : (1 - Math.exp(-k * t)) / denom);
     const dx = x2 - x1, dy = y2 - y1;
     let out = "";
-    for (let i = 1; i <= 18; i++) {
-      const t = i / 18;
+    for (let i = 1; i <= 20; i++) {
+      const t = i / 20;
       out += "L" + (x1 + dx * t).toFixed(1) + ","
-                 + (y1 + dy * Math.pow(t, g)).toFixed(1);
+                 + (y1 + dy * ease(t)).toFixed(1);
     }
     return out;
   };
