@@ -71,6 +71,14 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### An LFO rate that follows the clock (measured)
+
+With arp sync on (parameter 4), the panel no longer shows a rate but a note
+value: twenty of them, from four bars down to a sixty-fourth. The parameter
+itself does not change shape — with sync on, turning the rate knob still sends
+the full 0-255 range, so the twenty steps are bands of 256/20 across it. The
+LFO panel snaps the fader to those bands and sends the middle of one.
+
 ## Android app
 
 ```

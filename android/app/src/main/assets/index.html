@@ -1328,11 +1328,11 @@ const SHAPE_NAMES = ["Sine", "Triangle", "Square", "Ramp up", "Ramp down",
 const SYNC_DIVS = ["4", "3", "2", "1", "1/2", "3/8", "1/3", "1/4", "3/16",
                    "1/6", "1/8", "3/32", "1/12", "1/16", "3/64", "1/24",
                    "1/32", "3/128", "1/48", "1/64"];
-// De synth legt die twintig standen in één byte. Verdeeld over het hele
-// bereik (0-255) zoals hieronder, of als 0 t/m 19? Dat eerste past bij een
-// regelaar die ook vrij kan lopen; zet SYNC_SPREAD op false als het apparaat
-// de standen gewoon doornummert. Aan het logboek te zien welke het is: draai
-// in sync de rate op de synth en kijk welke waarde parameter 0 meldt.
+// De synth legt die twintig standen in één byte, verdeeld over het hele
+// bereik: aan het apparaat zelf gemeten, met arp sync aan (parameter 4 = 1)
+// stuurt de rate-knop gewoon 0 t/m 255 door, niet 0 t/m 19. Elke stand is dus
+// een band van 256/20 breed. Nummert een latere firmware ze wel door, dan is
+// dit de knop om om te zetten.
 const SYNC_SPREAD = true;
 const SYNC_BAND = 256 / SYNC_DIVS.length;
 
