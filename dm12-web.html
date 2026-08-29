@@ -298,6 +298,23 @@
   .shapepop button { display:flex; flex-direction:column; align-items:center;
     gap:3px; padding:5px 2px; font-size:9px; line-height:1.1; text-align:center; }
   .shapepop button svg { display:block; }
+  /* OSC-paneel: middenblok met een knoppenkolom ernaast */
+  .oscmid { flex:none; width:300px; max-width:100%; display:flex;
+    flex-direction:column; gap:6px; }
+  .oscrow { display:flex; gap:6px; align-items:flex-start; }
+  .oscbtns { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+  .oscbtns .brow { display:flex; gap:5px; align-items:stretch; }
+  .oscbtns .brow > button { flex:1; min-width:0; padding:7px 3px; font-size:11px;
+    line-height:1.15; }
+  /* het vakje naast Range toont de stand die de knop doorstapt */
+  .vbox { flex:none; min-width:44px; display:flex; align-items:center;
+    justify-content:center; font-size:11px; font-weight:600; color:var(--accent);
+    background:var(--panel2); border:1px solid var(--border); border-radius:5px;
+    font-variant-numeric:tabular-nums; }
+  .wavebtn { flex:1; display:flex; align-items:center; justify-content:center;
+    padding:6px 3px; }
+  .wavebtn svg { display:block; }
+
   /* schakelaars op één rij: scheelt hoogte in het middenblok */
   .btngrid { display:flex; gap:5px; align-items:stretch; margin-top:6px; }
   .btngrid button { flex:1; min-width:0; padding:7px 3px; font-size:11px;
@@ -1127,6 +1144,8 @@ const CS = (cc, l, max) => ({k:"s", cc, l, max: max || 127});
 const CT = (cc, l) => ({k:"t", cc, l, max:1});
 
 const RANGE = ["16'","8'","4'"];
+// wat het OSC 1-paneel zelf al toont
+const OSC1_PANEL = new Set([14, 16, 18, 19, 20, 21, 22, 23, 24, 25, 38]);
 const MODSRC = ["Manual","LFO 1","LFO 2","VCA Env","VCF Env","Mod Env"];
 const MODSEL = ["LFO 1","LFO 2","VCA Env","VCF Env","Mod Env","LFO 1 unipolar","LFO 2 unipolar"];
 const PORTA = ["Normal","Fingered","Fixed rate","Fixed rate fingered","Exponential","Exp. fingered",
@@ -1152,7 +1171,7 @@ const fxSlot = (nr, type, p1, gain) => [
 ];
 
 const PAGES = [
-  {id:"osc", name:"OSC", params:[
+  {id:"osc", name:"OSC", panel:"osc1", params:[
     H("Oscillator 1"),
     E(14,"Range",RANGE), T(18,"Pulse wave"), T(19,"Sawtooth"), T(20,"OSC sync"),
     S(25,"PWM depth"), E(16,"PWM source",MODSRC),
@@ -2464,6 +2483,208 @@ function lfoGlyphEl(shape) {
   return w;
 }
 
+// ================== OSC 1-paneel ==================
+// Dezelfde opzet als het LFO-paneel: de regelaars staan waar ze op het
+// apparaat ook staan, en alles volgt de synth zonder de pagina te herbouwen.
+
+/** Keuzevakje met een uitklapper eronder, zoals het paneel het toont. */
+function comboBox(label, options, num, onPick) {
+  const box = document.createElement("div");
+  box.className = "combo";
+  const cl = document.createElement("div");
+  cl.className = "clab";
+  cl.textContent = label;
+  const cv = document.createElement("div");
+  cv.className = "cval";
+  const pop = document.createElement("div");
+  pop.className = "shapepop";
+  pop.style.display = "none";
+  pop.style.gridTemplateColumns = "repeat(2,1fr)";
+
+  const show = () => {
+    const cur = Math.min(options.length - 1, params.get(num, 0));
+    cv.textContent = options[cur];
+    Array.from(pop.children).forEach((b, i) => b.classList.toggle("on", i === cur));
+  };
+
+  let closer = null;
+  const close = () => {
+    pop.style.display = "none";
+    popOpen = false;
+    if (closer) { document.removeEventListener("click", closer); closer = null; }
+  };
+  const open = () => {
+    pop.style.display = "grid";
+    popOpen = true;
+    closer = e => { if (!box.contains || !box.contains(e.target)) close(); };
+    document.addEventListener("click", closer);
+  };
+
+  options.forEach((nm, i) => {
+    const b = document.createElement("button");
+    b.textContent = nm;
+    b.addEventListener("click", e => {
+      if (e.stopPropagation) e.stopPropagation();
+      onPick(i);
+      show();
+      close();
+    });
+    pop.appendChild(b);
+  });
+  box.addEventListener("click", e => {
+    if (e.stopPropagation) e.stopPropagation();
+    if (pop.style.display === "none") open(); else close();
+  });
+
+  box.appendChild(cl); box.appendChild(cv); box.appendChild(pop);
+  show();
+  params.subscribe(num, show);
+  return box;
+}
+
+/** Knop die door een lijstje standen stapt, met het vakje ernaast. */
+function stepBox(label, options, num, onPick) {
+  const row = document.createElement("div");
+  row.className = "brow";
+  const b = document.createElement("button");
+  b.textContent = label;
+  const v = document.createElement("div");
+  v.className = "vbox";
+  const show = () => {
+    v.textContent = options[Math.min(options.length - 1, params.get(num, 0))];
+  };
+  b.addEventListener("click", () => {
+    onPick((params.get(num, 0) + 1) % options.length);
+    show();
+  });
+  show();
+  params.subscribe(num, show);
+  row.appendChild(b); row.appendChild(v);
+  return row;
+}
+
+function renderOsc1() {
+  const P = n => ({k: "s", n: n, max: 255});
+  const send = (n, v) => sendParam(P(n), v);
+
+  const box = document.createElement("div");
+  box.className = "lfo";
+  const bar = document.createElement("div");
+  bar.className = "titlebar";
+  bar.textContent = "OSC 1";
+  box.appendChild(bar);
+
+  const body = document.createElement("div");
+  body.className = "lfobody";
+  box.appendChild(body);
+
+  // ---- de twee lange faders aan weerszijden ----
+  const OUTER = 168, INNER = 76;
+  const lane = (num, label, height, col) => {
+    const f = longFader(label, pval(P(num)), 255, height,
+      v => doSend(P(num), v), v => send(num, v));
+    col.appendChild(f.box);
+    params.subscribe(num, v => f.fromSynth(v));
+    return f;
+  };
+
+  const left = document.createElement("div");
+  left.className = "vfgroup";
+  body.appendChild(left);
+  lane(21, "Pitch mod", OUTER, left);
+
+  const mid = document.createElement("div");
+  mid.className = "oscmid";
+  body.appendChild(mid);
+
+  const right = document.createElement("div");
+  right.className = "vfgroup";
+  body.appendChild(right);
+  lane(25, "PWM", OUTER, right);
+
+  // ---- middenblok: de bron bovenaan, daaronder de twee kleine faders ----
+  mid.appendChild(comboBox("P.mod source", MODSEL, 22, i => send(22, i)));
+
+  const row = document.createElement("div");
+  row.className = "oscrow";
+  mid.appendChild(row);
+
+  const small = document.createElement("div");
+  small.className = "vfgroup";
+  row.appendChild(small);
+  lane(23, "AT > pitch", INNER, small);
+  lane(24, "MW > pitch", INNER, small);
+
+  // ---- knoppenkolom ----
+  const btns = document.createElement("div");
+  btns.className = "oscbtns";
+  row.appendChild(btns);
+
+  btns.appendChild(stepBox("Range", RANGE, 14, i => send(14, i)));
+
+  const toggle = (num, label, glyph) => {
+    const b = document.createElement("button");
+    if (glyph === undefined) b.textContent = label;
+    else b.className = "wavebtn";
+    b.title = label;
+    const show = () => {
+      const on = pval(P(num)) > 0;
+      b.classList.toggle("on", on);
+      if (glyph !== undefined) {
+        b.innerHTML = lfoGlyph(glyph, on ? "var(--accent)" : "var(--muted)");
+      }
+    };
+    b.addEventListener("click", () => { send(num, pval(P(num)) > 0 ? 0 : 1); show(); });
+    show();
+    params.subscribe(num, show);
+    return b;
+  };
+
+  const syncRow = document.createElement("div");
+  syncRow.className = "brow";
+  syncRow.appendChild(toggle(20, "Sync"));
+  btns.appendChild(syncRow);
+
+  const waves = document.createElement("div");
+  waves.className = "brow";
+  waves.appendChild(toggle(19, "Sawtooth", 3));
+  waves.appendChild(toggle(18, "Pulse", 2));
+  btns.appendChild(waves);
+
+  btns.appendChild(comboBox("PWM source", MODSRC, 16, i => send(16, i)));
+
+  // ---- P.mod mode: twee standen, met lampjes zoals op het paneel ----
+  const modeRow = document.createElement("div");
+  modeRow.className = "brow";
+  const modeBtn = document.createElement("button");
+  modeBtn.textContent = "P.mod mode";
+  modeBtn.title = "whether the pitch modulation moves both oscillators or only OSC 1";
+  modeBtn.addEventListener("click", () => send(38, pval(P(38)) > 0 ? 0 : 1));
+  const lamps = document.createElement("div");
+  lamps.className = "lamps";
+  const made = ["OSC 1+2", "OSC 1"].map(nm => {
+    const l = document.createElement("div");
+    l.className = "lamp";
+    const dot = document.createElement("i");
+    const txt = document.createElement("span");
+    txt.textContent = nm;
+    l.appendChild(dot); l.appendChild(txt);
+    lamps.appendChild(l);
+    return l;
+  });
+  const showMode = () => {
+    const only = pval(P(38)) > 0;
+    made[0].classList.toggle("on", !only);
+    made[1].classList.toggle("on", only);
+  };
+  showMode();
+  params.subscribe(38, showMode);
+  modeRow.appendChild(modeBtn); modeRow.appendChild(lamps);
+  btns.appendChild(modeRow);
+
+  return box;
+}
+
 /**
  * Eén parameter als draaiknop, schakelaar of keuzelijst, voor een skin die
  * filmstrips aanbiedt. Compacter dan een kaart per parameter, en het is wat een
@@ -2542,13 +2763,21 @@ function renderParams() {
     return;
   }
 
+  // Een pagina kan bovenaan een paneel hebben; wat daarin staat hoeft er
+  // daaronder niet nog eens als losse regelaar bij.
+  let list = page.params;
+  if (page.panel === "osc1") {
+    wrap.appendChild(renderOsc1());
+    list = page.params.filter(p => !(OSC1_PANEL.has(p.n) || p.l === "Oscillator 1"));
+  }
+
   // Biedt de skin een knop-filmstrip aan? Dan een raster met draaiknoppen,
   // wat een stuk compacter is dan een kaart per parameter.
   const knob = skinStrip("knob");
   if (knob) {
     const sw = skinStrip("switch2");
     let grid = null;
-    for (const p of page.params) {
+    for (const p of list) {
       if (p.k === "h") {
         const h = document.createElement("div");
         h.className = "phead";
@@ -2567,7 +2796,7 @@ function renderParams() {
     return;
   }
 
-  for (const p of page.params) {
+  for (const p of list) {
     if (p.k === "h") {
       const h = document.createElement("div");
       h.className = "phead"; h.textContent = p.l; wrap.appendChild(h);

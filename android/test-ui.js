@@ -413,6 +413,76 @@ setTimeout(() => {
     return out;
   };
 
+  // ---- OSC 1-paneel ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "OSC").fire("click");
+    const op = document.getElementById("paramList");
+    const panel = op.children[0];
+    const title = panel && collect(panel, e => String(e.className || "") === "titlebar")[0];
+    const lanes = collect(panel, e => String(e.className || "").includes("lfader"));
+    const combos = collect(panel, e => String(e.className || "") === "combo");
+    console.log("OSC-paneel:", title ? title.textContent : "geen",
+                "| faders:", lanes.length, "| keuzevakken:", combos.length);
+    if (!title || title.textContent !== "OSC 1" || lanes.length !== 4
+        || combos.length !== 2) {
+      console.error("FOUT: OSC 1-paneel niet volledig opgebouwd");
+      failures++;
+    } else {
+      // Range stapt door 16', 8', 4' en toont de stand ernaast
+      const vbox = collect(panel, e => String(e.className || "") === "vbox")[0];
+      const rangeBtn = collect(panel,
+        e => e.tagName === "BUTTON" && e.textContent === "Range")[0];
+      sent = [];
+      rangeBtn.fire("click");
+      const rangeMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 14).pop();
+      console.log("range ->", JSON.stringify(rangeMsg), "toont", vbox.textContent);
+      if (!rangeMsg || ["16'", "8'", "4'"][rangeMsg[2]] !== vbox.textContent) {
+        console.error("FOUT: Range stuurt niet de stand die ernaast staat");
+        failures++;
+      }
+
+      // de twee golfvormknoppen zijn schakelaars op 19 en 18
+      const waves = collect(panel, e => String(e.className || "").includes("wavebtn"));
+      sent = [];
+      waves.forEach(w => w.fire("click"));
+      const nums = sent.filter(x => x[0] === "nrpn").map(x => x[1]);
+      console.log("golfvormknoppen sturen naar", nums.join(" en "));
+      if (waves.length !== 2 || nums.indexOf(19) === -1 || nums.indexOf(18) === -1) {
+        console.error("FOUT: sawtooth en pulse schakelen niet 19 en 18");
+        failures++;
+      }
+
+      // P.mod mode: knop stuurt 38, en het juiste lampje brandt
+      const modeBtn = collect(panel,
+        e => e.tagName === "BUTTON" && e.textContent === "P.mod mode")[0];
+      sent = [];
+      modeBtn.fire("click");
+      const modeMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 38).pop();
+      const lit = collect(panel, e => String(e.className || "").split(" ").includes("lamp")
+                                   && e.classList.contains("on"));
+      console.log("p.mod mode ->", JSON.stringify(modeMsg),
+                  "| brandend lampje:", lit.length);
+      if (!modeMsg || lit.length !== 1) {
+        console.error("FOUT: P.mod mode schakelt niet netjes tussen twee standen");
+        failures++;
+      }
+
+      // wat in het paneel staat, hoort er niet nog eens onder te staan
+      // ("PWM depth" en de kop "Oscillator 1" komen alleen bij OSC 1 voor)
+      const doubles = collect(op, e => e !== panel && !panel.children.includes(e)
+        && ["PWM depth", "Oscillator 1", "Pitch mod range"]
+             .some(t => String(e.textContent) === t));
+      console.log("dubbel getoond:", doubles.length,
+                  doubles.map(e => e.textContent).join(", "));
+      if (doubles.length) {
+        console.error("FOUT: paneelparameters staan er ook nog los onder");
+        failures++;
+      }
+    }
+    lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
+  }
+
   const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
   const combos = collect(plist, e => String(e.className || "") === "combo");
   console.log("LFO-panelen:", plist.children.length, "| faderbanen:", lanes.length,
