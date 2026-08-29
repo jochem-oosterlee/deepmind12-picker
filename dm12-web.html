@@ -238,7 +238,7 @@
   .trig .lbl { color:var(--label); font-size:8px; letter-spacing:1px; }
 
   /* de golfvorm in een verzonken vak, over de volle breedte */
-  .wavebox { height:52px; display:flex; align-items:center; justify-content:center;
+  .wavebox { height:48px; display:flex; align-items:center; justify-content:center;
     overflow:hidden; margin-top:8px; background:var(--well);
     border:1px solid var(--divider); border-radius:8px; }
 
@@ -323,14 +323,18 @@
 
   /* rij faders, en het raster met de kleine regelaars eronder */
   .fads { display:flex; gap:22px; justify-content:center; margin-top:10px; }
+  /* Vaste hoogte voor de onderste rij, zodat panelen met een draaiknop en
+     panelen met een schakelaar even hoog uitkomen. */
   .cells { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 6px;
-    justify-items:center; align-items:start; }
+    justify-items:center; align-items:start; min-height:64px; }
   .cell { display:flex; flex-direction:column; align-items:center; gap:3px;
     max-width:100%; }
   .cell.wide { grid-column:1 / -1; width:60%; }
   .cell .lbl { color:var(--label); font-size:8px; letter-spacing:1px;
-    text-align:center; line-height:1.2; min-height:2.4em; display:flex;
-    align-items:flex-end; justify-content:center; }
+    text-align:center; line-height:1.2; }
+  /* alleen in het raster: daar staan ze naast elkaar en moeten ze uitlijnen */
+  .cells .lbl { min-height:2.4em; display:flex; align-items:flex-end;
+    justify-content:center; }
   .cell .num { color:var(--label); font-weight:700; font-size:11px; }
 
   /* keuze uit een handvol standen, naast elkaar */
@@ -2370,12 +2374,12 @@ function renderLfo(base, title) {
 
   const synced = get(4) > 0;
   const spreadOn = get(5) > PHASE_MONO;
-  const H = 84;
 
   const arp = cell("ARP SYNC");
   arp.appendChild(swPill(base + 4));
   const key = cell("KEY SYNC");
   key.appendChild(swPill(base + 3));
+  const H = FADER_SHORT;
 
   // Poly, mono of een faseverschil: dezelfde parameter, drie standen.
   const phase = cell("PHASE");
@@ -2395,7 +2399,7 @@ function renderLfo(base, title) {
        toRaw: degToRaw, toShown: rawToDeg, fmt: v => v + "\u00B0",
      }),
      panelFader(base + 1, "DELAY", H, {after: draw})],
-    [], {top: waveBox, side: [arp, key, phase]});
+    [arp, key, phase], {top: waveBox, cols: 3});
   box.className += " lfo";
 
   // Van soort veranderen vraagt een andere opmaak: de fase-fader wordt actief
@@ -2501,7 +2505,7 @@ function renderEnv(base, title) {
   trig.appendChild(tl);
   trig.appendChild(pickBox(base + 4, TRIG, {cols: 2}));
 
-  const H = 84;
+  const H = FADER_SHORT;
   const curves = [["A CURVE", 5], ["D CURVE", 6], ["S CURVE", 7], ["R CURVE", 8]]
     .map(([l, off]) => {
       const c = cell(l);
@@ -2570,7 +2574,7 @@ let globalWatchers = [];
 // hoort bij de high-pass, waar hij op het paneel ook staat.
 
 function renderVca() {
-  const H = 96;
+  const H = FADER_H;
 
   // VCA-MODE kwam in firmware 1.1.0 en staat niet in de handleiding van 2016:
   // "Ballsy" is de oude karakteristiek van voor 1.0.5, "Transparent" de nieuwe.
@@ -2580,21 +2584,25 @@ function renderVca() {
   mode.className += " auto";
   mode.title = "VCA mode: transparent, or the older and louder ballsy";
 
-  return panelBox(300, "VCA", [mode],
+  const modeCell = cell("VCA MODE");
+  modeCell.appendChild(mode);
+
+  return panelBox(300, "VCA", [],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
      panelFader(82, "VEL > SENS", H),
      panelFader(83, "PAN SPREAD", H, {fmt: v => fmt({k: "b"}, v)})],
-    []);
+    [modeCell], {cols: 1});
 }
 
 function renderHpf() {
   const boost = cell("BASS BOOST");
   boost.appendChild(swPill(52));
-  return panelBox(120, "HPF", [], [panelFader(40, "FREQ", 96)], [boost], {cols: 1});
+  return panelBox(120, "HPF", [], [panelFader(40, "FREQ", FADER_H)], [boost],
+                  {cols: 1});
 }
 
 function renderVcf() {
-  const H = 96;
+  const H = FADER_H;
 
   // in de kop: twee of vier polen
   const poles = segRow(51, [{l: "2-POLE", v: 1}, {l: "4-POLE", v: 0}]);
@@ -2991,7 +2999,13 @@ function panelBox(width, title, headRight, faders, cells, opts) {
   return box;
 }
 
-const FADER_H = 104;
+// Alle panelen hebben dezelfde opbouw: kop, eventueel een tekening, een rij
+// faders, een streep, en daaronder een rij kleine regelaars. Panelen met een
+// tekening hebben kortere faders, precies zoveel dat de streep overal op
+// dezelfde hoogte ligt.
+const GRAPH_H = 48;         // hoogte van het tekenvak
+const FADER_H = 138;        // fader in een paneel zonder tekening
+const FADER_SHORT = 82;     // en met
 
 function renderOsc1() {
   const range = cell("RANGE");

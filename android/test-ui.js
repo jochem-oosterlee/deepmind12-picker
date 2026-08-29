@@ -755,10 +755,10 @@ setTimeout(() => {
       {
         const css = require("fs").readFileSync(process.argv[2], "utf8").split("</style>")[0];
         const rule = (css.match(/\.vcap \{[^}]*\}/) || [""])[0];
-        const cellRule = (css.match(/\.cell \.lbl \{[^}]*\}/) || [""])[0];
+        const gridRule = (css.match(/\.cells \.lbl \{[^}]*\}/) || [""])[0];
         console.log("labelruimte vast:", /min-height/.test(rule) ? "fader ja" : "fader NEE",
-                    "|", /min-height/.test(cellRule) ? "cel ja" : "cel NEE");
-        if (!/min-height/.test(rule) || !/min-height/.test(cellRule)) {
+                    "|", /min-height/.test(gridRule) ? "cel ja" : "cel NEE");
+        if (!/min-height/.test(rule) || !/min-height/.test(gridRule)) {
           console.error("FOUT: zonder vaste labelruimte lijnen de faders niet uit");
           failures++;
         }
