@@ -586,6 +586,17 @@ setTimeout(() => {
       console.error("FOUT: de voice-panelen staan er niet zoals ontworpen");
       failures++;
     } else {
+      // alles moet binnen het paneel passen: breedte tegen de inhoud
+      {
+        const w = parseInt(panels[1].style.width, 10);
+        const fads = collect(panels[1], e => String(e.className || "") === "vf").length;
+        console.log("tune-paneel:", w + "px voor", fads, "faders");
+        if (!(w >= 400)) {
+          console.error("FOUT: het tune-paneel is te smal voor zeven faders");
+          failures++;
+        }
+      }
+
       // transpose telt van -48 tot +48, met 128 in het midden
       const box = collect(panels[1], e => String(e.className || "") === "vf")
         .find(b => caps(b)[0] === "TRANS");

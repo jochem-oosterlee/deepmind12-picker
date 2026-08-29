@@ -241,7 +241,10 @@
   .routes button svg { display:block; }
 
   /* paneel met twee helften, gescheiden door een streep */
-  .halves { display:flex; gap:10px; align-items:stretch; margin-top:10px; }
+  .halves { display:flex; gap:14px; align-items:stretch; margin-top:10px;
+    justify-content:center; }
+  /* binnen een helft staan de faders wat dichter op elkaar */
+  .fgroup .pfads { gap:12px; }
   .vrule { width:1px; background:var(--divider); flex:none; }
   .fgroup { display:flex; flex-direction:column; gap:4px; }
   .gtitle { text-align:center; font-size:8px; letter-spacing:1px; color:var(--muted); }
@@ -2095,7 +2098,7 @@ function renderTune() {
 
   const box = document.createElement("div");
   box.className = "pnl";
-  box.style.width = "340px";
+  box.style.width = "420px";      // maat uit het ontwerp; zeven faders passen
 
   const head = document.createElement("div");
   head.className = "head";
