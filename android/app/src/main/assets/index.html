@@ -241,7 +241,7 @@
   /* faders links, schakelaars in een kolom ernaast */
   .prow { display:grid; grid-template-columns:1fr auto; gap:12px;
     margin-top:10px; align-items:center; }
-  .pfads { display:flex; gap:16px; justify-content:center; }
+  .pfads { display:flex; gap:18px; justify-content:center; }
   .pside { display:flex; flex-direction:column; gap:9px; align-items:center; }
   /* het woord onder een schakelaar */
   .word { font-size:9px; color:var(--muted); }
@@ -251,7 +251,7 @@
   /* binnenste faders staan naast het middenblok, onder de golfvorm */
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
-  .vf { display:flex; flex-direction:column; align-items:center; gap:3px; width:40px; }
+  .vf { display:flex; flex-direction:column; align-items:center; gap:4px; }
   /* de waarde staat onder de fader, zonder kader */
   .vnum { font-size:12px; color:var(--label); font-weight:700; text-align:center;
     font-variant-numeric:tabular-nums; }
@@ -334,6 +334,9 @@
   .seg > span { flex:1; text-align:center; color:var(--muted); font-size:10px;
     padding:1px 4px; border-radius:3px; cursor:pointer; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis; }
+  /* in de kop is er ruimte genoeg: daar krijgt elk woord zijn eigen breedte */
+  .seg.auto { width:auto; }
+  .seg.auto > span { flex:0 0 auto; padding:1px 9px; overflow:visible; }
   .seg > span.on { background:var(--accent); color:var(--well); font-weight:700; }
 
   /* keuze uit een lange lijst: een vakje dat uitklapt */
@@ -1580,8 +1583,9 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   const snap = opts && opts.snap, lo = (opts && opts.min) || 0, span = max - lo;
   const fmt = (opts && opts.fmt) || (v => v);
   const cap = skinStrip("fadercap");
-  const capW = cap ? Math.round(cap.w * cap.scale) : 26;
-  const capH = cap ? Math.round(cap.h * cap.scale) : 14;
+  // maten uit het ontwerp; met een skin bepaalt de afbeelding ze
+  const capW = cap ? Math.round(cap.w * cap.scale) : 20;
+  const capH = cap ? Math.round(cap.h * cap.scale) : 11;
 
   const box = document.createElement("div");
   box.className = "vf";
@@ -1609,9 +1613,8 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
     knobEl.style.backgroundImage = cap.img;
   } else {
     knobEl.style.background =
-      "linear-gradient(180deg,#5b5852,#26241f 62%,#3d3a35)";
-    knobEl.style.borderRadius = "3px";
-    knobEl.style.boxShadow = "0 1px 3px rgba(0,0,0,.45)";
+      "linear-gradient(var(--cap-hi),var(--cap-lo))";
+    knobEl.style.borderRadius = "2px";
   }
   lane.appendChild(slot);
   lane.appendChild(ticks);
@@ -1810,10 +1813,11 @@ function renderLfo(base, title) {
  * Analog thru gaat als control change over de lijn en komt niet terug van de
  * synth, dus deze hangt niet aan de waardenopslag.
  */
-function ccSeg(cc, options) {
+function ccSeg(cc, options, dflt) {
   const row = document.createElement("div");
   row.className = "seg";
   const p = {k: "t", cc: cc, max: 1};
+  if (dflt !== undefined && vals[pkey(p)] === undefined) vals[pkey(p)] = dflt;
   const spans = options.map(o => {
     const sp = document.createElement("span");
     sp.textContent = o.l;
@@ -1838,8 +1842,8 @@ function renderVca() {
 
   // TRANSPARENT/RELAY staat in het ontwerp maar niet in de handleiding; het
   // enige wat erop lijkt is de analoge doorlus (CC 113).
-  const thru = ccSeg(113, [{l: "TRANSPARENT", v: 1}, {l: "RELAY", v: 0}]);
-  thru.style.width = "150px";
+  const thru = ccSeg(113, [{l: "TRANSPARENT", v: 1}, {l: "RELAY", v: 0}], 1);
+  thru.className += " auto";
 
   return panelBox(380, "VCA / HPF", [thru],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
@@ -1853,7 +1857,7 @@ function renderVcf() {
 
   // in de kop: twee of vier polen
   const poles = segRow(51, [{l: "2-POLE", v: 1}, {l: "4-POLE", v: 0}]);
-  poles.style.width = "120px";
+  poles.className += " auto";
 
   const lfoSel = cell("LFO SELECT");
   const sel = segRow(46, [{l: "LFO 1", v: 0}, {l: "LFO 2", v: 1}]);
