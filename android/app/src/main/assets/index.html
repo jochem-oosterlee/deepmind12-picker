@@ -306,9 +306,12 @@
   .pnl { display:inline-block; vertical-align:top; box-sizing:border-box;
     background:var(--panel); border:1px solid var(--border); border-radius:14px;
     padding:10px; margin:0 10px 10px 0; box-shadow:var(--shadow); }
+  /* De kop is overal even hoog, of er nu alleen een naam in staat of ook een
+     knop, een keuzevak of een balk. */
   .pnl .head { display:flex; align-items:center; justify-content:space-between;
-    gap:8px; background:var(--panel2); border:1px solid var(--border-soft);
-    border-radius:9px; padding:4px 6px 4px 10px; }
+    gap:8px; height:30px; background:var(--panel2);
+    border:1px solid var(--border-soft); border-radius:9px;
+    padding:0 6px 0 10px; }
   .pnl .head .pick { display:flex; align-items:center; gap:6px; padding:3px 8px; }
   .pnl .head .name { color:var(--text); font-weight:700; letter-spacing:2px;
     font-size:13px; }

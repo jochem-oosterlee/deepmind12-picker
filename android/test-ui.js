@@ -756,6 +756,11 @@ setTimeout(() => {
         const css = require("fs").readFileSync(process.argv[2], "utf8").split("</style>")[0];
         const rule = (css.match(/\.vcap \{[^}]*\}/) || [""])[0];
         const gridRule = (css.match(/\.cells \.lbl \{[^}]*\}/) || [""])[0];
+        const headRule = (css.match(/\.pnl \.head \{[^}]*\}/) || [""])[0];
+        if (!/height:\s*\d+px/.test(headRule)) {
+          console.error("FOUT: zonder vaste hoogte lopen de titelbalken uiteen");
+          failures++;
+        }
         console.log("labelruimte vast:", /min-height/.test(rule) ? "fader ja" : "fader NEE",
                     "|", /min-height/.test(gridRule) ? "cel ja" : "cel NEE");
         if (!/min-height/.test(rule) || !/min-height/.test(gridRule)) {
