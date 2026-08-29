@@ -63,6 +63,16 @@ while it runs.
   (`shownParams`). A page rebuild during typing or dragging is a bug, and the
   test checks for it.
 - **Tabs live in the URL hash**, so F5 stays where you were.
+- **The look comes from a design.** `design/synth-oscillator-interface-ontwerp/`
+  holds the handoff bundle from Claude Design that the panel style was built
+  from — colours, sizes and the shape of every control are in
+  `OSC Layouts.dc.html`. Read it before inventing a new control; there is
+  probably already a class for it. The building blocks live in the CSS as
+  `.pnl` (frame plus head), `.fads` (row of faders), `.cells`/`.cell` (grid
+  below the rule), `.seg` (a handful of settings side by side, `.amber` for the
+  second accent), `.pick` (long list), `.dial`, `.sw` and `.hbtn`. Themes are
+  token sets: the design is the default, `light` and `dark` redefine the same
+  names.
 - **Skin.** `local-assets/` holds Arturia Jun-6 V bitmaps and `skin.css`; it is
   gitignored on purpose (not ours to publish), so every layout must also look
   right without it. Hence the two test runs. Buttons do not get an LED.

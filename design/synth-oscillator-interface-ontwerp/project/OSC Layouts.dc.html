@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+body{margin:0;background:#1e1b18;font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;}
+a{color:#f08050;} a:hover{color:#ffa07a;}
+</style>
+</helmet>
+<section style="display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start;padding:48px;">
+
+  <div id="5a" style="position:relative;display:flex;gap:16px;align-items:flex-start;">
+    <div style="position:absolute;top:-26px;left:0;color:#a99f8c;font-size:12px;letter-spacing:1px;">5a · compact: label boven, waarde onder, geen kaders</div>
+
+    <div style="width:300px;background:#37322c;border:1px solid #6a635a;border-radius:14px;padding:10px;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#2b2724;border:1px solid #5a534b;border-radius:9px;padding:4px 10px;">
+        <span style="color:#e6ddc9;font-weight:700;letter-spacing:2px;font-size:13px;">OSC 1</span>
+        <span style="display:flex;gap:5px;">
+          <span style="width:36px;height:22px;border:1.5px solid #ee7a4e;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#2b2724;"><svg width="20" height="11" viewBox="0 0 26 14"><polyline points="1,13 12,1 12,13 24,1 24,13" fill="none" stroke="#ee7a4e" stroke-width="2"></polyline></svg></span>
+          <span style="width:36px;height:22px;border:1.5px solid #ee7a4e;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#2b2724;"><svg width="20" height="11" viewBox="0 0 26 14"><polyline points="1,13 1,1 8,1 8,13 14,13 14,1 21,1 21,13" fill="none" stroke="#ee7a4e" stroke-width="2"></polyline></svg></span>
+        </span>
+      </div>
+      <div style="display:flex;gap:22px;justify-content:center;margin-top:10px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;text-align:center;">PITCH MOD</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:34%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">163</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PWM</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:52%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">115</div>
+        </div>
+      </div>
+      <div style="height:1px;background:#4a443d;margin:10px 0;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 6px;justify-items:center;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">RANGE</div>
+          <div style="display:flex;background:#241f1c;border-radius:5px;padding:2px;gap:2px;width:100%;box-sizing:border-box;">
+            <span style="flex:1;text-align:center;color:#8d8474;font-size:10px;padding:1px 0;border-radius:3px;">16'</span>
+            <span style="flex:1;text-align:center;color:#241f1c;font-size:10px;font-weight:700;padding:1px 0;border-radius:3px;background:#ee7a4e;">8'</span>
+            <span style="flex:1;text-align:center;color:#8d8474;font-size:10px;padding:1px 0;border-radius:3px;">4'</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">P.MOD SRC</div>
+          <div style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:2px 8px;">LFO 1 ▾</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PWM SRC</div>
+          <div style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:2px 8px;">Manual ▾</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">AFT &gt; P.MOD</div>
+          <div style="width:24px;height:24px;border-radius:50%;background:#241f1c;border:1px solid #6a635a;position:relative;"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ddd4c2;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:11px;">0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">WHEEL &gt; P.MOD</div>
+          <div style="width:24px;height:24px;border-radius:50%;background:#241f1c;border:1px solid #6a635a;position:relative;"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ddd4c2;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:11px;">0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">KEY-DN-RESET</div>
+          <div style="width:30px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#8d8474;"></div></div>
+          <div style="color:#8d8474;font-size:10px;">Off</div>
+        </div>
+        <div style="grid-column:1 / -1;display:flex;flex-direction:column;align-items:center;gap:3px;width:60%;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">P.MOD MODE</div>
+          <div style="display:flex;background:#241f1c;border-radius:5px;padding:2px;gap:2px;width:100%;box-sizing:border-box;">
+            <span style="flex:1;text-align:center;color:#241f1c;font-size:10px;font-weight:700;padding:1px 4px;border-radius:3px;background:#f0a030;">OSC 1</span>
+            <span style="flex:1;text-align:center;color:#8d8474;font-size:10px;padding:1px 4px;border-radius:3px;">OSC 1+2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:340px;background:#37322c;border:1px solid #6a635a;border-radius:14px;padding:10px;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#2b2724;border:1px solid #5a534b;border-radius:9px;padding:4px 10px;">
+        <span style="color:#e6ddc9;font-weight:700;letter-spacing:2px;font-size:13px;">OSC 2</span>
+        <span style="height:22px;border:1.5px solid #ee7a4e;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#2b2724;color:#ee7a4e;font-size:9px;letter-spacing:2px;font-weight:700;padding:0 10px;">SYNC</span>
+      </div>
+      <div style="display:flex;gap:20px;justify-content:center;margin-top:10px;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PITCH MOD</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:88%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">TONE MOD</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:60%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">64</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PITCH</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:46%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">LEVEL</div>
+          <div style="width:5px;height:104px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:16%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:12px;">200</div>
+        </div>
+      </div>
+      <div style="height:1px;background:#4a443d;margin:10px 0;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 6px;justify-items:center;align-items:start;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">RANGE</div>
+          <div style="display:flex;background:#241f1c;border-radius:5px;padding:2px;gap:2px;width:100%;box-sizing:border-box;">
+            <span style="flex:1;text-align:center;color:#8d8474;font-size:10px;padding:1px 0;border-radius:3px;">16'</span>
+            <span style="flex:1;text-align:center;color:#241f1c;font-size:10px;font-weight:700;padding:1px 0;border-radius:3px;background:#ee7a4e;">8'</span>
+            <span style="flex:1;text-align:center;color:#8d8474;font-size:10px;padding:1px 0;border-radius:3px;">4'</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">P.MOD SRC</div>
+          <div style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:2px 8px;">LFO 1 ▾</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">T.MOD SRC</div>
+          <div style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:2px 8px;">LFO 2 ▾</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">AFT &gt; P.MOD</div>
+          <div style="width:24px;height:24px;border-radius:50%;background:#241f1c;border:1px solid #6a635a;position:relative;"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ddd4c2;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:11px;">0</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="color:#f08050;font-size:8px;letter-spacing:1px;">WHEEL &gt; P.MOD</div>
+          <div style="width:24px;height:24px;border-radius:50%;background:#241f1c;border:1px solid #6a635a;position:relative;"><div style="position:absolute;left:50%;top:2px;width:2px;height:8px;background:#ddd4c2;"></div></div>
+          <div style="color:#f08050;font-weight:700;font-size:11px;">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+</body>
+</html>

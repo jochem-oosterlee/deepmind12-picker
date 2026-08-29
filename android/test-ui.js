@@ -398,10 +398,6 @@ setTimeout(() => {
     }
   }
 
-  // LFO-paneel: vormmenu, lange faders en het knoppenblok
-  const lfoTab = [...document.getElementById("tabs").children]
-    .find(t => t.textContent === "LFO");
-  lfoTab.fire("click");
   const plist = document.getElementById("paramList");
 
   const collect = (root, pred) => {
@@ -413,83 +409,96 @@ setTimeout(() => {
     return out;
   };
 
-  // ---- OSC 1-paneel ----
+  const lfoTab = [...document.getElementById("tabs").children]
+    .find(t => t.textContent === "LFO");
+
+  // ---- oscillatorpanelen, volgens het ontwerp ----
   {
     [...document.getElementById("tabs").children]
       .find(t => t.textContent === "OSC").fire("click");
     const op = document.getElementById("paramList");
-    const panel = op.children[0];
-    const title = panel && collect(panel, e => String(e.className || "") === "titlebar")[0];
-    const lanes = collect(panel, e => String(e.className || "").includes("lfader"));
-    const combos = collect(panel, e => String(e.className || "") === "combo");
-    console.log("OSC-paneel:", title ? title.textContent : "geen",
-                "| faders:", lanes.length, "| keuzevakken:", combos.length);
-    if (!title || title.textContent !== "OSC 1" || lanes.length !== 4
-        || combos.length !== 2) {
-      console.error("FOUT: OSC 1-paneel niet volledig opgebouwd");
+    const panels = op.children.filter(e => String(e.className || "") === "pnl");
+    const nameOf = pn => {
+      const n = collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "geen";
+    };
+    const count = (pn, cls) => collect(pn,
+      e => String(e.className || "").split(" ").includes(cls)).length;
+
+    console.log("panelen:", panels.map(nameOf).join(" + "));
+    if (panels.length !== 2 || nameOf(panels[0]) !== "OSC 1"
+        || nameOf(panels[1]) !== "OSC 2") {
+      console.error("FOUT: de twee oscillatorpanelen staan er niet");
       failures++;
     } else {
-      // Range stapt door 16', 8', 4' en toont de stand ernaast
-      const vbox = collect(panel, e => String(e.className || "") === "vbox")[0];
-      const rangeBtn = collect(panel,
-        e => e.tagName === "BUTTON" && e.textContent === "Range")[0];
-      sent = [];
-      rangeBtn.fire("click");
-      const rangeMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 14).pop();
-      console.log("range ->", JSON.stringify(rangeMsg), "toont", vbox.textContent);
-      if (!rangeMsg || ["16'", "8'", "4'"][rangeMsg[2]] !== vbox.textContent) {
-        console.error("FOUT: Range stuurt niet de stand die ernaast staat");
+      const one = panels[0], two = panels[1];
+      const shape = pn => [count(pn, "lfader"), count(pn, "pick"),
+                           count(pn, "seg"), count(pn, "dial"),
+                           count(pn, "sw"), count(pn, "hbtn")].join("/");
+      console.log("OSC 1 fader/pick/seg/dial/sw/kop:", shape(one),
+                  "| OSC 2:", shape(two));
+      if (shape(one) !== "2/2/2/2/1/2") {
+        console.error("FOUT: OSC 1 heeft niet de regelaars uit het ontwerp");
+        failures++;
+      }
+      if (shape(two) !== "4/2/1/2/0/1") {
+        console.error("FOUT: OSC 2 heeft niet de regelaars uit het ontwerp");
         failures++;
       }
 
-      // de twee golfvormknoppen zijn schakelaars op 19 en 18
-      const waves = collect(panel, e => String(e.className || "").includes("wavebtn"));
+      // een stand kiezen in de balk, en die moet oplichten
+      const seg = collect(one, e => String(e.className || "").split(" ").includes("seg"))[0];
       sent = [];
-      waves.forEach(w => w.fire("click"));
-      const nums = sent.filter(x => x[0] === "nrpn").map(x => x[1]);
-      console.log("golfvormknoppen sturen naar", nums.join(" en "));
-      if (waves.length !== 2 || nums.indexOf(19) === -1 || nums.indexOf(18) === -1) {
-        console.error("FOUT: sawtooth en pulse schakelen niet 19 en 18");
+      seg.children[2].fire("click");                 // 4'
+      const segMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 14).pop();
+      const litSeg = seg.children.filter(c => c.classList.contains("on"));
+      console.log("range:", JSON.stringify(segMsg), "| opgelicht:",
+                  litSeg.map(c => c.textContent).join(","));
+      if (!segMsg || segMsg[2] !== 2 || litSeg.length !== 1
+          || litSeg[0] !== seg.children[2]) {
+        console.error("FOUT: de gekozen stand licht niet als enige op");
         failures++;
       }
 
-      // P.mod mode: de knop stuurt 38 en het lampje moet meeschakelen
-      const modeBtn = collect(panel,
-        e => e.tagName === "BUTTON" && e.textContent === "P.mod mode")[0];
-      const litName = () => {
-        const on = collect(panel, e => String(e.className || "").split(" ").includes("lamp")
-                                    && e.classList.contains("on"));
-        if (on.length !== 1) return on.length + " lampjes";
-        // de naam zit in het span naast het bolletje
-        const txt = on[0].children.filter(c => c.tagName === "SPAN")[0];
-        return txt ? txt.textContent : "?";
-      };
-      const before = litName();
+      // p.mod mode staat in het ontwerp met OSC 1 vooraan; dat is waarde 1
+      const amber = collect(one, e => String(e.className || "").includes("amber"))[0];
       sent = [];
-      modeBtn.fire("click");
-      const modeMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 38).pop();
-      const after = litName();
-      console.log("p.mod mode ->", JSON.stringify(modeMsg),
-                  "| lampje:", before, "->", after);
-      if (!modeMsg) {
-        console.error("FOUT: P.mod mode stuurt niet naar parameter 38");
-        failures++;
-      }
-      if (after === before || after.indexOf("lampjes") !== -1) {
-        console.error("FOUT: het lampje volgt de knop niet");
-        failures++;
-      }
-      // en terug, zodat de rest van de test onveranderd begint
-      modeBtn.fire("click");
-      if (litName() !== before) {
-        console.error("FOUT: tweede druk brengt het lampje niet terug");
+      amber.children[0].fire("click");
+      const amberMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 38).pop();
+      console.log("p.mod mode ->", JSON.stringify(amberMsg),
+                  "(" + amber.children.map(c => c.textContent).join(" | ") + ")");
+      if (!amberMsg || amberMsg[2] !== 1) {
+        console.error("FOUT: OSC 1 in P.mod mode stuurt niet waarde 1");
         failures++;
       }
 
-      // wat in het paneel staat, hoort er niet nog eens onder te staan
-      // ("PWM depth" en de kop "Oscillator 1" komen alleen bij OSC 1 voor)
-      const doubles = collect(op, e => e !== panel && !panel.children.includes(e)
-        && ["PWM depth", "Oscillator 1", "Pitch mod range"]
+      // knop in de kop, draaiknop en schakelaar
+      sent = [];
+      collect(one, e => String(e.className || "").split(" ").includes("hbtn"))[0].fire("click");
+      const sawMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 19).pop();
+      sent = [];
+      const d = collect(one, e => String(e.className || "").split(" ").includes("dial"))[0];
+      d.fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 9});
+      d.fire("pointermove", {clientY: 150, preventDefault() {}, shiftKey: false});
+      d.fire("pointerup", {});
+      const dialMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 23).pop();
+      sent = [];
+      collect(one, e => String(e.className || "").split(" ").includes("sw"))[0].fire("click");
+      const swMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 92).pop();
+      console.log("kop:", JSON.stringify(sawMsg), "| knop:", JSON.stringify(dialMsg),
+                  "| schakelaar:", JSON.stringify(swMsg));
+      if (!sawMsg || !dialMsg || !swMsg) {
+        console.error("FOUT: koptoets, draaiknop of schakelaar stuurt niets");
+        failures++;
+      }
+      if (dialMsg && dialMsg[2] === 0) {
+        console.error("FOUT: de draaiknop komt niet van zijn plaats");
+        failures++;
+      }
+
+      // wat in een paneel staat, hoort er niet nog eens onder te staan
+      const doubles = collect(op, e => panels.indexOf(e) === -1
+        && ["PWM depth", "Oscillator 1", "Oscillator 2", "Pitch mod range", "Level"]
              .some(t => String(e.textContent) === t));
       console.log("dubbel getoond:", doubles.length,
                   doubles.map(e => e.textContent).join(", "));
@@ -500,6 +509,10 @@ setTimeout(() => {
     }
     lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
   }
+  // LFO-paneel: vormmenu, lange faders en het knoppenblok
+
+  // LFO-paneel: vormmenu, lange faders en het knoppenblok
+  lfoTab.fire("click");
 
   const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
   const combos = collect(plist, e => String(e.className || "") === "combo");
@@ -788,9 +801,27 @@ setTimeout(() => {
         failures++;
       }
 
-      if (global.__onerror && errors.length) console.log("meldingen:", errors);
-      console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
-      process.exit(failures ? 1 : 0);
+      // laatste controle: verandert de synth iets, dan volgt het paneel
+      [...document.getElementById("tabs").children]
+        .find(t => t.textContent === "OSC").fire("click");
+      const sawOf = () => collect(document.getElementById("paramList"),
+        e => String(e.className || "").split(" ").includes("hbtn"))[0];
+      const wasOn = sawOf().classList.contains("on");
+      paramBytes[19] = wasOn ? 0 : 1;
+      paramRev++;
+      setTimeout(() => {
+        const nowOn = sawOf().classList.contains("on");
+        console.log("golfvormknop na een melding van de synth:",
+                    nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");
+        if (nowOn === wasOn) {
+          console.error("FOUT: de koptoets volgt de synth niet");
+          failures++;
+        }
+
+        if (global.__onerror && errors.length) console.log("meldingen:", errors);
+        console.log(failures ? "MISLUKT: " + failures + " fouten" : "ALLE UI-TESTS GESLAAGD");
+        process.exit(failures ? 1 : 0);
+      }, 700);
     }, 1700);
   }
 }, 20);

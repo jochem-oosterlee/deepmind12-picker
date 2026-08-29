@@ -20,3 +20,9 @@ local-assets/*
 !local-assets/README.md
 !local-assets/skin.css.example
 .dm12-last-ip
+
+# Ontwerpbundel uit Claude Design: het ontwerp zelf houden we bij, de
+# runtime en de plaatjes eromheen niet
+design/**/support.js
+design/**/.thumbnail
+design/**/uploads/
