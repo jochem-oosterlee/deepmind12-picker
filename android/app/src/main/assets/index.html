@@ -247,6 +247,7 @@
     margin-top:10px; align-items:center; }
   .pfads { display:flex; gap:18px; justify-content:center; }
   .pside { display:flex; flex-direction:column; gap:9px; align-items:center; }
+  .pside .pick { max-width:112px; }
   /* het woord onder een schakelaar */
   .word { font-size:9px; color:var(--muted); }
   .word.on { color:var(--label); }
@@ -2429,7 +2430,13 @@ function renderOsc1() {
   const mode = cell("P.MOD MODE", true);
   mode.appendChild(segRow(38, [{l: "OSC 1", v: 1}, {l: "OSC 1+2", v: 0}]));
 
-  return panelBox(300, "OSC 1",
+  // Zelfde opbouw als het filterpaneel: wat bij de faders hoort staat ernaast,
+  // en onder de streep blijft één rij over. Scheelt de helft in hoogte.
+  range.children[1].style.width = "96px";
+  mode.classList.remove("wide");
+  mode.children[1].style.width = "112px";
+
+  return panelBox(320, "OSC 1",
     [headBtn(19, "Sawtooth", waveIcon(ICON_SAW)),
      headBtn(18, "Pulse width follows PWM", () => {
        const w = pwmDuty(params.get(25, 0));
@@ -2438,7 +2445,8 @@ function renderOsc1() {
        return params.get(16, 0) === 0 ? pulseIcon(w) : pulseIcon(0.5, w);
      }, [25, 16])],
     [panelFader(21, "PITCH MOD", FADER_H), panelFader(25, "PWM", FADER_H)],
-    [range, pmodSrc, pwmSrc, aft, wheel, keyReset, mode]);
+    [aft, wheel, keyReset],
+    {side: [range, pmodSrc, pwmSrc, mode], cols: 3});
 }
 
 function renderOsc2() {
@@ -2457,11 +2465,14 @@ function renderOsc2() {
   const wheel = cell("WHEEL > P.MOD");
   wheel.appendChild(dial(31));
 
-  return panelBox(340, "OSC 2",
+  range.children[1].style.width = "96px";
+
+  return panelBox(360, "OSC 2",
     [headBtn(20, "Sync OSC 2 to OSC 1", "SYNC")],
     [panelFader(29, "PITCH MOD", FADER_H), panelFader(28, "TONE MOD", FADER_H),
      panelFader(27, "PITCH", FADER_H), panelFader(26, "LEVEL", FADER_H)],
-    [range, pmodSrc, tmodSrc, aft, wheel]);
+    [aft, wheel],
+    {side: [range, pmodSrc, tmodSrc], cols: 2});
 }
 
 /**
