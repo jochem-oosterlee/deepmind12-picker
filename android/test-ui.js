@@ -655,6 +655,20 @@ setTimeout(() => {
           console.error("FOUT: een fase pakt meer dan een kwart van de breedte");
           failures++;
         }
+        // en de release verschuift de rest niet
+        paramBytes[56] = 0;
+        paramRev++;
+        envChecks.push(() => {
+          const d2 = (svg().match(/ d="([^"]+)"/) || ["", ""])[1];
+          const p2 = d2.split("L").slice(1).map(z => z.split(",").map(Number));
+          console.log("release terug op 0 -> aanslag", p2[19][0].toFixed(0),
+                      "verval", p2[39][0].toFixed(0), "(waren", aEnd.toFixed(0),
+                      "en", dEnd.toFixed(0) + ")");
+          if (Math.abs(p2[19][0] - aEnd) > 0.6 || Math.abs(p2[39][0] - dEnd) > 0.6) {
+            console.error("FOUT: de release verschuift de andere fasen");
+            failures++;
+          }
+        });
       });
 
       const [x0, x1, y0, y1] = span();
