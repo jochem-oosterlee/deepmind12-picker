@@ -2054,9 +2054,9 @@ const ROUTINGS = [
   {lanes: [[1], [2]], post: [3, 4]},                       // M-2
   {lanes: [[1, 2], [3, 4]]},                               // M-3
   {lanes: [[1], [2], [3], [4]]},                           // M-4
-  {lanes: [[1], [3]], post: [2, 4]},                       // M-5
+  {lanes: [[1], [2], [3]], post: [4]},                     // M-5
   {pre: [1, 2], lanes: [[3], [4]]},                        // M-6
-  {pre: [1, 3], lanes: [[2], [4]]},                        // M-7
+  {pre: [1], lanes: [[2], [3], [4]]},                      // M-7
   {lanes: [[1, 2, 3], [4]]},                               // M-8
   {lanes: [[1, 2], [3, 4]], cross: true},                  // M-9
   {lanes: [[1, 2, 3], [4]], cross: true},                  // M-10
@@ -2084,7 +2084,9 @@ function routingSvg(r, active, w, h) {
     '<path d="M' + x1 + "," + y1 + "L" + x2 + "," + y2 + '" stroke="' + col
     + '" fill="none"/>';
 
-  out += line(0, mid, x, mid);
+  const arrow = (ax, ay) => '<path d="M' + ax + "," + (ay - 3) + "L" + (ax + 5)
+    + "," + ay + "L" + ax + "," + (ay + 3) + 'Z" fill="' + col + '" stroke="none"/>';
+  out += line(0, mid, x, mid) + arrow(1, mid);
   pre.forEach(n => { out += box(n, x, mid) + line(x + BW, mid, x + BW + GAP, mid); x += BW + GAP; });
 
   if (lanes.length) {
@@ -2111,7 +2113,7 @@ function routingSvg(r, active, w, h) {
   }
 
   post.forEach(n => { out += box(n, x, mid) + line(x + BW, mid, x + BW + GAP, mid); x += BW + GAP; });
-  out += line(x - GAP, mid, W, mid);
+  out += line(x - GAP, mid, W - 6, mid) + arrow(W - 6, mid);
 
   // Elk schema heeft zijn eigen afmeting; door de tekening te laten schalen
   // passen ze allemaal even groot in hun vakje.
