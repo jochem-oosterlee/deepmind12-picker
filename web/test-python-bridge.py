@@ -127,7 +127,37 @@ def send_dump(sock, addr):
         time.sleep(0.005)
 
 
+def check_helpers():
+    print("de synth opzoeken:")
+    check(dm12._is_lan("192.168.0.227") and dm12._is_lan("10.1.2.3")
+          and dm12._is_lan("172.20.0.5"), "thuisadressen tellen mee")
+    check(not dm12._is_lan("255.255.255.0") and not dm12._is_lan("8.8.8.8")
+          and not dm12._is_lan("169.254.1.2") and not dm12._is_lan("192.168.0.255"),
+          "netmaskers, internet en 169.254 vallen af")
+    check(dm12.pick_synth(["192.168.0.5 (Studio Mac)", "192.168.0.44 (DeepMind12)"])
+          == "192.168.0.44", "kiest het apparaat dat DeepMind heet")
+    check(dm12.pick_synth(["192.168.0.9"]) == "192.168.0.9",
+          "zonder naam: dan maar de eerste")
+    check(dm12.pick_synth([]) is None, "niets gevonden is geen adres")
+
+    # het laatst werkende adres onthouden, en onzin niet
+    keep = dm12.LAST_IP_FILE
+    dm12.LAST_IP_FILE = os.path.join(ROOT, ".dm12-test-ip")
+    try:
+        dm12.remember_ip("192.168.0.227")
+        check(dm12.remembered_ip() == "192.168.0.227", "adres onthouden")
+        dm12.remember_ip("127.0.0.1")
+        check(dm12.remembered_ip() == "192.168.0.227", "loopback overschrijft niets")
+    finally:
+        try:
+            os.remove(dm12.LAST_IP_FILE)
+        except OSError:
+            pass
+        dm12.LAST_IP_FILE = keep
+
+
 def main():
+    check_helpers()
     threading.Thread(target=fake_deepmind, daemon=True).start()
     time.sleep(0.2)
 

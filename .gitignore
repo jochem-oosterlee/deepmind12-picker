@@ -19,3 +19,4 @@ __pycache__/
 local-assets/*
 !local-assets/README.md
 !local-assets/skin.css.example
+.dm12-last-ip

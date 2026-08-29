@@ -105,8 +105,14 @@ session with the synth and passes MIDI through over HTTP. All DeepMind knowledge
 stays in the page, so the bridge is pure transport.
 
 ```
-python dm12-bridge.py                  # finds the synth on the network
+python dm12-bridge.py                  # finds the synth by itself
 python dm12-bridge.py 192.168.0.227    # or name it
+
+The router usually hands the synth a different address every time, so the
+bridge does not rely on one: it starts with the address that worked last
+time and otherwise sweeps every network this computer is on until a device
+answers. It keeps doing that while it runs, so a synth that is switched on
+later, or that moves to another address, is picked up on its own.
 ```
 
 Then open `http://localhost:8080` on that computer, or
