@@ -1826,7 +1826,6 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   const dx = ax + 6 + (d / 255) * 90;
   const ys = bot - (sus / 255) * (bot - top);
   const sx = Math.max(dx + 10, W - 68);
-  const rx = sx + 6 + (r / 255) * (W - 12 - sx);
   // Een curve buigt het stuk tussen twee punten, maar blijft binnen de hoeken
   // ervan: hoog tegen de ene rand (eerst snel, dan vlak), laag tegen de andere
   // (eerst vlak, dan snel). Halverwege is het een rechte lijn.
@@ -1840,21 +1839,21 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
                + n(x2 - dx * q) + "," + n(y2 - dy * p) + " "
                + n(x2) + "," + n(y2);
   };
-  // Het houdstuk is geen bocht maar een helling: in het midden vlak, naar de
-  // uitersten toe 45 graden omlaag of omhoog. Raakt hij onderweg de rand van
-  // het vak, dan loopt hij daar verder — de hoek blijft dus 45 graden.
+  // Het houdstuk is geen bocht maar een rechte lijn: vlak in het midden, en
+  // naar de uitersten toe 45 graden omlaag of omhoog. Raakt hij de rand van
+  // het vak, dan houdt hij daar op — de lijn blijft recht en de release
+  // vertrekt vanaf dat punt.
   const tilt = Math.max(-1, Math.min(1, (sus_c - 127) / 128));
   let ex = sx, ey = ys - tilt * (sx - dx);
   if (ey < top) { ex = dx + (ys - top) / Math.abs(tilt); ey = top; }
   else if (ey > bot) { ex = dx + (bot - ys) / Math.abs(tilt); ey = bot; }
-  const hold = "L" + ex.toFixed(1) + "," + ey.toFixed(1)
-             + (ex < sx - 0.5 ? "L" + sx.toFixed(1) + "," + ey.toFixed(1) : "");
+  const rx = ex + 6 + (r / 255) * Math.max(0, W - 12 - ex);
 
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)
     + bend(ax, top, dx, ys, dc)
-    + hold
-    + bend(sx, ey, rx, bot, rc)
+    + "L" + ex.toFixed(1) + "," + ey.toFixed(1)
+    + bend(ex, ey, rx, bot, rc)
     + " Z";
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H
     + '" class="wave"><path d="' + path + '" fill="var(--accent)" '
