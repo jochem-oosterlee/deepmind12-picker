@@ -1856,22 +1856,19 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
     return out;
   };
 
-  // Het houdstuk is geen bocht maar een rechte lijn, en altijd even lang:
-  // vlak in het midden, naar de uitersten toe 45 graden omlaag of omhoog.
-  // Komt hij tegen de boven- of onderrand, dan loopt hij van daaraf vlak
-  // verder tot het eind — de hoek blijft dus 45 graden en de lengte gelijk.
+  // Het houdstuk is een rechte lijn: vlak in het midden, en naar de uitersten
+  // toe klimt of zakt hij zo dat hij aan het eind van het stuk precies de
+  // boven- of onderrand haalt. De hoek volgt dus de lengte van het stuk, en de
+  // lijn gebruikt de volle hoogte zonder er ooit uit te lopen.
   const tilt = Math.max(-1, Math.min(1, (sus_c - 128) / 127));
-  let hx = sx, hy = ys - tilt * (sx - dx);
-  if (hy < top) { hx = dx + (ys - top) / Math.abs(tilt); hy = top; }
-  else if (hy > bot) { hx = dx + (bot - ys) / Math.abs(tilt); hy = bot; }
-  const hold = "L" + hx.toFixed(1) + "," + hy.toFixed(1)
-             + (hx < sx - 0.5 ? "L" + sx.toFixed(1) + "," + hy.toFixed(1) : "");
+  const hy = ys + (tilt >= 0 ? tilt * (top - ys) : -tilt * (bot - ys));
+
   const rx = W;
 
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)
     + bend(ax, top, dx, ys, dc)
-    + hold
+    + "L" + sx.toFixed(1) + "," + hy.toFixed(1)
     + bend(sx, hy, rx, bot, rc);
   // Twee keer hetzelfde pad: gesloten om te vullen, open om te trekken. Anders
   // krijg je onderlangs een streep die niet bij de envelope hoort, en die valt
