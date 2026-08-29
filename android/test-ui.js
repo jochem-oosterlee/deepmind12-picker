@@ -460,7 +460,7 @@ setTimeout(() => {
         failures++;
       }
     }
-    // de faseregelaar loopt van 1 tot 154, zoals het menu op het apparaat
+    // de faseregelaar loopt van 1 tot 254, zoals het menu op het apparaat
     const phaseBox = collect(plist, e => String(e.className || "") === "vf")
       .find(b => collect(b, x => String(x.className || "") === "vcap")
                    .some(c => c.textContent === "Phase"));
@@ -484,8 +484,8 @@ setTimeout(() => {
         console.error("FOUT: fase gaat onder 1");
         failures++;
       }
-      if (!high || high[2] !== 154) {
-        console.error("FOUT: fase gaat niet tot 154");
+      if (!high || high[2] !== 254) {
+        console.error("FOUT: fase gaat niet tot 254");
         failures++;
       }
     }

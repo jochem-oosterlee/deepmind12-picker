@@ -2228,9 +2228,9 @@ function vFader(label, value, max, onMove, onDone) {
           setValue: v => { num.textContent = v; r.value = v; }};
 }
 
-// Het fasemenu op de DeepMind loopt van 1 tot 154; 0 is geen verschil en
+// Het fasemenu op de DeepMind loopt van 1 tot 254; 0 is geen verschil en
 // klinkt dus als mono.
-const PHASE_MIN = 1, PHASE_MAX = 154;
+const PHASE_MIN = 1, PHASE_MAX = 254;
 
 /** Laatst gebruikte faseverschil per LFO, zodat de knop daar weer begint. */
 const lastPhaseByBase = {};
@@ -2312,9 +2312,9 @@ function renderLfo(base, title) {
   mk(1, "Delay", OUTER, rightCol);
   mk(6, "Slew", INNER, innerLeft);
 
-  // Rechts-binnen de fase: op het apparaat loopt dat menu van 1 tot 154, en
-  // 0 betekent geen verschil tussen de stemmen — dus mono. Over MIDI neemt de
-  // synth wel elke waarde tot 255 aan, maar buiten het menubereik gaan we niet.
+  // Rechts-binnen de fase: op het apparaat loopt dat menu van 1 tot 254, en
+  // 0 betekent geen verschil tussen de stemmen — dus mono. 255 neemt de synth
+  // ook aan, maar dat staat niet in het menu.
   const spreadOn = get(5) >= PHASE_MIN;
   const spread = spreadOn
     ? longFader("Phase", get(5), PHASE_MAX, INNER,
@@ -2405,7 +2405,7 @@ function renderLfo(base, title) {
   grid.appendChild(pill("Arp<br>sync", 4));
   grid.appendChild(pill("Key<br>sync", 3));
 
-  // Eén parameter: 0 zet elke stem in dezelfde fase (mono), 1 tot 154 geeft
+  // Eén parameter: 0 zet elke stem in dezelfde fase (mono), 1 tot 254 geeft
   // ze een eigen verschuiving (poly). De knop wipt daartussen en de lampjes
   // tonen waar je staat — net als op het paneel.
   const mode = get(5);
