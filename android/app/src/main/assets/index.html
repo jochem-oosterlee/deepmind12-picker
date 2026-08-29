@@ -1827,13 +1827,22 @@ function envSvg(a, d, sus, r, ac, dc, sc, rc) {
   const ys = bot - (sus / 255) * (bot - top);
   const sx = Math.max(dx + 10, W - 68);
   const rx = sx + 6 + (r / 255) * (W - 12 - sx);
-  // een curve boven de helft bolt op, eronder holt hij uit
+  // Een curve buigt het stuk tussen twee punten, maar blijft binnen de hoeken
+  // ervan: hoog tegen de ene rand (eerst snel, dan vlak), laag tegen de andere
+  // (eerst vlak, dan snel). Halverwege is het een rechte lijn.
   const bend = (x1, y1, x2, y2, c) => {
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const k = ((c - 128) / 128) * 0.55;
-    return "Q" + (mx - (y2 - y1) * k).toFixed(1) + ","
-             + (my + (x2 - x1) * k).toFixed(1) + " "
-             + x2.toFixed(1) + "," + y2.toFixed(1);
+    const t = Math.max(-1, Math.min(1, (c - 128) / 127));
+    const p = t >= 0 ? 1 / 3 + t * (2 / 3) : (1 + t) / 3;
+    const q = t >= 0 ? (1 - t) / 3 : 1 / 3 - t * (2 / 3);
+    const dx = x2 - x1, dy = y2 - y1;
+    const n = v => v.toFixed(1);
+    if (Math.abs(dy) < 0.5) {
+      // een vlak stuk heeft geen hoek om in te buigen: dan een lichte welving
+      return "Q" + n(x1 + dx / 2) + "," + n(y1 - t * 7) + " " + n(x2) + "," + n(y2);
+    }
+    return "C" + n(x1 + dx * p) + "," + n(y1 + dy * q) + " "
+               + n(x2 - dx * q) + "," + n(y2 - dy * p) + " "
+               + n(x2) + "," + n(y2);
   };
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)

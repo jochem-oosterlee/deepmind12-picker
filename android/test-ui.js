@@ -412,6 +412,7 @@ setTimeout(() => {
   const lfoTab = [...document.getElementById("tabs").children]
     .find(t => t.textContent === "LFO");
   const pwmChecks = [];
+  const envChecks = [];
 
   // ---- oscillatorpanelen, volgens het ontwerp ----
   {
@@ -578,6 +579,35 @@ setTimeout(() => {
         console.error("FOUT: de attack-fader tekent de envelope niet opnieuw");
         failures++;
       }
+      // hoe je de curves ook zet, de lijn hoort binnen het vak te blijven
+      const outside = () => {
+        const d = (svg().match(/ d="([^"]+)"/) || ["", ""])[1];
+        const nums = (d.match(/-?[0-9.]+/g) || []).map(Number);
+        const bad = [];
+        for (let i = 0; i + 1 < nums.length; i += 2) {
+          if (nums[i] < -0.5 || nums[i] > 264.5) bad.push("x=" + nums[i]);
+          if (nums[i + 1] < 3.5 || nums[i + 1] > 44.5) bad.push("y=" + nums[i + 1]);
+        }
+        return bad;
+      };
+      let worst = [];
+      [0, 255].forEach(v => {
+        [5, 6, 7, 8].forEach(off => { paramBytes[53 + off] = v; });
+        paramRev++;
+        envChecks.push(() => {
+          const bad = outside();
+          if (bad.length) worst = worst.concat(bad);
+        });
+      });
+      envChecks.push(() => {
+        console.log("tekening buiten het vak bij de uiterste curves:",
+                    worst.length ? worst.slice(0, 4).join(", ") : "nee");
+        if (worst.length) {
+          console.error("FOUT: de curve trekt de lijn buiten het vak");
+          failures++;
+        }
+      });
+
       // de curve-knoppen sturen naar 58 t/m 61
       sent = [];
       collect(one, e => cl2(e, "dial")).forEach((d, i) => {
@@ -971,6 +1001,7 @@ setTimeout(() => {
       paramRev++;
       setTimeout(() => {
         pwmChecks.forEach(fn => fn());
+        envChecks.forEach(fn => fn());
         const nowOn = sawOf().classList.contains("on");
         console.log("golfvormknop na een melding van de synth:",
                     nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");
