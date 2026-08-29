@@ -2447,7 +2447,7 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   // vlak in het midden, naar de uitersten toe 45 graden omlaag of omhoog.
   // Komt hij tegen de boven- of onderrand, dan loopt hij van daaraf vlak
   // verder tot het eind — de hoek blijft dus 45 graden en de lengte gelijk.
-  const tilt = Math.max(-1, Math.min(1, (sus_c - 127) / 128));
+  const tilt = Math.max(-1, Math.min(1, (sus_c - 128) / 127));
   let hx = sx, hy = ys - tilt * (sx - dx);
   if (hy < top) { hx = dx + (ys - top) / Math.abs(tilt); hy = top; }
   else if (hy > bot) { hx = dx + (bot - ys) / Math.abs(tilt); hy = bot; }
@@ -2799,6 +2799,9 @@ function dial(num, max, after) {
   };
   d.addEventListener("pointerup", end);
   d.addEventListener("pointercancel", end);
+  // dubbelklik zet hem terug in het midden: bij een curve is dat kaarsrecht
+  d.title = "double-click for the middle";
+  d.addEventListener("dblclick", () => paramSet(num, Math.round(top / 2)));
   return wrap;
 }
 

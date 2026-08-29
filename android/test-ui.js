@@ -625,6 +625,19 @@ setTimeout(() => {
         }
       }
 
+      // dubbelklik op een knop zet hem in het midden
+      {
+        const dS = collect(one, e => cl2(e, "dial"))[2];      // de sustain-curve
+        sent = [];
+        dS.fire("dblclick");
+        const m = sent.filter(x => x[0] === "nrpn" && x[1] === 60).pop();
+        console.log("dubbelklik op S CURVE ->", JSON.stringify(m));
+        if (!m || m[2] !== 128) {
+          console.error("FOUT: dubbelklik zet de knop niet op 128");
+          failures++;
+        }
+      }
+
       // aanslag, verval en release mogen elk hoogstens een kwart pakken
       [53, 54, 56].forEach(n => { paramBytes[n] = 255; });
       [5, 6, 7, 8].forEach(off => { paramBytes[53 + off] = 128; });
