@@ -633,6 +633,33 @@ setTimeout(() => {
     }
   }
 
+  // ---- de tekening loopt sneller als de rate hoger staat ----
+  {
+    const crossings = () => {
+      const box = collect(document.getElementById("paramList"),
+        e => cls(e, "wavebox"))[0];
+      const m = String(box._html || "").match(/points="([^"]+)"/);
+      if (!m) return -1;
+      const ys = m[1].trim().split(/\s+/).map(pt => +pt.split(",")[1]);
+      let n = 0;
+      for (let i = 1; i < ys.length; i++) {
+        if ((ys[i - 1] - 60) * (ys[i] - 60) < 0) n++;      // door het midden
+      }
+      return n;
+    };
+    paramBytes[0] = 0; paramRev++;
+    const slow = crossings();
+    paramBytes[0] = 255; paramRev++;
+    setTimeout(() => {
+      const fast = crossings();
+      console.log("golfvorm door het midden: traag", slow, "-> snel", fast);
+      if (fast < slow * 2) {
+        console.error("FOUT: de tekening loopt bij een hoge rate niet dubbel zo snel");
+        failures++;
+      }
+    }, 400);
+  }
+
   // ---- met arp sync is de rate een notewaarde ----
   const rateOf = () => faderNamed(document.getElementById("paramList"), "RATE");
   const DIVS = ["4","3","2","1","1/2","3/8","1/3","1/4","3/16","1/6","1/8",

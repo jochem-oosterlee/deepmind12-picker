@@ -1441,7 +1441,7 @@ function lfoGlyph(shape, colour) {
 function lfoWaveSvg(shape, rate, delay, slew, mono) {
   const w = 600, h = 120, mid = h / 2, amp = mid - 12;
   const n = 300;
-  const cycles = 1 + Math.round((rate / 255) * 7);      // sneller = meer perioden
+  const cycles = 1 + Math.round((rate / 255) * 15);     // sneller = meer perioden
   // vaste reeks, zodat sample & hold niet bij elke tekening verspringt
   const rnd = [0.65, -0.35, 0.9, -0.8, 0.25, -0.6, 0.75, -0.15, 0.5, -0.95, 0.2, -0.7];
   const fade = Math.min(0.85, delay / 255);
