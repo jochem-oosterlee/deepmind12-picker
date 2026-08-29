@@ -1825,12 +1825,15 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   // De tekening vult altijd het hele vak: de vier fasen verdelen de breedte
   // naar verhouding van hun tijden, en samen zijn ze precies zo breed als het
   // kader. Elke fase houdt een beetje breedte over, anders verdwijnt ze.
-  const share = t => 12 + (t / 255) * 100;
+  const share = t => 6 + (t / 255) * 100;   // ook op nul houdt een fase wat breedte
   const wa = share(a), wd = share(d), ws = 55, wr = share(r);
-  const k = W / (wa + wd + ws + wr);
-  const ax = wa * k;
-  const dx = ax + wd * k;
-  const sx = dx + ws * k;
+  // Aanslag, verval en release krijgen elk hoogstens een kwart van de
+  // breedte; wat overblijft is voor het houdstuk, dat geen tijd heeft.
+  const tot = wa + wd + ws + wr, cap = W / 4;
+  const pa = Math.min(cap, W * wa / tot);
+  const pd = Math.min(cap, W * wd / tot);
+  const pr = Math.min(cap, W * wr / tot);
+  const ax = pa, dx = pa + pd, sx = W - pr;
   const ys = bot - (sus / 255) * (bot - top);
   // Een curve buigt het stuk tussen twee punten, en gebruikt daarbij altijd
   // de volle breedte en hoogte van dat stuk: hij begint en eindigt precies op

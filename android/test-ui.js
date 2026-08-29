@@ -609,6 +609,25 @@ setTimeout(() => {
         const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
         return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       };
+      // aanslag, verval en release mogen elk hoogstens een kwart pakken
+      [53, 54, 56].forEach(n => { paramBytes[n] = 255; });
+      [5, 6, 7, 8].forEach(off => { paramBytes[53 + off] = 128; });
+      paramRev++;
+      envChecks.push(() => {
+        const d = (svg().match(/ d="([^"]+)"/) || ["", ""])[1];
+        const pts = d.split("L").slice(1).map(q => q.split(",").map(Number));
+        // elke fase tekent twintig punten; het houdstuk ertussen een of twee
+        const aEnd = pts[19][0], dEnd = pts[39][0], rStart = pts[pts.length - 21][0];
+        const q = 264 / 4 + 0.5;
+        console.log("met alles op 255 -> aanslag", aEnd.toFixed(0),
+                    "| verval tot", dEnd.toFixed(0),
+                    "| release vanaf", rStart.toFixed(0), "(kwart = 66)");
+        if (aEnd > q || dEnd - aEnd > q || 264 - rStart > q) {
+          console.error("FOUT: een fase pakt meer dan een kwart van de breedte");
+          failures++;
+        }
+      });
+
       const [x0, x1, y0, y1] = span();
       console.log("tekening vult het vak: x", x0.toFixed(0) + "-" + x1.toFixed(0),
                   "y", y0.toFixed(0) + "-" + y1.toFixed(0));
@@ -1017,7 +1036,7 @@ setTimeout(() => {
       paramRev++;
       setTimeout(() => {
         pwmChecks.forEach(fn => fn());
-        envChecks.forEach(fn => fn());
+        while (envChecks.length) envChecks.shift()();
         const nowOn = sawOf().classList.contains("on");
         console.log("golfvormknop na een melding van de synth:",
                     nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");
