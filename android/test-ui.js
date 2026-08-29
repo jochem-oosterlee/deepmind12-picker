@@ -271,7 +271,7 @@ for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn
 // een parameterregelaar verzetten (laatste param-tab is nog actief gerenderd)
 try {
   const tabsArr = [...document.getElementById("tabs").children];
-  tabsArr.find(t => t.textContent === "Voice").fire("click");
+  tabsArr.find(t => t.textContent === "Mod").fire("click");
   const list = document.getElementById("paramList");
   sent = [];
   // met een skin zijn het draaiknoppen, zonder skin schuifregelaars
@@ -562,6 +562,45 @@ setTimeout(() => {
     if (lanes < 30) {
       console.error("FOUT: er ontbreken faders op de paneeltab");
       failures++;
+    }
+  }
+
+  // ---- stemgedrag en stemming ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Voice").fire("click");
+    const vp = document.getElementById("paramList");
+    const cl4 = (e, c) => String(e.className || "").split(" ").includes(c);
+    const panels = vp.children.filter(e => cl4(e, "pnl"));
+    const names = panels.map(pn => {
+      const n = collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "?";
+    });
+    const caps = pn => collect(pn, e => String(e.className || "") === "vcap")
+      .map(e => e.textContent);
+    console.log("voice-tab:", names.join(" + "), "|", caps(panels[0]).join(", "),
+                "|", caps(panels[1]).join(", "));
+    if (names.join(" + ") !== "VOICE / PORTA + TUNE / DRIFT"
+        || caps(panels[0]).join() !== "DETUNE,PORTA TIME,PORTA BAL"
+        || caps(panels[1]).join() !== "GLOBAL,TRANS,BEND+,BEND-,OSC,PARAM,RATE") {
+      console.error("FOUT: de voice-panelen staan er niet zoals ontworpen");
+      failures++;
+    } else {
+      // transpose telt van -48 tot +48, met 128 in het midden
+      const box = collect(panels[1], e => String(e.className || "") === "vf")
+        .find(b => caps(b)[0] === "TRANS");
+      const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
+      const num = collect(box, e => String(e.className || "") === "vnum")[0];
+      sent = [];
+      lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 7});
+      lane.fire("pointermove", {clientY: -900, preventDefault() {}, shiftKey: false});
+      lane.fire("pointerup", {});
+      const top = sent.filter(x => x[0] === "nrpn" && x[1] === 241).pop();
+      console.log("transpose helemaal omhoog ->", JSON.stringify(top), "toont", num.textContent);
+      if (!top || top[2] !== 176 || num.textContent !== "48") {
+        console.error("FOUT: transpose loopt niet van -48 tot +48");
+        failures++;
+      }
     }
   }
 
