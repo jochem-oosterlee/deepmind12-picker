@@ -461,7 +461,8 @@ setTimeout(() => {
       }
 
       // p.mod mode staat in het ontwerp met OSC 1 vooraan; dat is waarde 1
-      const amber = collect(one, e => String(e.className || "").includes("amber"))[0];
+      const segs = collect(one, e => String(e.className || "").split(" ").includes("seg"));
+      const amber = segs[1];
       sent = [];
       amber.children[0].fire("click");
       const amberMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 38).pop();
@@ -509,182 +510,154 @@ setTimeout(() => {
     }
     lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
   }
-  // LFO-paneel: vormmenu, lange faders en het knoppenblok
-
-  // LFO-paneel: vormmenu, lange faders en het knoppenblok
+  // ---- LFO-panelen, in dezelfde stijl als de oscillatoren ----
   lfoTab.fire("click");
 
-  const lanes = collect(plist, e => String(e.className || "").includes("lfader"));
-  const combos = collect(plist, e => String(e.className || "") === "combo");
-  console.log("LFO-panelen:", plist.children.length, "| faderbanen:", lanes.length,
-              "| vormvakken:", combos.length);
-  if (plist.children.length !== 2 || lanes.length !== 8 || combos.length !== 2) {
+  const cls = (e, c) => String(e.className || "").split(" ").includes(c);
+  const pick = (root, c) => collect(root, e => cls(e, c));
+  const faderNamed = (root, name) => {
+    const box = collect(root, e => String(e.className || "") === "vf")
+      .find(b => collect(b, x => String(x.className || "") === "vcap")
+                   .some(c => String(c.textContent).indexOf(name) === 0));
+    return box && {
+      box: box,
+      num: collect(box, e => String(e.className || "") === "vnum")[0],
+      lane: collect(box, e => String(e.className || "").includes("lfader"))[0],
+    };
+  };
+
+  const lfos = plist.children.filter(e => cls(e, "lfo"));
+  const lanes = pick(plist, "lfader");
+  console.log("LFO-panelen:", lfos.length, "| faders:", lanes.length,
+              "| vormvakken:", pick(plist, "pick").length,
+              "| standenbalken:", pick(plist, "seg").length);
+  if (lfos.length !== 2 || lanes.length !== 8 || pick(plist, "pick").length !== 2
+      || pick(plist, "seg").length !== 2) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
-    // eigen uitklapper: openen, een vorm aanwijzen, en weer dicht
-    const pops = collect(plist, e => String(e.className || "") === "shapepop");
-    console.log("uitklapvensters:", pops.length,
-                "| vormen per venster:", pops[0] ? pops[0].children.length : 0);
-    if (pops.length !== 2 || pops[0].children.length !== 7) {
-      console.error("FOUT: uitklapper met zeven vormen ontbreekt");
+    const one = lfos[0];
+
+    // vorm kiezen uit het uitklapvak, met de tekeningen erin
+    const box = pick(one, "pick")[0];
+    const pop = collect(box, e => String(e.className || "") === "shapepop")[0];
+    console.log("vormen in het menu:", pop.children.length);
+    if (pop.children.length !== 7) {
+      console.error("FOUT: het vormmenu heeft geen zeven vormen");
       failures++;
     } else {
-      combos[0].fire("click");
-      const opened = pops[0].style.display;
+      box.fire("click");
+      const opened = pop.style.display;
       sent = [];
-      pops[0].children[2].fire("click");          // blokgolf
-      console.log("uitklapper:", opened, "-> vorm gekozen",
-                  JSON.stringify(sent[0]), "-> nu", pops[0].style.display);
-      if (opened !== "grid") { console.error("FOUT: uitklapper ging niet open"); failures++; }
+      pop.children[2].fire("click");                 // blokgolf
+      const lit = pop.children.filter(b => b.classList.contains("on"));
+      console.log("vormmenu:", opened, "-> gekozen", JSON.stringify(sent[0]),
+                  "| opgelicht:", lit.length === 1 && lit[0] === pop.children[2]
+                    ? "de gekozen vorm" : lit.length);
+      if (opened !== "grid") { console.error("FOUT: het vormmenu ging niet open"); failures++; }
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 2 && x[2] === 2)) {
         console.error("FOUT: vormkeuze stuurt niet NRPN 2 = 2");
         failures++;
       }
-      if (pops[0].style.display !== "none") {
-        console.error("FOUT: uitklapper bleef open na kiezen");
+      if (pop.style.display !== "none") {
+        console.error("FOUT: het vormmenu bleef open na kiezen");
         failures++;
       }
-      const lit = pops[0].children.filter(b => b.classList.contains("on"));
-      console.log("opgelicht in het menu:",
-                  lit.length === 1 && lit[0] === pops[0].children[2]
-                    ? "de gekozen vorm" : lit.length + " badges");
-      if (lit.length !== 1 || lit[0] !== pops[0].children[2]) {
+      if (lit.length !== 1 || lit[0] !== pop.children[2]) {
         console.error("FOUT: de gekozen vorm licht niet als enige op");
         failures++;
       }
       sent = [];
-      combos[1].fire("click");
-      pops[1].children[3].fire("click");
+      const box2 = pick(lfos[1], "pick")[0];
+      box2.fire("click");
+      collect(box2, e => String(e.className || "") === "shapepop")[0].children[3].fire("click");
       if (!sent.some(x => x[0] === "nrpn" && x[1] === 9)) {
         console.error("FOUT: LFO 2 stuurt niet naar parameter 9");
         failures++;
       }
     }
-    // de faseregelaar toont graden (1 t/m 254); in de parameter staat een
-    // hogere waarde, want 0 is poly en 1 is mono
-    const phaseBox = collect(plist, e => String(e.className || "") === "vf")
-      .find(b => collect(b, x => String(x.className || "") === "vcap")
-                   .some(c => c.textContent === "Phase"));
-    const phaseLane = phaseBox
-      && collect(phaseBox, e => String(e.className || "").includes("lfader"))[0];
-    if (!phaseLane) {
+
+    // poly, mono of een faseverschil: drie standen in dezelfde parameter
+    const seg = pick(one, "seg")[0];
+    const step = i => {
+      sent = [];
+      pick(document.getElementById("paramList"), "seg")[0].children[i].fire("click");
+      const m = sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
+      return m ? m[2] : null;
+    };
+    const walk = [step(0), step(1), step(2)];
+    console.log("standen:", seg.children.map(c => c.textContent).join("/"),
+                "->", walk.join(", "));
+    if (walk[0] !== 0 || walk[1] !== 1 || !(walk[2] > 1)) {
+      console.error("FOUT: de standenbalk stuurt niet poly, mono, faseverschil");
+      failures++;
+    }
+
+    // de fase-fader toont graden en loopt van 1 tot 254
+    const ph = faderNamed(document.getElementById("paramList"), "PHASE");
+    if (!ph) {
       console.error("FOUT: faseregelaar niet gevonden");
       failures++;
     } else {
       const swipe = (from, to) => {
         sent = [];
-        phaseLane.fire("pointerdown", {clientY: from, preventDefault() {}, pointerId: 5});
-        phaseLane.fire("pointermove", {clientY: to, preventDefault() {}, shiftKey: false});
-        phaseLane.fire("pointerup", {});
+        ph.lane.fire("pointerdown", {clientY: from, preventDefault() {}, pointerId: 5});
+        ph.lane.fire("pointermove", {clientY: to, preventDefault() {}, shiftKey: false});
+        ph.lane.fire("pointerup", {});
         return sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
       };
-      const phaseNum = () => collect(phaseBox,
-        e => String(e.className || "") === "vnum")[0].textContent;
-      const low = swipe(100, 900), lowText = phaseNum();
-      const high = swipe(900, -900), highText = phaseNum();
+      const low = swipe(100, 900), lowText = ph.num.textContent;
+      const high = swipe(900, -900), highText = ph.num.textContent;
       console.log("fase omlaag ->", JSON.stringify(low), "toont", lowText,
                   "| omhoog ->", JSON.stringify(high), "toont", highText);
-      if (!low || low[2] !== 2 || lowText !== "1°") {
+      if (!low || low[2] !== 2 || lowText !== "1\u00B0") {
         console.error("FOUT: laagste fase is niet 1 graad (parameter 2)");
         failures++;
       }
-      if (!high || high[2] !== 255 || highText !== "254°") {
+      if (!high || high[2] !== 255 || highText !== "254\u00B0") {
         console.error("FOUT: hoogste fase is niet 254 graden (parameter 255)");
         failures++;
       }
     }
-
-    // Phase-knop wipt tussen mono (0) en een faseverschil; poly en mono zijn
-    // lampjes en mogen dus niet aanklikbaar zijn
-    const lamps = collect(plist, e => String(e.className || "").split(" ").includes("lamp"));
-    const phaseBtn = collect(plist, e => e.textContent === "Phase"
-                                    && String(e.className || "").includes("mini") === false
-                                    && e.tagName === "BUTTON")[0];
-    console.log("lampjes:", lamps.length, "| phase-knop:", phaseBtn ? "ja" : "nee");
-    if (lamps.length !== 4 || !phaseBtn) {
-      console.error("FOUT: lampjes of Phase-knop ontbreken");
-      failures++;
-    } else {
-      if (lamps.some(l => (l.handlers.click || []).length)) {
-        console.error("FOUT: een lampje is aanklikbaar");
-        failures++;
-      }
-      // vanaf een faseverschil: eerst poly, dan mono, dan weer een verschil
-      const step = () => {
-        sent = [];
-        collect(document.getElementById("paramList"),
-                e => e.tagName === "BUTTON" && e.textContent === "Phase")[0].fire("click");
-        const m = sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
-        return m ? m[2] : null;
-      };
-      const walk = [step(), step(), step()];
-      console.log("phase-knop stapt ->", walk.join(" -> "));
-      if (walk[0] !== 0 || walk[1] !== 1 || !(walk[2] > 1)) {
-        console.error("FOUT: Phase-knop loopt niet poly -> mono -> faseverschil");
-        failures++;
-      }
-    }
-
-    // slepen aan de eerste faderbaan moet parameter 0 sturen
-    sent = [];
-    lanes[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 1});
-    lanes[0].fire("pointermove", {clientY: 140, preventDefault() {}, shiftKey: false});
-    lanes[0].fire("pointerup", {});
-    const moved = sent.filter(x => x[0] === "nrpn" && x[1] === 0);
-    console.log("fader gesleept ->", JSON.stringify(moved[moved.length - 1]));
-    if (!moved.length) { console.error("FOUT: slepen stuurt geen parameter 0"); failures++; }
   }
 
   // ---- met arp sync is de rate een notewaarde ----
-  const rateText = () => {
-    const pl = document.getElementById("paramList");
-    const box = collect(pl, e => String(e.className || "") === "vf")
-      .find(b => collect(b, x => String(x.className || "") === "vcap")
-                   .some(c => String(c.textContent).indexOf("Rate") === 0));
-    return collect(box, e => String(e.className || "") === "vnum")[0].textContent;
-  };
-  const rateLane = () => {
-    const pl = document.getElementById("paramList");
-    const box = collect(pl, e => String(e.className || "") === "vf")
-      .find(b => collect(b, x => String(x.className || "") === "vcap")
-                   .some(c => String(c.textContent).indexOf("Rate") === 0));
-    return collect(box, e => String(e.className || "").includes("lfader"))[0];
-  };
+  const rateOf = () => faderNamed(document.getElementById("paramList"), "RATE");
   const DIVS = ["4","3","2","1","1/2","3/8","1/3","1/4","3/16","1/6","1/8",
                 "3/32","1/12","1/16","3/64","1/24","1/32","3/128","1/48","1/64"];
-  console.log("arp sync staat aan, rate leest:", rateText());
-  if (DIVS.indexOf(rateText()) === -1) {
+  console.log("arp sync staat aan, rate leest:", rateOf().num.textContent);
+  if (DIVS.indexOf(rateOf().num.textContent) === -1) {
     console.error("FOUT: rate toont geen notewaarde terwijl arp sync aan staat");
     failures++;
   } else {
     // een sleep moet midden in een stand landen, niet ertussen
     sent = [];
-    rateLane().fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 3});
-    rateLane().fire("pointermove", {clientY: 250, preventDefault() {}, shiftKey: false});
-    rateLane().fire("pointerup", {});
+    const lane = rateOf().lane;
+    lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 3});
+    lane.fire("pointermove", {clientY: 250, preventDefault() {}, shiftKey: false});
+    lane.fire("pointerup", {});
     const last = sent.filter(x => x[0] === "nrpn" && x[1] === 0).pop();
     const idx = last ? Math.floor(last[2] / (256 / 20)) : -1;
     console.log("gesleept ->", JSON.stringify(last), "= stand", DIVS[idx],
-                "| fader leest", rateText());
-    if (!last || DIVS[idx] !== rateText()) {
+                "| fader leest", rateOf().num.textContent);
+    if (!last || DIVS[idx] !== rateOf().num.textContent) {
       console.error("FOUT: gestuurde waarde hoort niet bij de stand die er staat");
       failures++;
     }
-    if (last && last[2] % 1 !== 0) { console.error("FOUT: geen hele waarde"); failures++; }
 
-    // arp sync uit: dan is het weer een gewone waarde
-    const arpBtn = collect(plist, e => e.dataset && String(e.dataset.off) === "4")[0];
-    if (!arpBtn) { console.error("FOUT: arp sync-knop niet gevonden"); failures++; }
+    // arp sync uit via de knop in de kop: dan is het weer een gewone waarde
+    const arp = pick(document.getElementById("paramList"), "hbtn")
+      .find(b => b.title === "Arp sync");
+    if (!arp) { console.error("FOUT: arp sync-knop niet gevonden"); failures++; }
     else {
-      arpBtn.fire("click");
-      console.log("arp sync uit, rate leest:", rateText());
-      if (!/^[0-9]+$/.test(String(rateText()))) {
+      arp.fire("click");
+      console.log("arp sync uit, rate leest:", rateOf().num.textContent);
+      if (!/^[0-9]+$/.test(String(rateOf().num.textContent))) {
         console.error("FOUT: rate toont geen gewone waarde na arp sync uit");
         failures++;
       }
-      collect(document.getElementById("paramList"),
-              e => e.dataset && String(e.dataset.off) === "4")[0].fire("click");   // weer aan
+      pick(document.getElementById("paramList"), "hbtn")
+        .find(b => b.title === "Arp sync").fire("click");     // weer aan
     }
   }
 
@@ -765,7 +738,7 @@ setTimeout(() => {
         lane: findAll(box, e => String(e.className || "").includes("lfader"))[0],
       };
     };
-    const rate = fader("Rate"), slew = fader("Slew");
+    const rate = fader("RATE"), slew = fader("SLEW");
 
     // 1. wat jij zet mag niet terugspringen door een verouderde lezing:
     // de synth is nog niet bij, dus de volgende lezing geeft de oude stand
