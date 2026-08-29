@@ -537,6 +537,59 @@ setTimeout(() => {
     }
     lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
   }
+  // ---- filterpaneel ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Filter").fire("click");
+    const fp = document.getElementById("paramList");
+    const has = c => collect(fp, e => String(e.className || "").split(" ").includes(c));
+    const panel = fp.children[0];
+    const nm = collect(panel, e => String(e.className || "") === "name")[0];
+    console.log("filterpaneel:", nm ? nm.textContent : "geen",
+                "| faders:", has("lfader").length, "| balken:", has("seg").length,
+                "| schakelaars:", has("sw").length, "| knoppen:", has("dial").length);
+    if (!nm || nm.textContent !== "VCF" || has("lfader").length !== 5
+        || has("seg").length !== 2 || has("sw").length !== 2
+        || has("dial").length !== 4) {
+      console.error("FOUT: filterpaneel niet volgens het ontwerp opgebouwd");
+      failures++;
+    } else {
+      // envelope omkeren is de omgekeerde parameter: aan is nul
+      const invCell = collect(fp, e => String(e.className || "").split(" ").includes("cell"))
+        .find(c => collect(c, l => String(l.className || "") === "lbl")
+                     .some(l => l.textContent === "ENV INVERT"));
+      const invSw = collect(invCell, e => String(e.className || "").split(" ").includes("sw"))[0];
+      const word = () => collect(invCell, e => String(e.className || "") === "word")[0].textContent;
+      sent = [];
+      invSw.fire("click");
+      const first = sent.filter(x => x[0] === "nrpn" && x[1] === 50).pop();
+      const w1 = word();
+      sent = [];
+      invSw.fire("click");
+      const second = sent.filter(x => x[0] === "nrpn" && x[1] === 50).pop();
+      console.log("env invert:", JSON.stringify(first), w1, "->",
+                  JSON.stringify(second), word());
+      if (!first || !second || first[2] === second[2]
+          || [first[2], second[2]].sort().join() !== "0,1") {
+        console.error("FOUT: env invert schakelt niet tussen 0 en 1");
+        failures++;
+      }
+      if ((first[2] === 0) !== (w1 === "On")) {
+        console.error("FOUT: bij env invert hoort nul het woord On te geven");
+        failures++;
+      }
+
+      // alleen de high-pass hoort nog los onder het paneel te staan
+      const cards = fp.children.filter(e => e !== panel
+        && String(e.textContent).length > 0);
+      console.log("los onder het paneel:", fp.children.length - 1, "element(en)");
+      if (!collect(fp, e => String(e.textContent).indexOf("High-pass") === 0).length) {
+        console.error("FOUT: de high-pass is nergens meer te vinden");
+        failures++;
+      }
+    }
+  }
+
   // ---- LFO-panelen, in dezelfde stijl als de oscillatoren ----
   lfoTab.fire("click");
 
