@@ -73,11 +73,12 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 
 ### LFO phase (from the instrument's own menu)
 
-Parameter 5 is one control with two meanings: **0 puts every voice in the same
-phase**, which sounds like mono, and **1 to 254 gives each voice its own
-offset**. The menu on the synth offers exactly that range, so the app keeps to
-it — 255 is stored happily too, it just is not a setting the instrument offers. Slew (parameter 6) does use the full
-0-255.
+Parameter 5 holds three settings in one byte, and the 256 values fit them
+exactly: **0 is poly**, **1 is mono**, and **2 to 255 is a phase offset per
+voice**, which the instrument shows in degrees as 1° to 254°. So the number on
+screen is one less than the number on the wire. The app's fader reads degrees
+and the two lamps beside it show poly and mono. Slew (parameter 6) is an
+ordinary 0-255.
 
 ### An LFO rate that follows the clock (measured)
 

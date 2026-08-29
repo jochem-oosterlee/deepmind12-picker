@@ -2078,6 +2078,7 @@ function spriteControl(strip, value, max, onMove, onDone) {
  */
 function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   const snap = opts && opts.snap, lo = (opts && opts.min) || 0, span = max - lo;
+  const fmt = (opts && opts.fmt) || (v => v);
   const cap = skinStrip("fadercap");
   const capW = cap ? Math.round(cap.w * cap.scale) : 26;
   const capH = cap ? Math.round(cap.h * cap.scale) : 14;
@@ -2125,7 +2126,7 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   const travel = height - capH;
   const paint = () => {
     knobEl.style.top = Math.round((1 - (val - lo) / (span || 1)) * travel) + "px";
-    num.textContent = snap ? snap.label(snap.toIndex(val)) : val;
+    num.textContent = snap ? snap.label(snap.toIndex(val)) : fmt(val);
   };
   paint();
   const set = (v, done) => {
@@ -2228,15 +2229,19 @@ function vFader(label, value, max, onMove, onDone) {
           setValue: v => { num.textContent = v; r.value = v; }};
 }
 
-// Het fasemenu op de DeepMind loopt van 1 tot 254; 0 is geen verschil en
-// klinkt dus als mono.
-const PHASE_MIN = 1, PHASE_MAX = 254;
+// Eén byte met drie standen: 0 is poly, 1 is mono, en al het hogere is een
+// faseverschil per stem — op het apparaat afgelezen in graden, 1° t/m 254°.
+// De 256 waarden passen daar precies op, vandaar de verschuiving van één.
+const PHASE_POLY = 0, PHASE_MONO = 1;
+const PHASE_MIN = 1, PHASE_MAX = 254;          // in graden, zoals het menu
+const degToRaw = d => d + 1;
+const rawToDeg = r => r - 1;
 
-/** Laatst gebruikte faseverschil per LFO, zodat de knop daar weer begint. */
+/** Laatst gebruikte faseverschil per LFO (in graden), waar de knop weer begint. */
 const lastPhaseByBase = {};
 function lastPhase(base) {
-  const v = lastPhaseByBase[base] || 64;
-  return Math.max(PHASE_MIN, Math.min(PHASE_MAX, v));
+  const d = lastPhaseByBase[base] || 64;
+  return Math.max(PHASE_MIN, Math.min(PHASE_MAX, d));
 }
 
 function renderLfo(base, title) {
@@ -2287,7 +2292,7 @@ function renderLfo(base, title) {
   const hNow = document.createElement("span");   // wordt in de titelbalk gezet
 
   const draw = () => {
-    const shape = Math.min(6, get(2)), mono = get(5) === 0 ? 1 : 0;
+    const shape = Math.min(6, get(2)), mono = get(5);
     waveBox.innerHTML = lfoWaveSvg(shape, get(0), get(1), get(6), mono);
     hNow.textContent = SHAPE_NAMES[shape];
   };
@@ -2312,20 +2317,18 @@ function renderLfo(base, title) {
   mk(1, "Delay", OUTER, rightCol);
   mk(6, "Slew", INNER, innerLeft);
 
-  // Rechts-binnen de fase: op het apparaat loopt dat menu van 1 tot 254, en
-  // 0 betekent geen verschil tussen de stemmen — dus mono. 255 neemt de synth
-  // ook aan, maar dat staat niet in het menu.
-  const spreadOn = get(5) >= PHASE_MIN;
+  // Rechts-binnen het faseverschil, in graden zoals het apparaat het toont.
+  const spreadOn = get(5) > PHASE_MONO;
+  const degOpts = {min: PHASE_MIN, fmt: v => v + "°"};
   const spread = spreadOn
-    ? longFader("Phase", get(5), PHASE_MAX, INNER,
-        v => { doSend(P(base + 5), v); draw(); },
-        v => { lastPhaseByBase[base] = v; sendParam(P(base + 5), v); draw(); },
-        false, {min: PHASE_MIN})
-    : longFader("Phase", PHASE_MIN, PHASE_MAX, INNER, () => {}, () => {}, true,
-                {min: PHASE_MIN});
+    ? longFader("Phase", rawToDeg(get(5)), PHASE_MAX, INNER,
+        d => { doSend(P(base + 5), degToRaw(d)); draw(); },
+        d => { lastPhaseByBase[base] = d; sendParam(P(base + 5), degToRaw(d)); draw(); },
+        false, degOpts)
+    : longFader("Phase", PHASE_MIN, PHASE_MAX, INNER, () => {}, () => {}, true, degOpts);
   if (!spreadOn) {
     spread.box.title = "press Phase to use this: the LFO of each voice is then "
-      + "offset, instead of every voice running in step (mono)";
+      + "offset, instead of all voices running together (poly) or as one (mono)";
   }
   innerRight.appendChild(spread.box);
 
@@ -2405,17 +2408,18 @@ function renderLfo(base, title) {
   grid.appendChild(pill("Arp<br>sync", 4));
   grid.appendChild(pill("Key<br>sync", 3));
 
-  // Eén parameter: 0 zet elke stem in dezelfde fase (mono), 1 tot 254 geeft
-  // ze een eigen verschuiving (poly). De knop wipt daartussen en de lampjes
-  // tonen waar je staat — net als op het paneel.
+  // De knop stapt door de drie standen; poly en mono zijn lampjes die tonen
+  // waar je staat, net als op het paneel.
   const mode = get(5);
   const phase = document.createElement("button");
   phase.textContent = "Phase";
-  phase.title = "switches between mono and a phase offset per voice; the fader "
-    + "next to it sets how far the voices are apart";
-  phase.classList.toggle("on", mode >= PHASE_MIN);
+  phase.title = "steps through poly, mono and phase; in phase the fader sets "
+    + "how many degrees the voices are apart";
+  phase.classList.toggle("on", mode > PHASE_MONO);
   phase.addEventListener("click", () => {
-    const next = get(5) >= PHASE_MIN ? 0 : lastPhase(base);
+    const m = get(5);
+    const next = m === PHASE_POLY ? PHASE_MONO
+               : (m === PHASE_MONO ? degToRaw(lastPhase(base)) : PHASE_POLY);
     sendParam(P(base + 5), next);
     renderParams();            // de fader wordt actief of juist grijs
   });
@@ -2423,7 +2427,7 @@ function renderLfo(base, title) {
 
   const lamps = document.createElement("div");
   lamps.className = "lamps";
-  [["Poly", mode >= PHASE_MIN], ["Mono", mode === 0]].forEach(([nm, on]) => {
+  [["Poly", mode === PHASE_POLY], ["Mono", mode === PHASE_MONO]].forEach(([nm, on]) => {
     const l = document.createElement("div");
     l.className = "lamp" + (on ? " on" : "");
     const dot = document.createElement("i");

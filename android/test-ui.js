@@ -460,7 +460,8 @@ setTimeout(() => {
         failures++;
       }
     }
-    // de faseregelaar loopt van 1 tot 254, zoals het menu op het apparaat
+    // de faseregelaar toont graden (1 t/m 254); in de parameter staat een
+    // hogere waarde, want 0 is poly en 1 is mono
     const phaseBox = collect(plist, e => String(e.className || "") === "vf")
       .find(b => collect(b, x => String(x.className || "") === "vcap")
                    .some(c => c.textContent === "Phase"));
@@ -477,15 +478,18 @@ setTimeout(() => {
         phaseLane.fire("pointerup", {});
         return sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
       };
-      const low = swipe(100, 900), high = swipe(900, -900);
-      console.log("fase helemaal omlaag ->", JSON.stringify(low),
-                  "| helemaal omhoog ->", JSON.stringify(high));
-      if (!low || low[2] !== 1) {
-        console.error("FOUT: fase gaat onder 1");
+      const phaseNum = () => collect(phaseBox,
+        e => String(e.className || "") === "vnum")[0].textContent;
+      const low = swipe(100, 900), lowText = phaseNum();
+      const high = swipe(900, -900), highText = phaseNum();
+      console.log("fase omlaag ->", JSON.stringify(low), "toont", lowText,
+                  "| omhoog ->", JSON.stringify(high), "toont", highText);
+      if (!low || low[2] !== 2 || lowText !== "1°") {
+        console.error("FOUT: laagste fase is niet 1 graad (parameter 2)");
         failures++;
       }
-      if (!high || high[2] !== 254) {
-        console.error("FOUT: fase gaat niet tot 254");
+      if (!high || high[2] !== 255 || highText !== "254°") {
+        console.error("FOUT: hoogste fase is niet 254 graden (parameter 255)");
         failures++;
       }
     }
@@ -505,11 +509,18 @@ setTimeout(() => {
         console.error("FOUT: een lampje is aanklikbaar");
         failures++;
       }
-      sent = [];
-      phaseBtn.fire("click");
-      console.log("phase-knop ->", JSON.stringify(sent[0]));
-      if (!sent.some(x => x[0] === "nrpn" && x[1] === 5)) {
-        console.error("FOUT: Phase-knop stuurt niet naar parameter 5");
+      // vanaf een faseverschil: eerst poly, dan mono, dan weer een verschil
+      const step = () => {
+        sent = [];
+        collect(document.getElementById("paramList"),
+                e => e.tagName === "BUTTON" && e.textContent === "Phase")[0].fire("click");
+        const m = sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
+        return m ? m[2] : null;
+      };
+      const walk = [step(), step(), step()];
+      console.log("phase-knop stapt ->", walk.join(" -> "));
+      if (walk[0] !== 0 || walk[1] !== 1 || !(walk[2] > 1)) {
+        console.error("FOUT: Phase-knop loopt niet poly -> mono -> faseverschil");
         failures++;
       }
     }
