@@ -1820,7 +1820,7 @@ function renderLfo(base, title) {
  * en na loslaten weer omlaag. De vier curve-instellingen bollen elk stuk op
  * of hollen het uit, dus je ziet wat je draait.
  */
-function envSvg(a, d, sus, r, ac, dc, sc, rc) {
+function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
   const W = 264, H = 46, top = 4, bot = 44;
   const ax = 2 + (a / 255) * 70;
   const dx = ax + 6 + (d / 255) * 90;
@@ -1836,19 +1836,25 @@ function envSvg(a, d, sus, r, ac, dc, sc, rc) {
     const q = t >= 0 ? (1 - t) / 3 : 1 / 3 - t * (2 / 3);
     const dx = x2 - x1, dy = y2 - y1;
     const n = v => v.toFixed(1);
-    if (Math.abs(dy) < 0.5) {
-      // een vlak stuk heeft geen hoek om in te buigen: dan een lichte welving
-      return "Q" + n(x1 + dx / 2) + "," + n(y1 - t * 7) + " " + n(x2) + "," + n(y2);
-    }
     return "C" + n(x1 + dx * p) + "," + n(y1 + dy * q) + " "
                + n(x2 - dx * q) + "," + n(y2 - dy * p) + " "
                + n(x2) + "," + n(y2);
   };
+  // Het houdstuk is geen bocht maar een helling: in het midden vlak, naar de
+  // uitersten toe 45 graden omlaag of omhoog. Raakt hij onderweg de rand van
+  // het vak, dan loopt hij daar verder — de hoek blijft dus 45 graden.
+  const tilt = Math.max(-1, Math.min(1, (sus_c - 127) / 128));
+  let ex = sx, ey = ys - tilt * (sx - dx);
+  if (ey < top) { ex = dx + (ys - top) / Math.abs(tilt); ey = top; }
+  else if (ey > bot) { ex = dx + (bot - ys) / Math.abs(tilt); ey = bot; }
+  const hold = "L" + ex.toFixed(1) + "," + ey.toFixed(1)
+             + (ex < sx - 0.5 ? "L" + sx.toFixed(1) + "," + ey.toFixed(1) : "");
+
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)
     + bend(ax, top, dx, ys, dc)
-    + bend(dx, ys, sx, ys, sc)
-    + bend(sx, ys, rx, bot, rc)
+    + hold
+    + bend(sx, ey, rx, bot, rc)
     + " Z";
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H
     + '" class="wave"><path d="' + path + '" fill="var(--accent)" '

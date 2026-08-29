@@ -591,8 +591,10 @@ setTimeout(() => {
         return bad;
       };
       let worst = [];
-      [0, 255].forEach(v => {
+      // alle uitersten door elkaar: curves op nul en vol, houdniveau laag en hoog
+      [[0, 0], [0, 255], [255, 0], [255, 255]].forEach(([v, sus]) => {
         [5, 6, 7, 8].forEach(off => { paramBytes[53 + off] = v; });
+        paramBytes[55] = sus;
         paramRev++;
         envChecks.push(() => {
           const bad = outside();
