@@ -707,7 +707,7 @@ setTimeout(() => {
     [...document.getElementById("tabs").children]
       .find(t => t.textContent === "Filter").fire("click");
     const fp = document.getElementById("paramList");
-    const panel = fp.children[0], vca = fp.children[1];
+    const panel = fp.children[0], vca = fp.children[1], hpf = fp.children[2];
     const has = (root, c) => collect(root, e => String(e.className || "").split(" ").includes(c));
     const nameOf = pn => {
       const n = pn && collect(pn, e => String(e.className || "") === "name")[0];
@@ -715,11 +715,16 @@ setTimeout(() => {
     };
     const shape = pn => [has(pn, "lfader").length, has(pn, "seg").length,
                          has(pn, "sw").length, has(pn, "dial").length].join("/");
-    console.log("filtertab:", nameOf(panel), "+", nameOf(vca),
-                "| fader/balk/schakelaar/knop:", shape(panel), "en", shape(vca));
-    if (nameOf(panel) !== "VCF" || shape(panel) !== "5/2/2/4"
-        || nameOf(vca) !== "VCA / HPF" || shape(vca) !== "5/1/1/0") {
-      console.error("FOUT: de filterpanelen staan er niet zoals ontworpen");
+    console.log("filtertab:", [panel, vca, hpf].map(nameOf).join(" + "),
+                "| fader/balk/schakelaar/knop:",
+                [panel, vca, hpf].map(shape).join("  "));
+    // de boost hoort bij de high-pass, en staat dus maar op een plek
+    const boosts = collect(fp, e => String(e.className || "").split(" ").includes("lbl"))
+      .filter(l => l.textContent === "BASS BOOST").length;
+    if (nameOf(panel) !== "VCF" || shape(panel) !== "5/2/1/4"
+        || nameOf(vca) !== "VCA" || shape(vca) !== "4/1/0/0"
+        || nameOf(hpf) !== "HPF" || shape(hpf) !== "1/0/1/0" || boosts !== 1) {
+      console.error("FOUT: de filterpanelen staan er niet zoals op het apparaat");
       failures++;
     } else {
       // faders lijnen uit, ook als het ene label langer is dan het andere:
@@ -806,13 +811,11 @@ setTimeout(() => {
       // niets los onder de panelen over
       const caps = collect(vca, e => String(e.className || "") === "vcap")
         .map(e => e.textContent);
-      console.log("faders in VCA / HPF:", caps.join(", "),
-                  "| los eronder:", fp.children.length - 2);
-      if (caps.indexOf("HPF FREQ") === -1) {
-        console.error("FOUT: de high-pass staat niet in het VCA/HPF-paneel");
-        failures++;
-      }
-      if (fp.children.length !== 2) {
+      console.log("faders in VCA:", caps.join(", "),
+                  "| in HPF:", collect(hpf, e => String(e.className || "") === "vcap")
+                    .map(e => e.textContent).join(", "),
+                  "| los eronder:", fp.children.length - 3);
+      if (fp.children.length !== 3) {
         console.error("FOUT: er staat nog iets los onder de filterpanelen");
         failures++;
       }

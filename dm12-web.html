@@ -2554,26 +2554,32 @@ function globalSeg(idx, options) {
 let globalWatchers = [];
 
 // ================== versterker en high-pass ==================
+// Op het apparaat zijn dit twee dingen: de VCA werkt per stem, en de high-pass
+// zit erachter op de som van alle stemmen (handleiding 8.6 en 8.7). De boost
+// hoort bij de high-pass, waar hij op het paneel ook staat.
 
 function renderVca() {
   const H = 96;
-  const boost = cell("BASS BOOST");
-  boost.appendChild(swPill(52));
 
   // VCA-MODE kwam in firmware 1.1.0 en staat niet in de handleiding van 2016:
   // "Ballsy" is de oude karakteristiek van voor 1.0.5, "Transparent" de nieuwe.
   // Het is een globale instelling, byte 47, dus NRPN 347. Nul is transparent,
   // een is ballsy — nagekeken op het apparaat.
-  const thru = globalSeg(VCA_MODE_BYTE, [{l: "TRANSPARENT", v: 0}, {l: "BALLSY", v: 1}]);
-  thru.className += " auto";
-  thru.title = "VCA mode: transparent, or the older and louder ballsy";
+  const mode = globalSeg(VCA_MODE_BYTE, [{l: "TRANSPARENT", v: 0}, {l: "BALLSY", v: 1}]);
+  mode.className += " auto";
+  mode.title = "VCA mode: transparent, or the older and louder ballsy";
 
-  return panelBox(380, "VCA / HPF", [thru],
+  return panelBox(300, "VCA", [mode],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
      panelFader(82, "VEL > SENS", H),
-     panelFader(83, "PAN SPREAD", H, {fmt: v => fmt({k: "b"}, v)}),
-     panelFader(40, "HPF FREQ", H)],
-    [], {side: [boost]});
+     panelFader(83, "PAN SPREAD", H, {fmt: v => fmt({k: "b"}, v)})],
+    []);
+}
+
+function renderHpf() {
+  const boost = cell("BASS BOOST");
+  boost.appendChild(swPill(52));
+  return panelBox(170, "HPF", [], [panelFader(40, "FREQ", 96)], [], {side: [boost]});
 }
 
 function renderVcf() {
@@ -2593,9 +2599,6 @@ function renderVcf() {
   const inv = cell("ENV INVERT");
   inv.appendChild(swPill(50, "Off", "On", {on: 0, off: 1}));
 
-  const bass = cell("BASS BOOST");
-  bass.appendChild(swPill(52));
-
   const small = [["VEL > ENV", 43], ["P.BEND > FREQ", 44],
                  ["AFT > LFO", 47], ["MW > LFO", 48]].map(([l, n]) => {
     const c = cell(l);
@@ -2607,7 +2610,7 @@ function renderVcf() {
     [panelFader(39, "FREQ", H), panelFader(41, "RES", H),
      panelFader(42, "ENV", H), panelFader(45, "LFO", H),
      panelFader(49, "KYBD", H)],
-    small, {side: [lfoSel, inv, bass], cols: 4});
+    small, {side: [lfoSel, inv], cols: 4});
 }
 
 function lfoGlyphEl(shape) {
@@ -3133,6 +3136,7 @@ function renderParams() {
   if (page.panel === "vcf") {
     wrap.appendChild(renderVcf());
     wrap.appendChild(renderVca());
+    wrap.appendChild(renderHpf());
     list = page.params.filter(p => !VCF_PANEL.has(p.n));
   }
 

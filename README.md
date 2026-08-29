@@ -80,6 +80,14 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### VCA and HPF are two sections, not one
+
+The VCA menu holds envelope depth, velocity sensitivity and pan spread, and
+works per voice. The high-pass sits behind it: "applied to the output of the
+VCA", so it filters all voices at once (8.6 and 8.7). Its BOOST switch sits
+with it on the panel, though the setting also appears in the VCF menu. The app
+follows the instrument: VCF, then VCA, then HPF with the boost.
+
 ### Bipolar parameters, and one number that means two things
 
 Ten parameters run from -128 to +127 while the wire carries 0-255: pan spread
