@@ -26,7 +26,8 @@ function makeEl(id) {
     value: "",
     files: [],
     get textContent() { return this._text; },
-    set textContent(v) { this._text = String(v); },
+    // tekst zetten gooit de kinderen eruit, net als in een browser
+    set textContent(v) { this._text = String(v); this.children = []; },
     get innerHTML() { return this._html; },
     set innerHTML(v) { this._html = String(v); this.children = []; },
     // classList werkt op className, net als in een browser: de app leest soms
@@ -586,6 +587,79 @@ setTimeout(() => {
       console.error("FOUT: de voice-panelen staan er niet zoals ontworpen");
       failures++;
     } else {
+      // stembuiging loopt van -24 tot +24, met teken in de byte
+      {
+        const bend = nm => collect(panels[1], e => String(e.className || "") === "vf")
+          .find(b => caps(b)[0] === nm);
+        [["BEND+", 36, 232, 24], ["BEND-", 37, 24, 232]].forEach(([nm, par, lo, hi]) => {
+          const box = bend(nm);
+          const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
+          const num = collect(box, e => String(e.className || "") === "vnum")[0];
+          sent = [];
+          lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 3});
+          lane.fire("pointermove", {clientY: 900, preventDefault() {}, shiftKey: false});
+          lane.fire("pointerup", {});
+          const bottom = sent.filter(x => x[0] === "nrpn" && x[1] === par).pop();
+          const bottomText = num.textContent;
+          sent = [];
+          lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 3});
+          lane.fire("pointermove", {clientY: -900, preventDefault() {}, shiftKey: false});
+          lane.fire("pointerup", {});
+          const top = sent.filter(x => x[0] === "nrpn" && x[1] === par).pop();
+          console.log(nm, "onderaan:", bottomText, "=", bottom && bottom[2],
+                      "| bovenaan:", num.textContent, "=", top && top[2]);
+          if (!bottom || bottom[2] !== lo || !top || top[2] !== hi) {
+            console.error("FOUT: " + nm + " stuurt niet de bytes met teken");
+            failures++;
+          }
+          if (bottomText !== "-24" || num.textContent !== "24") {
+            console.error("FOUT: " + nm + " toont niet -24 tot 24");
+            failures++;
+          }
+        });
+      }
+
+      // een waarde intikken: klikken, typen, enter
+      {
+        const box = collect(panels[1], e => String(e.className || "") === "vf")
+          .find(b => caps(b)[0] === "TRANS");
+        const num = collect(box, e => String(e.className || "") === "vnum")[0];
+        sent = [];
+        num.fire("click");
+        const input = num.children[0];
+        console.log("invoervak geopend:", input ? input.tagName : "geen",
+                    "| begint op", input ? JSON.stringify(input.value) : "-");
+        if (!input) {
+          console.error("FOUT: klikken op een waarde opent geen invoervak");
+          failures++;
+        } else {
+          input.value = "-12";
+          input.fire("keydown", {key: "Enter", stopPropagation() {}});
+          const m = sent.filter(x => x[0] === "nrpn" && x[1] === 241).pop();
+          console.log("ingetikt -12 ->", JSON.stringify(m), "| toont", num.textContent);
+          if (!m || m[2] !== 116 || num.textContent !== "-12") {
+            console.error("FOUT: de ingetikte waarde komt niet goed aan");
+            failures++;
+          }
+          if (num.children.length) {
+            console.error("FOUT: het invoervak blijft open staan");
+            failures++;
+          }
+        }
+        // escape laat de waarde staan
+        const before = num.textContent;
+        num.fire("click");
+        const inp2 = num.children[0];
+        sent = [];
+        inp2.value = "40";
+        inp2.fire("keydown", {key: "Escape", stopPropagation() {}});
+        console.log("escape:", JSON.stringify(before), "->", JSON.stringify(num.textContent));
+        if (num.textContent !== before || sent.length) {
+          console.error("FOUT: escape zet toch iets");
+          failures++;
+        }
+      }
+
       // alles moet binnen het paneel passen: breedte tegen de inhoud
       {
         const w = parseInt(panels[1].style.width, 10);
@@ -924,7 +998,8 @@ setTimeout(() => {
       // de labelruimte staat vast, anders zakt zo'n kolom omlaag
       {
         const css = require("fs").readFileSync(process.argv[2], "utf8").split("</style>")[0];
-        const rule = (css.match(/\.vcap \{[^}]*\}/) || [""])[0];
+        // de regel voor het faderlabel zelf, niet die van een variant erop
+        const rule = (css.match(/^  \.vcap \{[^}]*\}/m) || [""])[0];
         const gridRule = (css.match(/\.cells \.lbl \{[^}]*\}/) || [""])[0];
         const headRule = (css.match(/\.pnl \.head \{[^}]*\}/) || [""])[0];
         if (!/height:\s*\d+px/.test(headRule)) {

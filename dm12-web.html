@@ -274,6 +274,12 @@
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
   .vf { display:flex; flex-direction:column; align-items:center; gap:4px; }
   /* de waarde staat onder de fader, zonder kader */
+  /* De waarde is aan te tikken om hem in te tikken. Het invoervak neemt precies
+     dezelfde plek en opmaak, zodat er niets verspringt. */
+  .vnum, .cell .num { cursor:text; }
+  .vnum input, .cell .num input { width:100%; padding:0; margin:0; border:none;
+    background:none; text-align:center; font:inherit; color:var(--text);
+    outline:none; }
   .vnum { font-size:12px; color:var(--label); font-weight:700; text-align:center;
     font-variant-numeric:tabular-nums; }
   .vtrack { position:relative; width:28px; height:96px; }
@@ -2369,12 +2375,62 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
     else set(val + dir * Math.max(1, Math.round(span / 64)), true);
   });
 
+  // getikte tekst terug naar een waarde: standaard gewoon het getal, met vaste
+  // standen de naam van een stand, en anders wat de aanroeper meegeeft
+  const fromText = t => {
+    if (snap) {
+      for (let i = 0; i < snap.count; i++) {
+        if (String(snap.label(i)).toLowerCase() === String(t).trim().toLowerCase()) {
+          return snap.toValue(i);
+        }
+      }
+    }
+    if (opts && opts.parse) return opts.parse(t);
+    const n = parseFloat(String(t).replace(/[^0-9.+-]/g, ""));
+    return isNaN(n) ? val : Math.round(n);
+  };
+  typeIn(num, () => String(num.textContent).replace(/[^0-9.+\-\/]/g, ""),
+         t => set(fromText(t), true));
+
   return {
     box: box, num: num,
     setValue: v => { val = v; paint(); },
     // van de synth: niet ingrijpen terwijl de gebruiker sleept
     fromSynth: v => { if (from === null) { val = v; paint(); } },
   };
+}
+
+/**
+ * Maakt een waardeveld aantikbaar: klikken zet er een invoervak in met dezelfde
+ * opmaak, enter neemt over, escape laat het.
+ *
+ * `read` geeft de tekst die er nu staat, `write` krijgt wat er getikt is.
+ */
+function typeIn(el, read, write) {
+  el.addEventListener("click", () => {
+    if (el.children && el.children.length) return;      // al open
+    const was = el.textContent;
+    const input = document.createElement("input");
+    input.value = read();
+    el.textContent = "";
+    el.appendChild(input);
+    if (input.focus) input.focus();
+    if (input.select) input.select();
+    let closed = false;
+    const close = keep => {
+      if (closed) return;
+      closed = true;
+      const text = input.value;
+      el.textContent = was;                              // eerst terug, dan zetten
+      if (keep) write(text);
+    };
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") close(true);
+      else if (e.key === "Escape") close(false);
+      if (e.stopPropagation) e.stopPropagation();
+    });
+    input.addEventListener("blur", () => close(true));
+  });
 }
 
 /** Verticale fader met de waarde erboven en het label eronder. */
@@ -2659,7 +2715,8 @@ function renderVoice() {
   return panelBox(300, "VOICE / PORTA", [],
     [panelFader(87, "DETUNE", H),
      panelFader(34, "PORTA TIME", H),
-     panelFader(91, "PORTA BAL", H, {fmt: v => fmt({k: "b"}, v)})],
+     panelFader(91, "PORTA BAL", H,
+                {fmt: v => fmt({k: "b"}, v), parse: t => +t + 128})],
     [], {side: [pick("POLY MODE", 85, POLY), pick("NOTE PRTY", 84, PRIO),
                 pick("TRIG MODE", 86, ETRIG), pick("PORTA MODE", 35, PORTA)]});
 }
@@ -2700,10 +2757,17 @@ function renderTune() {
   // byte 31, dus NRPN 331. Gemeten door hem op het apparaat te verdraaien.
   // 128 is zuiver, elke stap daarnaast is een cent.
   body.appendChild(faderGroup("TUNE", [
-    globalFader(TUNE_BYTE, "GLOBAL", H, {middle: 128, fmt: v => fmt({k: "b"}, v)}),
-    panelFader(241, "TRANS", H, {min: 80, max: 176, fmt: v => v - 128}),
-    panelFader(36, "BEND+", H, {max: 24}),
-    panelFader(37, "BEND-", H, {max: 24, fmt: v => (v ? "-" + v : 0)}),
+    globalFader(TUNE_BYTE, "GLOBAL", H,
+                {middle: 128, fmt: v => fmt({k: "b"}, v), parse: t => +t + 128}),
+    panelFader(241, "TRANS", H,
+                {min: 80, max: 176, fmt: v => v - 128, parse: t => +t + 128}),
+    // Allebei van -24 tot +24 halve tonen. In de byte staat dat met teken
+    // (232 is -24), en bij "omlaag" is het teken omgedraaid: die fader loopt
+    // andersom. De handleiding houdt het nog op 0-24.
+    panelFader(36, "BEND+", H, {min: -24, max: 24,
+                toShown: signed8, toRaw: unsigned8}),
+    panelFader(37, "BEND-", H, {min: -24, max: 24,
+                toShown: v => -signed8(v), toRaw: d => unsigned8(-d)}),
   ]));
   const bar = document.createElement("div");
   bar.className = "vrule";
@@ -2887,7 +2951,8 @@ function renderVca() {
   return panelBox(300, "VCA", [],
     [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
      panelFader(82, "VEL > SENS", H),
-     panelFader(83, "PAN SPREAD", H, {fmt: v => fmt({k: "b"}, v)})],
+     panelFader(83, "PAN SPREAD", H,
+                {fmt: v => fmt({k: "b"}, v), parse: t => +t + 128})],
     [modeCell], {cols: 1});
 }
 
@@ -3138,6 +3203,12 @@ function dial(num, max, after) {
   };
   d.addEventListener("pointerup", end);
   d.addEventListener("pointercancel", end);
+  typeIn(num_, () => String(num_.textContent),
+         t => {
+           const n = parseFloat(String(t).replace(/[^0-9.+-]/g, ""));
+           if (!isNaN(n)) paramSet(num, Math.max(0, Math.min(top, Math.round(n))));
+         });
+
   // dubbelklik zet hem terug in het midden: bij een curve is dat kaarsrecht
   d.title = "double-click for the middle";
   d.addEventListener("dblclick", () => paramSet(num, Math.round(top / 2)));
@@ -3972,6 +4043,10 @@ function globalNrpn(i) {
   const m = gmeta.bytes[i] || {};
   return m.nrpn !== undefined ? m.nrpn : GLOBAL_NRPN_BASE + i;
 }
+
+/** Byte met teken: 232 is -24, en terug. */
+function signed8(v) { return v > 127 ? v - 256 : v; }
+function unsigned8(v) { return v < 0 ? v + 256 : v; }
 
 /** Bytewaarde naar het getal dat de synth toont. */
 function rawToShown(i, v) {

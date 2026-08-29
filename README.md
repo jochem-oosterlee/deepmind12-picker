@@ -134,6 +134,13 @@ VCA", so it filters all voices at once (8.6 and 8.7). Its BOOST switch sits
 with it on the panel, though the setting also appears in the VCF menu. The app
 follows the instrument: VCF, then VCA, then HPF with the boost.
 
+### Pitch bend runs both ways
+
+The manual gives 36 and 37 as 0-24 semitones. On this firmware they are signed
+bytes running -24 to +24: 232 in the byte reads as -24. And the "down" one
+counts the other way round - byte 24 shows as -24 - so the two faders move in
+opposite directions, which is how the instrument's own editor draws them.
+
 ### Bipolar parameters, and one number that means two things
 
 Ten parameters run from -128 to +127 while the wire carries 0-255: pan spread
