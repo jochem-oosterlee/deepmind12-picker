@@ -2110,12 +2110,11 @@ function renderTune() {
 
   const body = document.createElement("div");
   body.className = "halves";
-  // De hoofdstemming is een globale instelling, geen onderdeel van een
-  // programma; welke byte dat is weten we nog niet. Hij staat er dus wel, maar
-  // zonder waarde — anders leest hij die van een parameter waar hij niet bij hoort.
+  // De hoofdstemming staat niet in een programma maar in het instellingenblok:
+  // byte 31, dus NRPN 331. Gemeten door hem op het apparaat te verdraaien.
+  // 128 is zuiver, elke stap daarnaast is een cent.
   body.appendChild(faderGroup("TUNE", [
-    panelFader(0, "GLOBAL", H, {disabled: true, value: 128,
-                                fmt: () => "—"}),
+    globalFader(TUNE_BYTE, "GLOBAL", H, {middle: 128, fmt: v => fmt({k: "b"}, v)}),
     panelFader(241, "TRANS", H, {min: 80, max: 176, fmt: v => v - 128}),
     panelFader(36, "BEND+", H, {max: 24}),
     panelFader(37, "BEND-", H, {max: 24, fmt: v => (v ? "-" + v : 0)}),
@@ -2256,6 +2255,29 @@ function globalSeg(idx, options) {
 
 /** Panelen die een globale instelling tonen, willen het horen als die verandert. */
 let globalWatchers = [];
+
+/** Fader op een globale instelling in plaats van op een programmaparameter. */
+function globalFader(idx, label, height, opts) {
+  opts = opts || {};
+  let want;
+  const have = () => {
+    const v = gData && gData.bytes ? gData.bytes[idx] : undefined;
+    return v === undefined ? (opts.middle || 0) : v;
+  };
+  const put = (v, done) => {
+    want = v;
+    AndroidBridge.sendNRPN(globalNrpn(idx), v, channel);
+    if (done) setTimeout(() => AndroidBridge.requestGlobals(devId), 300);
+  };
+  const f = longFader(label, have(), 255, height,
+    v => put(v, false), v => put(v, true), false, opts);
+  globalWatchers.push(() => {
+    const v = have();
+    if (want !== undefined && v === want) want = undefined;
+    if (want === undefined) f.fromSynth(v);
+  });
+  return f.box;
+}
 
 // ================== versterker en high-pass ==================
 // Op het apparaat zijn dit twee dingen: de VCA werkt per stem, en de high-pass
@@ -3358,6 +3380,8 @@ const GLOBAL_NRPN_BASE = 300;
 // VCA-MODE zit op bytepositie 47: gemeten door hem op het apparaat om te
 // zetten en te kijken welk nummer voorbijkwam (347).
 const VCA_MODE_BYTE = 47;
+// en de hoofdstemming op byte 31: 128 is zuiver, 0 is -128 cent
+const TUNE_BYTE = 31;
 function globalNrpn(i) {
   const m = gmeta.bytes[i] || {};
   return m.nrpn !== undefined ? m.nrpn : GLOBAL_NRPN_BASE + i;

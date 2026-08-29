@@ -73,6 +73,10 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
   app uses.
 - SysEx command `0x17` (11 bytes) is sent when a setting is changed on the panel;
   it does not appear for changes made over MIDI. Undocumented, and not needed.
+- **Master tune is global byte 31** (NRPN 331), 128 for in tune and a cent per
+  step either way. The manual has a Global Commands table that lists it fourth,
+  but that table is not the block's byte order - byte 3 reads 0 on a synth that
+  is in tune, which would be -128 cents. Measured by turning it and watching.
 - **VCA-MODE is global byte 47** (so NRPN 347): 0 is transparent, 1 is ballsy -
   the louder VCA characteristic from before firmware 1.0.5. It arrived in 1.1.0
   and is in neither the 2016 manual nor its parameter table; found by switching
