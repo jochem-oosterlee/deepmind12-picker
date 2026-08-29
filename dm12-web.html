@@ -324,7 +324,6 @@
   .fads { display:flex; gap:22px; justify-content:center; margin-top:10px; }
   .cells { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 6px;
     justify-items:center; align-items:start; }
-  .cells.four { grid-template-columns:repeat(4,1fr); }
   .cell { display:flex; flex-direction:column; align-items:center; gap:3px;
     max-width:100%; }
   .cell.wide { grid-column:1 / -1; width:60%; }
@@ -2579,7 +2578,7 @@ function renderVca() {
 function renderHpf() {
   const boost = cell("BASS BOOST");
   boost.appendChild(swPill(52));
-  return panelBox(170, "HPF", [], [panelFader(40, "FREQ", 96)], [], {side: [boost]});
+  return panelBox(120, "HPF", [], [panelFader(40, "FREQ", 96)], [boost], {cols: 1});
 }
 
 function renderVcf() {
@@ -2972,7 +2971,8 @@ function panelBox(width, title, headRight, faders, cells, opts) {
     rule.className = "rule";
     box.appendChild(rule);
     const grid = document.createElement("div");
-    grid.className = "cells" + (opts.cols === 4 ? " four" : "");
+    grid.className = "cells";
+    if (opts.cols) grid.style.gridTemplateColumns = "repeat(" + opts.cols + ",1fr)";
     cells.forEach(c => grid.appendChild(c));
     box.appendChild(grid);
   }
