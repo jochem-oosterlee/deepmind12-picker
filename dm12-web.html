@@ -1147,6 +1147,7 @@ let devNames = {};        // "A-0" -> [naam, categorie, heeftPatch]
 let devId = 0;
 let synthParams = null;   // parameterwaarden uit de synth (index = NRPN-nummer)
 let lastParamRev = -1, lastNameCount = -1, lastGlobalRev = -1, wasConnected = false;
+let lastProg = null;   // om te merken dat er op de synth een ander programma staat
 let dragging = false, readWaiting = 0, dragTimer = null;
 let popOpen = false;   // een open uitklapper mag niet weggegooid worden
 let settingsOpened = false;
@@ -1428,6 +1429,13 @@ function pollNow() {
       + (scan ? ` · scan ${scan.i}/${scan.items.length}` : "")
       + (queue.length ? ` · queue ${queue.length}` : "");
     if (lib.names !== lastNameCount) { lastNameCount = lib.names; loadDevNames(); }
+    // Wissel je op de synth zelf van programma, dan staan onze waarden nog op
+    // het vorige. De synth stuurt een program change, maar niet de inhoud, dus
+    // vragen we die er zelf bij op.
+    if (lib.curProg !== lastProg) {
+      if (lastProg !== null) setTimeout(() => AndroidBridge.requestEditBuffer(devId), 200);
+      lastProg = lib.curProg;
+    }
     if (lib.paramRev !== lastParamRev) {
       lastParamRev = lib.paramRev;
       loadSynthParams();

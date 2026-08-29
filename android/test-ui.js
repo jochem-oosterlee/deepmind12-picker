@@ -121,13 +121,15 @@ global.URL = {createObjectURL: () => "blob:x", revokeObjectURL() {}};
 let sent = [];
 let globalRev = 1, globalChanged = [6];
 let paramRev = 7;
+let curProg = 5;   // welk programma de synth zegt te spelen
+let reqEdits = 0;  // hoe vaak de app de inhoud opnieuw opvroeg
 const paramBytes = Array.from({length: 242}, (_, i) => (i * 7) & 0xFF);
 const globalBytes = Array.from({length: 45}, (_, i) => (i * 3) & 0xFF);
 global.AndroidBridge = {
   getStatus: () => JSON.stringify({connected: true, status: "verbonden met FakeDM12",
     event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
-    badNames: 0, curBank: 0, curProg: 5, iface: 2, dev: 0, editBuffer: true, paramRev: paramRev,
+    badNames: 0, curBank: 0, curProg: curProg, iface: 2, dev: 0, editBuffer: true, paramRev: paramRev,
     info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0,
     globalRev: globalRev, rxCC: 12, rxPar: 3, rxLast: "par 39 = 200"}),
   globals: () => JSON.stringify({rev: globalRev, hadPrevious: true, changed: globalChanged,
@@ -160,7 +162,7 @@ global.AndroidBridge = {
   disconnectWifi: () => sent.push(["wifioff"]),
   requestBankNames: (b, d) => { sent.push(["reqNames", b, d]); return true; },
   requestProgram: (b, p, d) => { sent.push(["reqProg", b, p, d]); return true; },
-  requestEditBuffer: d => { sent.push(["reqEdit", d]); return true; },
+  requestEditBuffer: d => { sent.push(["reqEdit", d]); reqEdits++; return true; },
   patchToEditBuffer: (b, p, d) => { sent.push(["toEdit", b, p, d]); return true; },
   patchToSlot: (sb, sp, db, dp, d) => { sent.push(["toSlot", sb, sp, db, dp, d]); return true; },
   libSave: () => sent.push(["libSave"]),
@@ -413,6 +415,8 @@ setTimeout(() => {
     .find(t => t.textContent === "LFO");
   const pwmChecks = [];
   const envChecks = [];
+  let fxCheck = null;
+  const progChecks = [];
 
   // ---- oscillatorpanelen, volgens het ontwerp ----
   {
@@ -725,6 +729,20 @@ setTimeout(() => {
     }
   }
 
+  // ---- wisselt de synth van programma, dan halen we de inhoud opnieuw op ----
+  {
+    const before = reqEdits;
+    curProg = (curProg + 1) % 128;
+    progChecks.push(() => {
+      const asked = reqEdits - before;
+      console.log("programma gewisseld op de synth -> edit buffer opgevraagd:", asked);
+      if (!asked) {
+        console.error("FOUT: na een programmawissel wordt niets opnieuw gelezen");
+        failures++;
+      }
+    });
+  }
+
   // ---- effectpanelen: de namen volgen het geladen effect ----
   {
     [...document.getElementById("tabs").children]
@@ -764,6 +782,27 @@ setTimeout(() => {
         console.error("FOUT: de namen volgen het gekozen effect niet");
         failures++;
       }
+
+      // en als de synth vier andere effecten meldt (nieuw programma), moeten
+      // alle vier de slots meegaan
+      // let op: de handleiding nummert de effecten vanaf 1, de parameter vanaf 0
+      [[166, 1], [179, 13], [192, 26], [205, 29]].forEach(([n, v]) => { paramBytes[n] = v; });
+      paramRev++;
+      fxCheck = () => {
+        const want = ["AmbVerb", "MidasEQ", "ModDlyRev", "Flanger"];
+        const shown = collect(document.getElementById("paramList"),
+          e => String(e.className || "").split(" ").includes("pick"))
+          .map(b => {
+            // de naam zit in een span binnen het vakje, naast het uitklapmenu
+            const sp = collect(b, e => e.tagName === "SPAN" && e.textContent)[0];
+            return String(sp ? sp.textContent : "").replace(/\s*▾$/, "").trim();
+          });
+        console.log("na een nieuw programma tonen de slots:", shown.join(", "));
+        if (shown.join() !== want.join()) {
+          console.error("FOUT: de slots volgen de synth niet");
+          failures++;
+        }
+      };
     }
   }
 
@@ -1208,12 +1247,20 @@ setTimeout(() => {
       setTimeout(() => {
         pwmChecks.forEach(fn => fn());
         while (envChecks.length) envChecks.shift()();
+        progChecks.forEach(fn => fn());
         const nowOn = sawOf().classList.contains("on");
         console.log("golfvormknop na een melding van de synth:",
                     nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");
         if (nowOn === wasOn) {
           console.error("FOUT: de koptoets volgt de synth niet");
           failures++;
+        }
+
+        // deze wisselt van tabblad, dus als laatste
+        if (fxCheck) {
+          [...document.getElementById("tabs").children]
+            .find(t => t.textContent === "FX").fire("click");
+          fxCheck();
         }
 
         if (global.__onerror && errors.length) console.log("meldingen:", errors);
