@@ -1205,7 +1205,7 @@ const RANGE = ["16'","8'","4'"];
 // wat de oscillatorpanelen zelf al tonen (92 hoort bij Voice, maar staat in
 // het ontwerp in het OSC 1-paneel)
 const OSC_PANEL = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-                           26, 27, 28, 29, 30, 31, 32, 38]);
+                           26, 27, 28, 29, 30, 31, 32, 38, 92]);
 // en het filterpaneel; alleen de high-pass staat er niet in
 const VCF_PANEL = new Set([39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
                            40, 80, 81, 82, 83]);   // ook het VCA/HPF-paneel
@@ -1248,6 +1248,7 @@ const PAGES = [
     S(30,"Aftertouch → pitch"), S(31,"Mod wheel → pitch"),
     H("General"),
     S(33,"Noise level"), S(34,"Portamento time"), E(35,"Portamento mode",PORTA),
+    B(91,"Portamento balance"), T(92,"OSC key down reset"),
     S(36,"Pitch bend up",24), S(37,"Pitch bend down",24),
   ]},
   {id:"vcf", name:"Filter", panel:"vcf", params:[
@@ -1274,7 +1275,6 @@ const PAGES = [
   {id:"voice", name:"Voice", params:[
     E(85,"Voice mode",POLY), E(84,"Voice priority",PRIO), E(86,"Envelope trigger",ETRIG),
     S(87,"Unison detune"), S(88,"Voice drift"), S(89,"Parameter drift"), S(90,"Drift rate"),
-    B(91,"Portamento balance"), T(92,"Key down reset"),
   ]},
   {id:"lfo", name:"LFO", custom:"lfo", params:[
     H("LFO 1"),

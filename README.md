@@ -71,6 +71,13 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### Two parameters the manual files under the oscillators
+
+Numbers 91 and 92 are named "OSC Portamento Balance" and "OSC Key Down Reset"
+in the parameter table, and key down reset gets its own drawing in the OSC 1
+pages. Both sat under Voice here, which is where a synth editor tends to put
+them; they belong with the oscillators.
+
 ### LFO phase (from the instrument's own menu)
 
 Parameter 5 holds three settings in one byte, and the 256 values fit them
