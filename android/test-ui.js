@@ -417,6 +417,7 @@ setTimeout(() => {
   const pwmChecks = [];
   const envChecks = [];
   let fxCheck = null;
+  let bendCheck = null;
   const progChecks = [];
 
   // ---- oscillatorpanelen, volgens het ontwerp ----
@@ -619,6 +620,25 @@ setTimeout(() => {
             failures++;
           }
         });
+      }
+
+      // een waarde buiten de schaal (uit het apparaat) hoort aan het uiteinde
+      // te blijven staan, niet erbuiten
+      {
+        paramBytes[37] = 43;          // -43 zou buiten -24..24 vallen
+        paramRev++;
+        bendCheck = () => {
+          const box = collect(document.getElementById("paramList"),
+            e => String(e.className || "") === "vf")
+            .find(b => collect(b, x => String(x.className || "") === "vcap")
+                         .some(c => c.textContent === "BEND-"));
+          const num = collect(box, e => String(e.className || "") === "vnum")[0];
+          console.log("byte 43 buiten de schaal toont:", num.textContent);
+          if (num.textContent !== "-24") {
+            console.error("FOUT: een waarde buiten de schaal wordt niet begrensd");
+            failures++;
+          }
+        };
       }
 
       // een waarde intikken: klikken, typen, enter
@@ -1420,6 +1440,12 @@ setTimeout(() => {
         if (nowOn === wasOn) {
           console.error("FOUT: de koptoets volgt de synth niet");
           failures++;
+        }
+
+        if (bendCheck) {
+          [...document.getElementById("tabs").children]
+            .find(t => t.textContent === "Voice").fire("click");
+          bendCheck();
         }
 
         // deze wisselt van tabblad, dus als laatste

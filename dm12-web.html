@@ -2329,7 +2329,11 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
 
   box.appendChild(capName); box.appendChild(lane); box.appendChild(num);
 
-  let val = value;
+  // Wat er binnenkomt hoort binnen de schaal te vallen; staat er iets raars in
+  // het apparaat, dan wijst de fader zijn uiterste stand aan in plaats van
+  // ernaast te gaan staan.
+  const fit = v => Math.max(lo, Math.min(max, v));
+  let val = fit(value);
   const travel = height - capH;
   const paint = () => {
     const at = (val - lo) / (span || 1);
@@ -2398,9 +2402,9 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
 
   return {
     box: box, num: num,
-    setValue: v => { val = v; paint(); },
+    setValue: v => { val = fit(v); paint(); },
     // van de synth: niet ingrijpen terwijl de gebruiker sleept
-    fromSynth: v => { if (from === null) { val = v; paint(); } },
+    fromSynth: v => { if (from === null) { val = fit(v); paint(); } },
   };
 }
 
