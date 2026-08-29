@@ -649,6 +649,10 @@ const ETRIG = ["Mono","Re-trigger","Legato","One-shot"];
 const AMODE = ["Up","Down","Up & down","Up inv","Down inv","Up & down inv","Up alt","Down alt",
                "Random","As played","Chord"];
 const ACLK  = ["1/2","3/8","1/3","1/4","3/16","1/6","1/8","3/32","1/12","1/16","1/24","1/32","1/48"];
+// LET OP: deze volgorde is die van de handleiding (hoofdstuk 9.1) en klopt
+// niet met wat de synth stuurt. Gemeten op het apparaat: 10 = Chorus,
+// 20 = AutoPan, 21 = T-RayDelay, 31 = FairComp. Zodra de echte volgorde
+// bekend is hoeft alleen deze lijst om; de parameternamen hangen aan de naam.
 const FXT   = ["TC-DeepVRB","AmbVerb","RoomRev","VintageRev","HallRev","ChamberRev","PlateRev",
                "RichPltRev","GatedRev","Reverse","ChorusVerb","DelayVerb","FlangVerb","MidasEQ",
                "Enhancer","FairComp","MulBndDist","RackAmp","EdisonEX1","AutoPan","NoiseGate","Delay",
@@ -659,42 +663,45 @@ const FXT   = ["TC-DeepVRB","AmbVerb","RoomRev","VintageRev","HallRev","ChamberR
 // geladen is. Overgenomen uit hoofdstuk 9.3 van de handleiding, in dezelfde
 // volgorde als FXT. Een effect met minder dan twaalf parameters heeft een
 // kortere rij.
-const FXP = [
-  ["Preset","Decay","Tone","PreDelay","Mix"],   // TC-DeepVRB
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","Mod","TailGain"],   // AmbVerb
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],   // RoomRev
-  ["PreDelay","Size","Decay","Lo Mult","Hi Mult","Density","LoCut","Hi Cut","ER Level","ER Delay","Mix","Freeze"],   // VintageRev
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","ModSpeed"],   // HallRev
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],   // ChamberRev
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Xover","ModDepth","ModSpeed"],   // PlateRev
-  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Attack","Spin"],   // RichPltRev
-  ["PreDelay","Decay","Attack","Density","Spread","Mix","LoCut","HiSvFreq","HiSvGain","Diffusion"],   // GatedRev
-  ["PreDelay","Decay","Rise","Diffusion","Spread","Mix","LoCut","HiSvFreq","HiSvGain"],   // Reverse
-  ["Speed","Depth","Delay","Phase","Wave","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // ChorusVerb
-  ["Time","Pattern","FeedHC","Feedback","X-Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // DelayVerb
-  ["Speed","Depth","Delay","Phase","Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // FlangVerb
-  ["LoShelfGain","LoShelfFreq","LoMidGain","LoMidFreq","LoMidQ","HiMidGain","HiMidFreq","HiMidQ","HiShelfGain","HiShelfFreq","EQ"],   // MidasEQ
-  ["OutGain","Spread","BassGain","BassFreq","MidGain","MidQ","HiGain","HiFreq","FactorC"],   // Enhancer
-  ["Mode","InGain L/M","ThreshL/M","TImeL/M","DCBiasL/M","OutGainL/M","Bias Bal","InGain R/S","ThreshR/S","TImeR/S","DCBiasR/S","OutGainR/S"],   // FairComp
-  ["InputGain","Dist Types","Low Level","Low Drive","Xover Freq","Mid Level","Mid Drive","Xover Freq","High Level","High Drive","Cabinet","OutputGain"],   // MulBndDist
-  ["PreAmp","Buzz","Punch","Crunch","Drive","Level","Low","High","Cabinet"],   // RackAmp
-  ["On","InMode","OutMode","StSpread","LMFSpread","Balance","CntrDist","Gain"],   // EdisonEX1
-  ["Speed","Phase","Wave","Depth","EnvSpd","EnvDepth","Attack","Hold","Release"],   // AutoPan
-  ["Threshold","Range","Attack","Release","Hold","Punch","Mode","Power"],   // NoiseGate
-  ["Mix","Time","Mode","FactorL","FactorR","Offset","LC","HC","FeedLC","FeedL","FeedR","FeedHC"],   // Delay
-  ["Time","GainT","PanT","Feedback","FactorA","GainA","PanA","FactorB","GainB","PanB","X-Feed","Mix"],   // 3TapDelay
-  ["Time","Gain","Feedback","Spread","FactorA","GainA","FactorB","GainB","FactorC","GainC","X-Feed","Mix"],   // 4TapDelay
-  ["Mix","Delay","Sustain","Wobble","Tone"],   // T-RayDelay
-  ["Mix","Time Ms","Downsample","FactorL","FactorR","Bit-Reduce","Cutoff","Resonance","Type","FeedL","FeedR","Decimate"],   // DecimDelay
-  ["Time","Factor","Feedback","FeedHC","Depth","Speed","Mode","Rtype","Decay","Damping","Balance","Mix"],   // ModDlyRev
-  ["Speed","WidthL","WidthR","DelayL","DelayR","Mix","LoCut","Hi Cut","Phase","Wave","Spread"],   // Chorus
-  ["On","Mode","Mix","Sw1","Sw2","Sw3","Sw4"],   // Chorus-D
-  ["Speed","WidthL","WidthR","DelayL","Sets the modulation","Mix","LoCut","Hi Cut","Phase","FeedLC","FeedHC","Feed"],   // Flanger
-  ["Speed","Depth","Reso","Base Freq","Sets the modulation","Mix","Wave","Phase deg","EnvMod","Attack","Hold","Release"],   // Phaser
-  ["Speed","Depth","Resonance","Base Freq","Type LP","Mix","Wave","EnvMod","Attack","Release","Drive"],   // MoodFilter
-  ["Semi1","Cent1","Delay1","Gain1","Pan1","Mix","Semi2","Cent2","Delay2","Gain2","Pan2","HiCut"],   // DualPitch
-  ["LoSpeed","HiSpeed","Accel","Distance","Balance","Mix","Motor","Speed"],   // RotarySpkr
-];
+// Hoe de twaalf regelaars van een effect heten, uit hoofdstuk 9.3 van de
+// handleiding. Op naam, niet op volgorde: welke waarde bij welk effect hoort
+// bepaalt de synth, en die volgorde staat in FXT.
+const FXP = {
+  "TC-DeepVRB": ["Preset","Decay","Tone","PreDelay","Mix"],
+  "AmbVerb": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","Mod","TailGain"],
+  "RoomRev": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],
+  "VintageRev": ["PreDelay","Size","Decay","Lo Mult","Hi Mult","Density","LoCut","Hi Cut","ER Level","ER Delay","Mix","Freeze"],
+  "HallRev": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","ModSpeed"],
+  "ChamberRev": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],
+  "PlateRev": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Xover","ModDepth","ModSpeed"],
+  "RichPltRev": ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Attack","Spin"],
+  "GatedRev": ["PreDelay","Decay","Attack","Density","Spread","Mix","LoCut","HiSvFreq","HiSvGain","Diffusion"],
+  "Reverse": ["PreDelay","Decay","Rise","Diffusion","Spread","Mix","LoCut","HiSvFreq","HiSvGain"],
+  "ChorusVerb": ["Speed","Depth","Delay","Phase","Wave","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],
+  "DelayVerb": ["Time","Pattern","FeedHC","Feedback","X-Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],
+  "FlangVerb": ["Speed","Depth","Delay","Phase","Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],
+  "MidasEQ": ["LoShelfGain","LoShelfFreq","LoMidGain","LoMidFreq","LoMidQ","HiMidGain","HiMidFreq","HiMidQ","HiShelfGain","HiShelfFreq","EQ"],
+  "Enhancer": ["OutGain","Spread","BassGain","BassFreq","MidGain","MidQ","HiGain","HiFreq","FactorC"],
+  "FairComp": ["Mode","InGain L/M","ThreshL/M","TImeL/M","DCBiasL/M","OutGainL/M","Bias Bal","InGain R/S","ThreshR/S","TImeR/S","DCBiasR/S","OutGainR/S"],
+  "MulBndDist": ["InputGain","Dist Types","Low Level","Low Drive","Xover Freq","Mid Level","Mid Drive","Xover Freq","High Level","High Drive","Cabinet","OutputGain"],
+  "RackAmp": ["PreAmp","Buzz","Punch","Crunch","Drive","Level","Low","High","Cabinet"],
+  "EdisonEX1": ["On","InMode","OutMode","StSpread","LMFSpread","Balance","CntrDist","Gain"],
+  "AutoPan": ["Speed","Phase","Wave","Depth","EnvSpd","EnvDepth","Attack","Hold","Release"],
+  "NoiseGate": ["Threshold","Range","Attack","Release","Hold","Punch","Mode","Power"],
+  "Delay": ["Mix","Time","Mode","FactorL","FactorR","Offset","LC","HC","FeedLC","FeedL","FeedR","FeedHC"],
+  "3TapDelay": ["Time","GainT","PanT","Feedback","FactorA","GainA","PanA","FactorB","GainB","PanB","X-Feed","Mix"],
+  "4TapDelay": ["Time","Gain","Feedback","Spread","FactorA","GainA","FactorB","GainB","FactorC","GainC","X-Feed","Mix"],
+  "T-RayDelay": ["Mix","Delay","Sustain","Wobble","Tone"],
+  "DecimDelay": ["Mix","Time Ms","Downsample","FactorL","FactorR","Bit-Reduce","Cutoff","Resonance","Type","FeedL","FeedR","Decimate"],
+  "ModDlyRev": ["Time","Factor","Feedback","FeedHC","Depth","Speed","Mode","Rtype","Decay","Damping","Balance","Mix"],
+  "Chorus": ["Speed","WidthL","WidthR","DelayL","DelayR","Mix","LoCut","Hi Cut","Phase","Wave","Spread"],
+  "Chorus-D": ["On","Mode","Mix","Sw1","Sw2","Sw3","Sw4"],
+  "Flanger": ["Speed","WidthL","WidthR","DelayL","Sets the modulation","Mix","LoCut","Hi Cut","Phase","FeedLC","FeedHC","Feed"],
+  "Phaser": ["Speed","Depth","Reso","Base Freq","Sets the modulation","Mix","Wave","Phase deg","EnvMod","Attack","Hold","Release"],
+  "MoodFilter": ["Speed","Depth","Resonance","Base Freq","Type LP","Mix","Wave","EnvMod","Attack","Release","Drive"],
+  "DualPitch": ["Semi1","Cent1","Delay1","Gain1","Pan1","Mix","Semi2","Cent2","Delay2","Gain2","Pan2","HiCut"],
+  "RotarySpkr": ["LoSpeed","HiSpeed","Accel","Distance","Balance","Mix","Motor","Speed"],
+};
 
 const fxSlot = (nr, type, p1, gain) => [
   H("FX slot " + nr), E(type, "FX " + nr + " type", FXT), S(gain, "FX " + nr + " gain", 150),
@@ -1999,7 +2006,7 @@ function renderEnv(base, title) {
 
 function renderFx(nr, typeN, p1, gainN) {
   const kind = Math.min(FXT.length - 1, params.get(typeN, 0));
-  const names = FXP[kind] || [];
+  const names = FXP[FXT[kind]] || [];
 
   const cells = [];
   names.forEach((nm, i) => {
