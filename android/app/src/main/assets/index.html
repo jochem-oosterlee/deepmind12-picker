@@ -2179,8 +2179,9 @@ function dial(num, max, after) {
 
   const top = max || 255;
   const paint = v => {
-    // nul staat rechtop, en vandaar 270 graden met de klok mee
-    needle.style.transform = "rotate(" + ((v / top) * 270) + "deg)";
+    // nul staat linksonder, vol staat rechtsonder: 270 graden langs de top,
+    // met de opening dus aan de onderkant
+    needle.style.transform = "rotate(" + (-135 + (v / top) * 270) + "deg)";
     num_.textContent = v;
     if (after) after();
   };

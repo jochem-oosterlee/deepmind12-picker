@@ -609,6 +609,22 @@ setTimeout(() => {
         const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
         return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       };
+      // de wijzer staat op nul linksonder en gaat langs de top naar rechtsonder
+      {
+        const d0 = collect(one, e => cl2(e, "dial"))[0];
+        const needle = d0.children[0];
+        const shown = +collect(d0.parentEl, e => cl2(e, "num"))[0].textContent;
+        const m = String(needle.style.transform || "").match(/-?[0-9.]+/);
+        const angle = m ? +m[0] : null;
+        const want = -135 + (shown / 255) * 270;
+        console.log("knopwijzer bij", shown, "staat op", angle,
+                    "graden (verwacht", want.toFixed(1) + ")");
+        if (angle === null || Math.abs(angle - want) > 0.6) {
+          console.error("FOUT: de wijzer staat niet waar hij hoort");
+          failures++;
+        }
+      }
+
       // aanslag, verval en release mogen elk hoogstens een kwart pakken
       [53, 54, 56].forEach(n => { paramBytes[n] = 255; });
       [5, 6, 7, 8].forEach(off => { paramBytes[53 + off] = 128; });
