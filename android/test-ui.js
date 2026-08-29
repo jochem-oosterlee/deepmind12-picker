@@ -749,14 +749,32 @@ setTimeout(() => {
       .find(t => t.textContent === "FX").fire("click");
     const xp = document.getElementById("paramList");
     const cl3 = (e, c) => String(e.className || "").split(" ").includes(c);
-    const panels = xp.children.filter(e => cl3(e, "pnl"));
+    const all = xp.children.filter(e => cl3(e, "pnl"));
+    const routing = all[0];
+    const panels = all.slice(1);
     const names = panels.map(pn => {
       const n = collect(pn, e => String(e.className || "") === "name")[0];
       return n ? n.textContent : "?";
     });
     const labels = pn => collect(pn, e => cl3(e, "lbl")).map(e => e.textContent);
-    console.log("FX-panelen:", names.join(" "), "| eerste slot:",
-                labels(panels[0]).slice(0, 5).join(", "));
+    const routes = collect(routing, e => e.tagName === "BUTTON").length;
+    const routeName = collect(routing, e => String(e.className || "") === "pick")[0];
+    console.log("FX-tab:", collect(routing, e => String(e.className || "") === "name")[0].textContent,
+                "op", routeName.textContent, "met", routes, "schema's |",
+                names.join(" "), "| eerste slot:", labels(panels[0]).slice(0, 4).join(", "));
+    if (routes !== 10) {
+      console.error("FOUT: er staan geen tien routings om uit te kiezen");
+      failures++;
+    } else {
+      sent = [];
+      collect(routing, e => e.tagName === "BUTTON")[2].fire("click");
+      const m2 = sent.filter(x => x[0] === "nrpn" && x[1] === 165).pop();
+      console.log("routing gekozen ->", JSON.stringify(m2), "| kop:", routeName.textContent);
+      if (!m2 || m2[2] !== 2 || routeName.textContent !== "M-3") {
+        console.error("FOUT: een routing kiezen stuurt niet 165 of toont niet M-3");
+        failures++;
+      }
+    }
     if (names.join(" ") !== "FX 1 FX 2 FX 3 FX 4") {
       console.error("FOUT: de vier effectslots staan er niet");
       failures++;
@@ -772,7 +790,7 @@ setTimeout(() => {
       box.fire("click");
       pop.children[13].fire("click");                 // Delay
       const m = sent.filter(x => x[0] === "nrpn" && x[1] === 166).pop();
-      const after = labels(document.getElementById("paramList").children[0]);
+      const after = labels(document.getElementById("paramList").children[1]);
       console.log("gekozen:", JSON.stringify(m), "-> namen:", after.slice(0, 4).join(", "));
       if (!m || m[2] !== 13) {
         console.error("FOUT: het effecttype gaat niet naar parameter 166");
@@ -783,6 +801,24 @@ setTimeout(() => {
         failures++;
       }
 
+      // de gain loopt tot 150; helemaal open moet dus 150 sturen
+      {
+        const box2 = collect(panels[0], e => String(e.className || "") === "vf")
+          .find(b => collect(b, x => String(x.className || "") === "vcap")
+                       .some(c => c.textContent === "GAIN"));
+        const lane = collect(box2, e => String(e.className || "").includes("lfader"))[0];
+        sent = [];
+        lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 6});
+        lane.fire("pointermove", {clientY: -900, preventDefault() {}, shiftKey: false});
+        lane.fire("pointerup", {});
+        const top = sent.filter(x => x[0] === "nrpn" && x[1] === 218).pop();
+        console.log("gain helemaal open ->", JSON.stringify(top));
+        if (!top || top[2] !== 150) {
+          console.error("FOUT: de gain gaat niet tot 150");
+          failures++;
+        }
+      }
+
       // en als de synth vier andere effecten meldt (nieuw programma), moeten
       // alle vier de slots meegaan
       // waarden zoals de synth ze nummert, gemeten op het apparaat
@@ -790,8 +826,11 @@ setTimeout(() => {
       paramRev++;
       fxCheck = () => {
         const want = ["HallRev", "Delay", "ChamberRev", "DualPitch"];
-        const shown = collect(document.getElementById("paramList"),
-          e => String(e.className || "").split(" ").includes("pick"))
+        // het eerste paneel is de routing, daarna de vier slots
+        const slots = document.getElementById("paramList").children
+          .filter(e => String(e.className || "").split(" ").includes("pnl")).slice(1);
+        const shown = slots
+          .map(pn => collect(pn, e => String(e.className || "").split(" ").includes("pick"))[0])
           .map(b => {
             // de naam zit in een span binnen het vakje, naast het uitklapmenu
             const sp = collect(b, e => e.tagName === "SPAN" && e.textContent)[0];

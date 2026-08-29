@@ -233,6 +233,13 @@
     border:1px solid var(--border); border-radius:8px; }
   /* de golfvorm rekt mee met de hoogte die de buitenste faders bepalen, zodat
      er onder het knoppenblok geen ruimte overblijft */
+  /* de tien routings om uit te kiezen, met de gekozen opgelicht */
+  .wavebox.routing { height:56px; }
+  .routes { display:grid; grid-template-columns:repeat(2,1fr); gap:4px; }
+  .routes button { padding:3px; display:flex; align-items:center;
+    justify-content:center; overflow:hidden; }
+  .routes button svg { display:block; }
+
   /* een klein label naast iets in de kop, zoals TRIG bij een envelope */
   .trig { display:flex; align-items:center; gap:5px; }
   .trig .lbl { color:var(--label); font-size:8px; letter-spacing:1px; }
@@ -2600,9 +2607,13 @@ function renderFx(nr, typeN, p1, gainN) {
   const names = eff === "None" ? []
               : (FXP[eff] || Array.from({length: 12}, (_, i) => "Param " + (i + 1)));
 
+  // Mix hoort naast gain als fader, want die gebruik je het meest. Bij welke
+  // van de twaalf dat is verschilt per effect, en niet elk effect heeft er een.
+  const mixAt = names.findIndex(n => /^mix$/i.test(n));
+
   const cells = [];
   names.forEach((nm, i) => {
-    if (!nm) return;
+    if (!nm || i === mixAt) return;
     const c = cell(nm.toUpperCase());
     c.appendChild(dial(p1 + i));
     cells.push(c);
@@ -2612,7 +2623,147 @@ function renderFx(nr, typeN, p1, gainN) {
   params.subscribe(typeN, () => renderParams());
 
   return panelBox(470, "FX " + nr, [pickBox(typeN, FXT, {cols: 4})],
-    [panelFader(gainN, "GAIN", FADER_H)], cells, {cols: 6});
+    // de uitgangsversterking loopt tot 150, niet tot 255 (handleiding p120)
+    [panelFader(gainN, "GAIN", FADER_H, {max: 150}),
+     panelFader(mixAt >= 0 ? p1 + mixAt : p1, "MIX", FADER_H,
+                {disabled: mixAt < 0})],
+    cells, {cols: 6});
+}
+
+// ================== routing van de effecten ==================
+// De tien schema's uit de handleiding (7.2.2), overgetekend uit de plaatjes.
+// Elk schema is: eerst wat er in serie voor staat, dan de takken die naast
+// elkaar lopen, dan wat er in serie achter komt. De laatste twee kruisen hun
+// takken: dat zijn de routings met terugkoppeling.
+const ROUTINGS = [
+  {pre: [1, 2, 3, 4]},                                     // M-1
+  {lanes: [[1], [2]], post: [3, 4]},                       // M-2
+  {lanes: [[1, 2], [3, 4]]},                               // M-3
+  {lanes: [[1], [2], [3], [4]]},                           // M-4
+  {lanes: [[1], [3]], post: [2, 4]},                       // M-5
+  {pre: [1, 2], lanes: [[3], [4]]},                        // M-6
+  {pre: [1, 3], lanes: [[2], [4]]},                        // M-7
+  {lanes: [[1, 2, 3], [4]]},                               // M-8
+  {lanes: [[1, 2], [3, 4]], cross: true},                  // M-9
+  {lanes: [[1, 2, 3], [4]], cross: true},                  // M-10
+];
+
+/** Tekent een verbindingsschema: blokjes met lijnen ertussen. */
+function routingSvg(r, active, w, h) {
+  const BW = 20, BH = 14, GAP = 12, LANE = 20;
+  const pre = r.pre || [], post = r.post || [], lanes = r.lanes || [];
+  const cols = pre.length + post.length
+             + Math.max(1, ...lanes.map(l => l.length), lanes.length ? 1 : 0);
+  const wide = lanes.length ? Math.max(...lanes.map(l => l.length)) : 0;
+  const total = pre.length + wide + post.length;
+  const W = 14 + total * (BW + GAP), H = Math.max(34, lanes.length * LANE + 14);
+  const mid = H / 2;
+  const col = "var(--accent)";
+  let out = "", x = 8;
+
+  const box = (n, cx, cy) =>
+    '<rect x="' + cx + '" y="' + (cy - BH / 2) + '" width="' + BW + '" height="' + BH
+    + '" rx="2" fill="var(--well)" stroke="' + col + '"/>'
+    + '<text x="' + (cx + BW / 2) + '" y="' + (cy + 4) + '" text-anchor="middle" '
+    + 'font-size="9" fill="' + col + '">' + n + "</text>";
+  const line = (x1, y1, x2, y2) =>
+    '<path d="M' + x1 + "," + y1 + "L" + x2 + "," + y2 + '" stroke="' + col
+    + '" fill="none"/>';
+
+  out += line(0, mid, x, mid);
+  pre.forEach(n => { out += box(n, x, mid) + line(x + BW, mid, x + BW + GAP, mid); x += BW + GAP; });
+
+  if (lanes.length) {
+    const top = mid - ((lanes.length - 1) * LANE) / 2;
+    const splitX = x - GAP / 2, joinX = x + wide * (BW + GAP) - GAP / 2;
+    lanes.forEach((lane, i) => {
+      const y = top + i * LANE;
+      out += line(splitX, mid, splitX, y) + line(splitX, y, x, y);
+      let lx = x;
+      lane.forEach(n => {
+        out += box(n, lx, y);
+        lx += BW;
+        out += line(lx, y, lx + GAP, y);
+        lx += GAP;
+      });
+      out += line(lx - GAP, y, joinX, y) + line(joinX, y, joinX, mid);
+    });
+    if (r.cross) {
+      const y1 = top, y2 = top + (lanes.length - 1) * LANE, cx = x + wide * (BW + GAP) / 2;
+      out += line(cx - 6, y1, cx + 6, y2) + line(cx - 6, y2, cx + 6, y1);
+    }
+    x = joinX + GAP / 2;
+    out += line(joinX, mid, x, mid);
+  }
+
+  post.forEach(n => { out += box(n, x, mid) + line(x + BW, mid, x + BW + GAP, mid); x += BW + GAP; });
+  out += line(x - GAP, mid, W, mid);
+
+  // Elk schema heeft zijn eigen afmeting; door de tekening te laten schalen
+  // passen ze allemaal even groot in hun vakje.
+  return '<svg width="' + (w || 132) + '" height="' + (h || 42)
+    + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet"'
+    + ' stroke-width="1.2"' + (active ? "" : ' opacity=".7"') + ">" + out + "</svg>";
+}
+
+function renderRouting() {
+  const box = document.createElement("div");
+  box.className = "pnl";
+  box.style.width = "300px";
+
+  const head = document.createElement("div");
+  head.className = "head";
+  const nm = document.createElement("span");
+  nm.className = "name";
+  nm.textContent = "ROUTING";
+  head.appendChild(nm);
+  const lab = document.createElement("span");
+  lab.className = "pick";
+  head.appendChild(lab);
+  box.appendChild(head);
+
+  const draw = document.createElement("div");
+  draw.className = "wavebox routing";
+  box.appendChild(draw);
+
+  // alle tien onder elkaar om uit te kiezen
+  const grid = document.createElement("div");
+  grid.className = "routes";
+  ROUTINGS.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.innerHTML = routingSvg(r, false);
+    b.title = "M-" + (i + 1) + (i >= 8 ? " (met terugkoppeling)" : "");
+    b.addEventListener("click", () => paramSet(165, i));
+    grid.appendChild(b);
+  });
+
+  const show = () => {
+    const v = Math.min(ROUTINGS.length - 1, params.get(165, 0));
+    lab.textContent = "M-" + (v + 1);
+    draw.innerHTML = routingSvg(ROUTINGS[v], true, 260, 48);
+    Array.from(grid.children).forEach((b, i) => b.classList.toggle("on", i === v));
+  };
+  show();
+  params.subscribe(165, show);
+
+  const rule = document.createElement("div");
+  rule.className = "rule";
+  box.appendChild(rule);
+  box.appendChild(grid);
+
+  // waar de effecten in het signaal hangen hoort bij hetzelfde verhaal
+  const mode = cell("FX MODE");
+  mode.style.width = "100%";
+  mode.appendChild(segRow(222, [{l: "INSERT", v: 0}, {l: "SEND", v: 1},
+                                {l: "BYPASS", v: 2}]));
+  const modeWrap = document.createElement("div");
+  modeWrap.className = "cells";
+  modeWrap.style.gridTemplateColumns = "1fr";
+  modeWrap.style.minHeight = "0";
+  modeWrap.style.marginTop = "8px";
+  modeWrap.appendChild(mode);
+  box.appendChild(modeWrap);
+  return box;
 }
 
 // ================== filterpaneel ==================
@@ -3268,11 +3419,11 @@ function renderParams() {
     list = [];
   }
   if (page.panel === "fx") {
+    wrap.appendChild(renderRouting());
     [[1, 166, 167, 218], [2, 179, 180, 219],
      [3, 192, 193, 220], [4, 205, 206, 221]]
       .forEach(a => wrap.appendChild(renderFx(a[0], a[1], a[2], a[3])));
-    list = page.params.filter(p => p.n === undefined || p.n < 165 || p.n === 222
-                                   || p.n === 165);
+    list = page.params.filter(p => p.n === undefined || (p.n < 165 && p.n !== 165));
   }
   if (page.panel === "vcf") {
     wrap.appendChild(renderVcf());

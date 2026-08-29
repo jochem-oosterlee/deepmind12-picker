@@ -103,6 +103,16 @@ Two things the manual does not have: an empty slot at 0, and **VintagePitch at
 are ignored. Since the parameter tables of chapter 9.3 stop at the effects of
 2016, that one's twelve knobs are numbered rather than named.
 
+### The ten routings
+
+Parameter 165 picks how the four slots are wired. The manual draws the ten as
+pictures and describes none of them in words, so they were traced from those
+drawings: four in series, pairs in parallel, chains beside each other, all four
+at once, and two with a crossed feedback path (the manual warns to keep the
+volume down while trying those). The app draws them from a small description
+rather than as images - a chain in front, branches beside each other, a chain
+behind, and a cross - so all ten come out of one routine.
+
 ### The effects have no panel on the instrument
 
 There are no knobs for them: the FX menu shows an overview of the four slots
