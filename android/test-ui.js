@@ -591,7 +591,9 @@ setTimeout(() => {
       {
         const bend = nm => collect(panels[1], e => String(e.className || "") === "vf")
           .find(b => caps(b)[0] === nm);
-        [["BEND+", 36, 232, 24], ["BEND-", 37, 24, 232]].forEach(([nm, par, lo, hi]) => {
+        // bend+ heeft -24 onderin, bend- juist +24 onderin
+        [["BEND+", 36, 232, 24, "-24", "24"],
+         ["BEND-", 37, 232, 24, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
           const box = bend(nm);
           const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
@@ -612,7 +614,7 @@ setTimeout(() => {
             console.error("FOUT: " + nm + " stuurt niet de bytes met teken");
             failures++;
           }
-          if (bottomText !== "-24" || num.textContent !== "24") {
+          if (bottomText !== loT || num.textContent !== hiT) {
             console.error("FOUT: " + nm + " toont niet -24 tot 24");
             failures++;
           }

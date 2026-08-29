@@ -2282,6 +2282,8 @@ function spriteControl(strip, value, max, onMove, onDone) {
  */
 function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   const snap = opts && opts.snap, lo = (opts && opts.min) || 0, span = max - lo;
+  // Een omgedraaide fader heeft zijn hoogste waarde onderaan.
+  const flip = !!(opts && opts.flip);
   const fmt = (opts && opts.fmt) || (v => v);
   const cap = skinStrip("fadercap");
   // maten uit het ontwerp; met een skin bepaalt de afbeelding ze
@@ -2330,7 +2332,8 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   let val = value;
   const travel = height - capH;
   const paint = () => {
-    knobEl.style.top = Math.round((1 - (val - lo) / (span || 1)) * travel) + "px";
+    const at = (val - lo) / (span || 1);
+    knobEl.style.top = Math.round((flip ? at : 1 - at) * travel) + "px";
     num.textContent = snap ? snap.label(snap.toIndex(val)) : fmt(val);
   };
   paint();
@@ -2358,7 +2361,8 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   lane.addEventListener("pointermove", e => {
     if (from === null) return;
     markDragging();
-    set(startVal + ((from - e.clientY) / travel) * span * (e.shiftKey ? 0.25 : 1));
+    const step = ((from - e.clientY) / travel) * span * (e.shiftKey ? 0.25 : 1);
+    set(startVal + (flip ? -step : step));
   });
   const end = () => {
     if (from === null) return;
@@ -2370,7 +2374,7 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   lane.addEventListener("pointercancel", end);
   lane.addEventListener("wheel", e => {
     if (e.preventDefault) e.preventDefault();
-    const dir = e.deltaY < 0 ? 1 : -1;
+    const dir = (e.deltaY < 0 ? 1 : -1) * (flip ? -1 : 1);
     if (snap) set(snap.toValue(snap.toIndex(val) + dir), true);
     else set(val + dir * Math.max(1, Math.round(span / 64)), true);
   });
@@ -2766,7 +2770,7 @@ function renderTune() {
     // andersom. De handleiding houdt het nog op 0-24.
     panelFader(36, "BEND+", H, {min: -24, max: 24,
                 toShown: signed8, toRaw: unsigned8}),
-    panelFader(37, "BEND-", H, {min: -24, max: 24,
+    panelFader(37, "BEND-", H, {min: -24, max: 24, flip: true,
                 toShown: v => -signed8(v), toRaw: d => unsigned8(-d)}),
   ]));
   const bar = document.createElement("div");
