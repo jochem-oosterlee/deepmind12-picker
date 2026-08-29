@@ -245,15 +245,16 @@
   .pside { display:flex; flex-direction:column; gap:9px; align-items:center; }
   /* het woord onder een schakelaar */
   .word { font-size:9px; color:var(--muted); }
+  .word.on { color:var(--label); }
   /* schakelaar met drie standen: het knopje staat links, midden of rechts */
   .sw.wide { width:44px; }
   /* binnenste faders staan naast het middenblok, onder de golfvorm */
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
   .vf { display:flex; flex-direction:column; align-items:center; gap:3px; width:40px; }
-  .vnum { font-size:10px; color:var(--accent); border:1px solid var(--border);
-    border-radius:5px; padding:2px 0; width:100%; text-align:center; font-weight:600;
-    background:var(--panel); font-variant-numeric:tabular-nums; }
+  /* de waarde staat onder de fader, zonder kader */
+  .vnum { font-size:12px; color:var(--label); font-weight:700; text-align:center;
+    font-variant-numeric:tabular-nums; }
   .vtrack { position:relative; width:28px; height:96px; }
   .vtrack input { position:absolute; width:96px; height:28px; left:-34px; top:34px;
     transform:rotate(-90deg); margin:0; padding:0; }
@@ -392,7 +393,9 @@
   /* regelaar met een filmstrip uit een eigen skin */
   .sprite { background-repeat:no-repeat; touch-action:none; cursor:ns-resize;
     user-select:none; -webkit-user-select:none; }
-  .vcap { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  /* label boven de fader: klein, oranje, met ruimte tussen de letters */
+  .vcap { font-size:8px; color:var(--label); text-transform:uppercase;
+    letter-spacing:1px; text-align:center; line-height:1.2; }
 
   .shapes { display:flex; gap:3px; margin:5px 0 0; flex-wrap:wrap; }
   .shapes button { padding:2px 4px; line-height:0; }
@@ -1197,7 +1200,8 @@ const RANGE = ["16'","8'","4'"];
 const OSC_PANEL = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
                            26, 27, 28, 29, 30, 31, 32, 38]);
 // en het filterpaneel; alleen de high-pass staat er niet in
-const VCF_PANEL = new Set([39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52]);
+const VCF_PANEL = new Set([39, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52,
+                           40, 80, 81, 82, 83]);   // ook het VCA/HPF-paneel
 const MODSRC = ["Manual","LFO 1","LFO 2","VCA Env","VCF Env","Mod Env"];
 const MODSEL = ["LFO 1","LFO 2","VCA Env","VCF Env","Mod Env","LFO 1 unipolar","LFO 2 unipolar"];
 const PORTA = ["Normal","Fingered","Fixed rate","Fixed rate fingered","Exponential","Exp. fingered",
@@ -1250,7 +1254,7 @@ const PAGES = [
   {id:"env", name:"Env", params:[
     H("VCA envelope"),
     S(53,"Attack"), S(54,"Decay"), S(55,"Sustain"), S(56,"Release"), E(57,"Trigger",TRIG),
-    S(80,"VCA level"), S(81,"Envelope depth"), S(82,"Velocity"), B(83,"Pan spread"),
+    // niveau, diepte, aanslag en pan staan in het VCA/HPF-paneel op de filtertab
     H("VCF envelope"),
     S(62,"Attack"), S(63,"Decay"), S(64,"Sustain"), S(65,"Release"), E(66,"Trigger",TRIG),
     H("MOD envelope"),
@@ -2203,7 +2207,7 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   capName.className = "vcap";
   capName.textContent = label;
 
-  box.appendChild(num); box.appendChild(lane); box.appendChild(capName);
+  box.appendChild(capName); box.appendChild(lane); box.appendChild(num);
 
   let val = value;
   const travel = height - capH;
@@ -2385,6 +2389,50 @@ function renderLfo(base, title) {
 }
 
 // ================== filterpaneel ==================
+
+/**
+ * Schakelaar op een CC in plaats van een parameter.
+ *
+ * Analog thru gaat als control change over de lijn en komt niet terug van de
+ * synth, dus deze hangt niet aan de waardenopslag.
+ */
+function ccSeg(cc, options) {
+  const row = document.createElement("div");
+  row.className = "seg";
+  const p = {k: "t", cc: cc, max: 1};
+  const spans = options.map(o => {
+    const sp = document.createElement("span");
+    sp.textContent = o.l;
+    sp.addEventListener("click", () => { doSend(p, o.v); show(); });
+    row.appendChild(sp);
+    return sp;
+  });
+  const show = () => {
+    const v = pval(p);
+    spans.forEach((sp, i) => sp.classList.toggle("on", options[i].v === v));
+  };
+  show();
+  return row;
+}
+
+// ================== versterker en high-pass ==================
+
+function renderVca() {
+  const H = 96;
+  const boost = cell("BASS BOOST");
+  boost.appendChild(swPill(52));
+
+  // TRANSPARENT/RELAY staat in het ontwerp maar niet in de handleiding; het
+  // enige wat erop lijkt is de analoge doorlus (CC 113).
+  const thru = ccSeg(113, [{l: "TRANSPARENT", v: 1}, {l: "RELAY", v: 0}]);
+  thru.style.width = "150px";
+
+  return panelBox(380, "VCA / HPF", [thru],
+    [panelFader(80, "LEVEL", H), panelFader(81, "ENV DEPTH", H),
+     panelFader(82, "VEL > SENS", H), panelFader(83, "PAN SPREAD", H),
+     panelFader(40, "HPF FREQ", H)],
+    [], {side: [boost]});
+}
 
 function renderVcf() {
   const H = 96;
@@ -2595,8 +2643,8 @@ function dial(num, max) {
 
   const top = max || 255;
   const paint = v => {
-    // van kwart voor tot kwart over: 270 graden draaiing
-    needle.style.transform = "rotate(" + (-135 + (v / top) * 270) + "deg)";
+    // nul staat rechtop, en vandaar 270 graden met de klok mee
+    needle.style.transform = "rotate(" + ((v / top) * 270) + "deg)";
     num_.textContent = v;
   };
   paint(params.get(num, 0));
@@ -2686,6 +2734,7 @@ function swPill(num, offText, onText, opts) {
     : params.get(num, offVal) === onVal);
   const show = () => {
     sw.classList.toggle("on", isOn());
+    txt.classList.toggle("on", isOn());
     txt.textContent = isOn() ? (onText || "On") : (offText || "Off");
   };
   show();
@@ -2929,6 +2978,7 @@ function renderParams() {
   }
   if (page.panel === "vcf") {
     wrap.appendChild(renderVcf());
+    wrap.appendChild(renderVca());
     list = page.params.filter(p => !VCF_PANEL.has(p.n));
   }
 

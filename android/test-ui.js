@@ -269,7 +269,7 @@ for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn
 // een parameterregelaar verzetten (laatste param-tab is nog actief gerenderd)
 try {
   const tabsArr = [...document.getElementById("tabs").children];
-  tabsArr.find(t => t.textContent === "Filter").fire("click");
+  tabsArr.find(t => t.textContent === "Env").fire("click");
   const list = document.getElementById("paramList");
   sent = [];
   // met een skin zijn het draaiknoppen, zonder skin schuifregelaars
@@ -542,24 +542,27 @@ setTimeout(() => {
     [...document.getElementById("tabs").children]
       .find(t => t.textContent === "Filter").fire("click");
     const fp = document.getElementById("paramList");
-    const has = c => collect(fp, e => String(e.className || "").split(" ").includes(c));
-    const panel = fp.children[0];
-    const nm = collect(panel, e => String(e.className || "") === "name")[0];
-    console.log("filterpaneel:", nm ? nm.textContent : "geen",
-                "| faders:", has("lfader").length, "| balken:", has("seg").length,
-                "| schakelaars:", has("sw").length, "| knoppen:", has("dial").length);
-    if (!nm || nm.textContent !== "VCF" || has("lfader").length !== 5
-        || has("seg").length !== 2 || has("sw").length !== 2
-        || has("dial").length !== 4) {
-      console.error("FOUT: filterpaneel niet volgens het ontwerp opgebouwd");
+    const panel = fp.children[0], vca = fp.children[1];
+    const has = (root, c) => collect(root, e => String(e.className || "").split(" ").includes(c));
+    const nameOf = pn => {
+      const n = pn && collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "geen";
+    };
+    const shape = pn => [has(pn, "lfader").length, has(pn, "seg").length,
+                         has(pn, "sw").length, has(pn, "dial").length].join("/");
+    console.log("filtertab:", nameOf(panel), "+", nameOf(vca),
+                "| fader/balk/schakelaar/knop:", shape(panel), "en", shape(vca));
+    if (nameOf(panel) !== "VCF" || shape(panel) !== "5/2/2/4"
+        || nameOf(vca) !== "VCA / HPF" || shape(vca) !== "5/1/1/0") {
+      console.error("FOUT: de filterpanelen staan er niet zoals ontworpen");
       failures++;
     } else {
       // envelope omkeren is de omgekeerde parameter: aan is nul
-      const invCell = collect(fp, e => String(e.className || "").split(" ").includes("cell"))
+      const invCell = collect(panel, e => String(e.className || "").split(" ").includes("cell"))
         .find(c => collect(c, l => String(l.className || "") === "lbl")
                      .some(l => l.textContent === "ENV INVERT"));
       const invSw = collect(invCell, e => String(e.className || "").split(" ").includes("sw"))[0];
-      const word = () => collect(invCell, e => String(e.className || "") === "word")[0].textContent;
+      const word = () => collect(invCell, e => String(e.className || "").split(" ").includes("word"))[0].textContent;
       sent = [];
       invSw.fire("click");
       const first = sent.filter(x => x[0] === "nrpn" && x[1] === 50).pop();
@@ -579,12 +582,18 @@ setTimeout(() => {
         failures++;
       }
 
-      // alleen de high-pass hoort nog los onder het paneel te staan
-      const cards = fp.children.filter(e => e !== panel
-        && String(e.textContent).length > 0);
-      console.log("los onder het paneel:", fp.children.length - 1, "element(en)");
-      if (!collect(fp, e => String(e.textContent).indexOf("High-pass") === 0).length) {
-        console.error("FOUT: de high-pass is nergens meer te vinden");
+      // de high-pass staat nu als fader in het tweede paneel, en er blijft
+      // niets los onder de panelen over
+      const caps = collect(vca, e => String(e.className || "") === "vcap")
+        .map(e => e.textContent);
+      console.log("faders in VCA / HPF:", caps.join(", "),
+                  "| los eronder:", fp.children.length - 2);
+      if (caps.indexOf("HPF FREQ") === -1) {
+        console.error("FOUT: de high-pass staat niet in het VCA/HPF-paneel");
+        failures++;
+      }
+      if (fp.children.length !== 2) {
+        console.error("FOUT: er staat nog iets los onder de filterpanelen");
         failures++;
       }
     }
