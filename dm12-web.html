@@ -2426,17 +2426,22 @@ function envSvg(a, d, sus, r, ac, dc, sus_c, rc) {
                + n(x2) + "," + n(y2);
   };
   // Het houdstuk is geen bocht maar een rechte lijn, en altijd even lang:
-  // vlak in het midden, naar de uitersten toe zo steil mogelijk omlaag of
-  // omhoog (45 graden zolang het vak het toelaat, anders tot de rand).
+  // vlak in het midden, naar de uitersten toe 45 graden omlaag of omhoog.
+  // Komt hij tegen de boven- of onderrand, dan loopt hij van daaraf vlak
+  // verder tot het eind — de hoek blijft dus 45 graden en de lengte gelijk.
   const tilt = Math.max(-1, Math.min(1, (sus_c - 127) / 128));
-  const ey = Math.max(top, Math.min(bot, ys - tilt * (sx - dx)));
+  let hx = sx, hy = ys - tilt * (sx - dx);
+  if (hy < top) { hx = dx + (ys - top) / Math.abs(tilt); hy = top; }
+  else if (hy > bot) { hx = dx + (bot - ys) / Math.abs(tilt); hy = bot; }
+  const hold = "L" + hx.toFixed(1) + "," + hy.toFixed(1)
+             + (hx < sx - 0.5 ? "L" + sx.toFixed(1) + "," + hy.toFixed(1) : "");
   const rx = sx + 6 + (r / 255) * (W - 12 - sx);
 
   const path = "M0," + bot
     + bend(0, bot, ax, top, ac)
     + bend(ax, top, dx, ys, dc)
-    + "L" + sx.toFixed(1) + "," + ey.toFixed(1)
-    + bend(sx, ey, rx, bot, rc)
+    + hold
+    + bend(sx, hy, rx, bot, rc)
     + " Z";
   return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H
     + '" class="wave"><path d="' + path + '" fill="var(--accent)" '
