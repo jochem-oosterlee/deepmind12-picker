@@ -594,7 +594,7 @@ setTimeout(() => {
           .find(b => caps(b)[0] === nm);
         // bend+ heeft -24 onderin, bend- juist +24 onderin
         [["BEND+", 36, 232, 24, "-24", "24"],
-         ["BEND-", 37, 232, 24, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
+         ["BEND-", 37, 24, 232, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
           const box = bend(nm);
           const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
@@ -634,7 +634,7 @@ setTimeout(() => {
                          .some(c => c.textContent === "BEND-"));
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
           console.log("byte 43 buiten de schaal toont:", num.textContent);
-          if (num.textContent !== "-24") {
+          if (num.textContent !== "24") {
             console.error("FOUT: een waarde buiten de schaal wordt niet begrensd");
             failures++;
           }

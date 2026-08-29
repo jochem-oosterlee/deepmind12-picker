@@ -137,9 +137,13 @@ follows the instrument: VCF, then VCA, then HPF with the boost.
 ### Pitch bend runs both ways
 
 The manual gives 36 and 37 as 0-24 semitones. On this firmware they are signed
-bytes running -24 to +24: 232 in the byte reads as -24. And the "down" one
-counts the other way round - byte 24 shows as -24 - so the two faders move in
-opposite directions, which is how the instrument's own editor draws them.
+bytes running -24 to +24: 232 in the byte reads as -24, for both of them. What
+differs is the fader, not the encoding - the instrument's editor puts +24 at
+the bottom of the "down" one and -24 at the top, the mirror of its neighbour.
+
+A warning from getting this wrong twice: measure with the app's own writes out
+of the way. A byte we had written with a wrong assumption looked like evidence
+for a second wrong assumption.
 
 ### Bipolar parameters, and one number that means two things
 

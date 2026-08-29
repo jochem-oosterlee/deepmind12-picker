@@ -2183,13 +2183,14 @@ function renderTune() {
                 {middle: 128, fmt: v => fmt({k: "b"}, v), parse: t => +t + 128}),
     panelFader(241, "TRANS", H,
                 {min: 80, max: 176, fmt: v => v - 128, parse: t => +t + 128}),
-    // Allebei van -24 tot +24 halve tonen. In de byte staat dat met teken
-    // (232 is -24), en bij "omlaag" is het teken omgedraaid: die fader loopt
-    // andersom. De handleiding houdt het nog op 0-24.
+    // Allebei van -24 tot +24 halve tonen, en allebei met teken in de byte:
+    // 232 is -24. De handleiding houdt het nog op 0-24. Het verschil zit in de
+    // baan: bij "omlaag" staat +24 onderaan en -24 bovenaan, net als op het
+    // apparaat.
     panelFader(36, "BEND+", H, {min: -24, max: 24,
                 toShown: signed8, toRaw: unsigned8}),
     panelFader(37, "BEND-", H, {min: -24, max: 24, flip: true,
-                toShown: v => -signed8(v), toRaw: d => unsigned8(-d)}),
+                toShown: signed8, toRaw: unsigned8}),
   ]));
   const bar = document.createElement("div");
   bar.className = "vrule";
