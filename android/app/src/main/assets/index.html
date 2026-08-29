@@ -2058,20 +2058,25 @@ const ROUTINGS = [
   {pre: [1, 2], lanes: [[3], [4]]},                        // M-6
   {pre: [1], lanes: [[2], [3], [4]]},                      // M-7
   {lanes: [[1, 2, 3], [4]]},                               // M-8
-  {lanes: [[1, 2], [3, 4]], cross: true},                  // M-9
-  {lanes: [[1, 2, 3], [4]], cross: true},                  // M-10
+  // De laatste twee koppelen terug: wat uit de laatste doos komt gaat door de
+  // lus en komt er weer voor binnen.
+  {pre: [3], post: [4], loop: [1, 2]},                     // M-9
+  {post: [4], loop: [1, 2, 3]},                            // M-10
 ];
 
 /** Tekent een verbindingsschema: blokjes met lijnen ertussen. */
 function routingSvg(r, active, w, h) {
   const BW = 20, BH = 14, GAP = 12, LANE = 20;
   const pre = r.pre || [], post = r.post || [], lanes = r.lanes || [];
+  const loop = r.loop || [];
   const cols = pre.length + post.length
              + Math.max(1, ...lanes.map(l => l.length), lanes.length ? 1 : 0);
   const wide = lanes.length ? Math.max(...lanes.map(l => l.length)) : 0;
   const total = pre.length + wide + post.length;
-  const W = 14 + total * (BW + GAP), H = Math.max(34, lanes.length * LANE + 14);
-  const mid = H / 2;
+  const loopW = loop.length * (BW + GAP);
+  const W = 14 + Math.max(total * (BW + GAP), loopW + 2 * GAP),
+        H = Math.max(34, lanes.length * LANE + 14, loop.length ? 62 : 0);
+  const mid = loop.length ? H - 14 : H / 2;   // met een lus zakt de hoofdweg
   const col = "var(--accent)";
   let out = "", x = 8;
 
@@ -2094,7 +2099,9 @@ function routingSvg(r, active, w, h) {
     const splitX = x - GAP / 2, joinX = x + wide * (BW + GAP) - GAP / 2;
     lanes.forEach((lane, i) => {
       const y = top + i * LANE;
-      out += line(splitX, mid, splitX, y) + line(splitX, y, x, y);
+      // heen: van de splitsing omhoog of omlaag naar de tak, en terug
+      out += '<path d="M' + splitX + "," + mid + "L" + splitX + "," + y
+           + "L" + x + "," + y + '" stroke="' + col + '" fill="none"/>';
       let lx = x;
       lane.forEach(n => {
         out += box(n, lx, y);
@@ -2102,7 +2109,9 @@ function routingSvg(r, active, w, h) {
         out += line(lx, y, lx + GAP, y);
         lx += GAP;
       });
-      out += line(lx - GAP, y, joinX, y) + line(joinX, y, joinX, mid);
+      out += line(Math.max(x, lx - GAP), y, joinX, y)
+           + '<path d="M' + joinX + "," + y + "L" + joinX + "," + mid
+           + '" stroke="' + col + '" fill="none"/>';
     });
     if (r.cross) {
       const y1 = top, y2 = top + (lanes.length - 1) * LANE, cx = x + wide * (BW + GAP) / 2;
@@ -2112,14 +2121,33 @@ function routingSvg(r, active, w, h) {
     out += line(joinX, mid, x, mid);
   }
 
+  const inAt = x - GAP / 2;             // hier komt de lus weer binnen
   post.forEach(n => { out += box(n, x, mid) + line(x + BW, mid, x + BW + GAP, mid); x += BW + GAP; });
   out += line(x - GAP, mid, W - 6, mid) + arrow(W - 6, mid);
+
+  if (loop.length) {
+    // De lus loopt boven de hoofdweg: aftakken achter de laatste doos, door de
+    // dozen van links naar rechts, en er weer in vóór die doos.
+    const outAt = x - GAP / 2, boxY = 12, backY = mid - 16;
+    let lx = 8;
+    out += line(outAt, mid, outAt, backY) + line(outAt, backY, 8, backY)
+         + line(8, backY, 8, boxY);
+    loop.forEach((n, i) => {
+      out += box(n, lx, boxY);
+      lx += BW;
+      if (i < loop.length - 1) { out += line(lx, boxY, lx + GAP, boxY); lx += GAP; }
+    });
+    out += line(lx, boxY, inAt, boxY) + line(inAt, boxY, inAt, mid - 4)
+         + '<path d="M' + (inAt - 3) + "," + (mid - 5) + "L" + inAt + "," + mid
+         + "L" + (inAt + 3) + "," + (mid - 5) + 'Z" fill="' + col + '"/>';
+  }
 
   // Elk schema heeft zijn eigen afmeting; door de tekening te laten schalen
   // passen ze allemaal even groot in hun vakje.
   return '<svg width="' + (w || 132) + '" height="' + (h || 42)
     + '" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet"'
-    + ' stroke-width="1.2"' + (active ? "" : ' opacity=".7"') + ">" + out + "</svg>";
+    + ' stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"'
+    + (active ? "" : ' opacity=".7"') + ">" + out + "</svg>";
 }
 
 function renderRouting() {
