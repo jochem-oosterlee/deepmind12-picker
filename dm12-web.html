@@ -233,8 +233,20 @@
     border:1px solid var(--border); border-radius:8px; }
   /* de golfvorm rekt mee met de hoogte die de buitenste faders bepalen, zodat
      er onder het knoppenblok geen ruimte overblijft */
-  /* de golfvorm staat boven de faders, over de volle breedte */
-  .wavebox { height:84px; display:flex; margin-top:10px; }
+  /* de golfvorm in een verzonken vak, over de volle breedte */
+  .wavebox { height:52px; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; margin-top:8px; background:var(--well);
+    border:1px solid var(--divider); border-radius:8px; }
+
+  /* faders links, schakelaars in een kolom ernaast */
+  .lforow { display:grid; grid-template-columns:1fr auto; gap:12px;
+    margin-top:10px; align-items:center; }
+  .lfofads { display:flex; gap:16px; justify-content:center; }
+  .lfoside { display:flex; flex-direction:column; gap:9px; align-items:center; }
+  /* het woord onder een schakelaar */
+  .word { font-size:9px; color:var(--muted); }
+  /* schakelaar met drie standen: het knopje staat links, midden of rechts */
+  .sw.wide { width:44px; }
   /* binnenste faders staan naast het middenblok, onder de golfvorm */
 
   /* verticale fader: gedraaid, zodat het op elke engine werkt */
@@ -281,7 +293,8 @@
   .lfader .ticks { display:none; }
   .lfader .cap { position:absolute; left:50%; background-repeat:no-repeat;
     background-size:100% 100%; touch-action:none; cursor:ns-resize; }
-  .lfader.off { opacity:.4; pointer-events:none; }
+  .lfader.off { pointer-events:none; }
+  .vf.off { opacity:.35; }
 
   /* paneel: rand, kop met knoppen rechts, en een scheidingslijn */
   .pnl { display:inline-block; vertical-align:top; box-sizing:border-box;
@@ -289,7 +302,8 @@
     padding:10px; margin:0 10px 10px 0; box-shadow:var(--shadow); }
   .pnl .head { display:flex; align-items:center; justify-content:space-between;
     gap:8px; background:var(--panel2); border:1px solid var(--border-soft);
-    border-radius:9px; padding:4px 10px; }
+    border-radius:9px; padding:4px 6px 4px 10px; }
+  .pnl .head .pick { display:flex; align-items:center; gap:6px; padding:3px 8px; }
   .pnl .head .name { color:var(--text); font-weight:700; letter-spacing:2px;
     font-size:13px; }
   .pnl .head .hbtns { display:flex; gap:5px; }
@@ -321,9 +335,13 @@
   .seg > span.on { background:var(--accent); color:var(--well); font-weight:700; }
 
   /* keuze uit een lange lijst: een vakje dat uitklapt */
+  /* Het uitklapmenu hangt in dit vakje, dus hier mag niets afgeknipt worden:
+     een te lange naam wordt in het tekstdeel zelf ingekort. */
   .pick { position:relative; color:var(--text); font-size:11px; font-weight:600;
     background:var(--well); border-radius:5px; padding:2px 8px; cursor:pointer;
-    max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    max-width:100%; display:flex; align-items:center; gap:6px; }
+  .pick > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pick > svg { flex:none; }
 
   /* kleine draaiknop met een wijzer */
   .dial { width:24px; height:24px; border-radius:50%; background:var(--well);
@@ -2151,6 +2169,7 @@ function longFader(label, value, max, height, onMove, onDone, disabled, opts) {
   num.className = "vnum";
   num.textContent = value;
 
+  if (disabled) box.className += " off";
   const lane = document.createElement("div");
   lane.className = "lfader" + (disabled ? " off" : "");
   lane.style.height = height + "px";
@@ -2307,56 +2326,77 @@ function lastPhase(base) {
 function renderLfo(base, title) {
   const get = off => pval({k: "s", n: base + off, max: 255});
 
-  // de golfvorm zoals hij met deze instellingen loopt, boven de faders
+  const box = document.createElement("div");
+  box.className = "pnl lfo";
+  box.style.width = "320px";
+
+  // ---- kop: de naam links, de golfvorm als keuzevak rechts ----
+  const head = document.createElement("div");
+  head.className = "head";
+  const nm = document.createElement("span");
+  nm.className = "name";
+  nm.textContent = title;
+  head.appendChild(nm);
+  head.appendChild(pickBox(base + 2, SHAPE_NAMES, {
+    cols: 4,
+    icon: i => lfoGlyph(i, "var(--accent)"),
+  }));
+  box.appendChild(head);
+
+  // ---- de golfvorm zoals hij met deze instellingen loopt ----
   const waveBox = document.createElement("div");
   waveBox.className = "wavebox";
   const draw = () => {
     waveBox.innerHTML = lfoWaveSvg(Math.min(6, get(2)), get(0), get(1), get(6), get(5));
   };
+  box.appendChild(waveBox);
 
-  // met arp sync is de rate geen vrije waarde meer maar een notewaarde
+  const row = document.createElement("div");
+  row.className = "lforow";
+  box.appendChild(row);
+
+  // ---- faders: met arp sync leest de rate notewaarden ----
   const synced = get(4) > 0;
-  const mode = get(5);
-  const spreadOn = mode > PHASE_MONO;
+  const spreadOn = get(5) > PHASE_MONO;
+  const fads = document.createElement("div");
+  fads.className = "lfofads";
+  row.appendChild(fads);
 
-  const faders = [
-    panelFader(base + 0, "RATE", FADER_H,
-               {after: draw, snap: synced ? syncSnap : null}),
-    panelFader(base + 1, "DELAY", FADER_H, {after: draw}),
-    panelFader(base + 6, "SLEW", FADER_H, {after: draw}),
-    panelFader(base + 5, "PHASE", FADER_H, {
-      after: draw, disabled: !spreadOn, min: PHASE_MIN, max: PHASE_MAX,
-      value: spreadOn ? get(5) : degToRaw(lastPhase(base)),
-      toRaw: degToRaw, toShown: rawToDeg,
-      fmt: v => v + "\u00B0",
-    }),
-  ];
+  const H = 84;
+  [panelFader(base + 0, "RATE", H, {after: draw, snap: synced ? syncSnap : null}),
+   panelFader(base + 6, "SLEW", H, {after: draw}),
+   panelFader(base + 5, "PHASE", H, {
+     after: draw, disabled: !spreadOn, min: PHASE_MIN, max: PHASE_MAX,
+     value: spreadOn ? get(5) : degToRaw(lastPhase(base)),
+     toRaw: degToRaw, toShown: rawToDeg, fmt: v => v + "\u00B0",
+   }),
+   panelFader(base + 1, "DELAY", H, {after: draw}),
+  ].forEach(f => fads.appendChild(f));
 
-  const shape = cell("SHAPE");
-  shape.appendChild(pickBox(base + 2, SHAPE_NAMES, {
-    cols: 4,
-    icon: i => lfoGlyph(i, "currentColor"),
-  }));
+  // ---- schakelaars ernaast ----
+  const side = document.createElement("div");
+  side.className = "lfoside";
+  row.appendChild(side);
 
-  // Poly, mono of een faseverschil: drie standen in dezelfde parameter.
-  const modeCell = cell("MODE");
-  modeCell.appendChild(segRow(base + 5, [
-    {l: "POLY", v: PHASE_POLY},
-    {l: "MONO", v: PHASE_MONO},
-    {l: "PHASE", t: "a phase offset per voice",
-     v: () => degToRaw(lastPhase(base)), is: v => v > PHASE_MONO},
+  const arp = cell("ARP SYNC");
+  arp.appendChild(swPill(base + 4));
+  const key = cell("KEY SYNC");
+  key.appendChild(swPill(base + 3));
+
+  // Poly, mono of een faseverschil: dezelfde parameter, drie standen.
+  const phase = cell("PHASE");
+  phase.appendChild(statePill(base + 5, [
+    {l: "Poly", v: PHASE_POLY},
+    {l: "Mono", v: PHASE_MONO},
+    {l: "Phase", v: () => degToRaw(lastPhase(base)), is: v => v > PHASE_MONO},
   ]));
-
-  const box = panelBox(340, title,
-    [headBtn(base + 3, "Key sync", "KEY"), headBtn(base + 4, "Arp sync", "ARP")],
-    faders, [shape, modeCell], waveBox);
-  box.className += " lfo";
+  [arp, key, phase].forEach(c => side.appendChild(c));
 
   // Van soort veranderen vraagt een andere opmaak: de fase-fader wordt actief
   // of grijs, en met arp sync leest de rate notewaarden. Binnen een soort
   // hoeft er niets herbouwd te worden, ook niet terwijl je sleept.
   const kindOf = r => (r <= PHASE_MONO ? r : 2);
-  let shownKind = kindOf(mode);
+  let shownKind = kindOf(get(5));
   params.subscribe(base + 5, v => {
     if (kindOf(v) === shownKind) { draw(); return; }
     shownKind = kindOf(v);
@@ -2546,6 +2586,40 @@ function dial(num, max) {
   return wrap;
 }
 
+/** Schuifschakelaar met meer dan twee standen: het knopje schuift mee. */
+function statePill(num, states) {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:3px";
+  const pill = document.createElement("div");
+  pill.className = "sw wide";
+  const knob = document.createElement("i");
+  knob.style.background = "var(--accent)";
+  pill.appendChild(knob);
+  const word = document.createElement("div");
+  word.className = "word";
+  wrap.appendChild(pill);
+  wrap.appendChild(word);
+
+  const valOf = st => (typeof st.v === "function" ? st.v() : st.v);
+  const at = ["2px", "calc(50% - 5px)", "calc(100% - 12px)"];
+  const which = () => {
+    const v = params.get(num, 0);
+    const i = states.findIndex(st => (st.is ? st.is(v) : valOf(st) === v));
+    return i < 0 ? 0 : i;
+  };
+  const show = () => {
+    const i = which();
+    knob.style.left = at[Math.min(i, at.length - 1)];
+    word.textContent = states[i].l;
+  };
+  show();
+  params.subscribe(num, show);
+  pill.addEventListener("click", () => {
+    paramSet(num, valOf(states[(which() + 1) % states.length]));
+  });
+  return wrap;
+}
+
 /** Schuifschakelaar met het woord eronder. */
 function swPill(num, offText, onText) {
   const wrap = document.createElement("div");
@@ -2554,14 +2628,13 @@ function swPill(num, offText, onText) {
   sw.className = "sw";
   sw.appendChild(document.createElement("i"));
   const txt = document.createElement("div");
-  txt.className = "num";
+  txt.className = "word";
   wrap.appendChild(sw);
   wrap.appendChild(txt);
   const show = () => {
     const on = params.get(num, 0) > 0;
     sw.classList.toggle("on", on);
     txt.textContent = on ? (onText || "On") : (offText || "Off");
-    txt.style.color = on ? "var(--label)" : "var(--muted)";
   };
   show();
   params.subscribe(num, show);

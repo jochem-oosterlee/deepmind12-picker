@@ -528,18 +528,24 @@ setTimeout(() => {
 
   const lfos = plist.children.filter(e => cls(e, "lfo"));
   const lanes = pick(plist, "lfader");
+  const cellNamed = (root, name) => collect(root, e => cls(e, "cell"))
+    .find(c => collect(c, x => cls(x, "lbl")).some(l => l.textContent === name));
   console.log("LFO-panelen:", lfos.length, "| faders:", lanes.length,
               "| vormvakken:", pick(plist, "pick").length,
-              "| standenbalken:", pick(plist, "seg").length);
+              "| schakelaars:", pick(plist, "sw").length);
   if (lfos.length !== 2 || lanes.length !== 8 || pick(plist, "pick").length !== 2
-      || pick(plist, "seg").length !== 2) {
+      || pick(plist, "sw").length !== 6) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
     const one = lfos[0];
 
-    // vorm kiezen uit het uitklapvak, met de tekeningen erin
+    // vorm kiezen uit het vakje in de kop, met de tekeningen erin
     const box = pick(one, "pick")[0];
+    if (!collect(one, e => cls(e, "head")).some(h => collect(h, e => e === box).length)) {
+      console.error("FOUT: het vormvakje staat niet in de kop");
+      failures++;
+    }
     const pop = collect(box, e => String(e.className || "") === "shapepop")[0];
     console.log("vormen in het menu:", pop.children.length);
     if (pop.children.length !== 7) {
@@ -577,19 +583,25 @@ setTimeout(() => {
       }
     }
 
-    // poly, mono of een faseverschil: drie standen in dezelfde parameter
-    const seg = pick(one, "seg")[0];
-    const step = i => {
+    // poly, mono of een faseverschil: één schakelaar die doorstapt
+    const phaseCell = () => cellNamed(document.getElementById("paramList"), "PHASE");
+    const wordIn = c => collect(c, e => cls(e, "word"))[0].textContent;
+    const step = () => {
       sent = [];
-      pick(document.getElementById("paramList"), "seg")[0].children[i].fire("click");
+      collect(phaseCell(), e => cls(e, "sw"))[0].fire("click");
       const m = sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
-      return m ? m[2] : null;
+      return [m ? m[2] : null, wordIn(phaseCell())];
     };
-    const walk = [step(0), step(1), step(2)];
-    console.log("standen:", seg.children.map(c => c.textContent).join("/"),
-                "->", walk.join(", "));
-    if (walk[0] !== 0 || walk[1] !== 1 || !(walk[2] > 1)) {
-      console.error("FOUT: de standenbalk stuurt niet poly, mono, faseverschil");
+    const walk = [step(), step(), step()];
+    console.log("standen:", walk.map(w => w[1] + "=" + w[0]).join(" -> "));
+    const vals = walk.map(w => w[0]);
+    if (vals.indexOf(0) === -1 || vals.indexOf(1) === -1
+        || !vals.some(v => v > 1)) {
+      console.error("FOUT: de schakelaar loopt niet langs poly, mono en faseverschil");
+      failures++;
+    }
+    if (walk.some(w => !w[1])) {
+      console.error("FOUT: er staat geen woord onder de schakelaar");
       failures++;
     }
 
@@ -646,18 +658,20 @@ setTimeout(() => {
     }
 
     // arp sync uit via de knop in de kop: dan is het weer een gewone waarde
-    const arp = pick(document.getElementById("paramList"), "hbtn")
-      .find(b => b.title === "Arp sync");
-    if (!arp) { console.error("FOUT: arp sync-knop niet gevonden"); failures++; }
+    const arpSw = () => {
+      const c = collect(document.getElementById("paramList"), e => cls(e, "cell"))
+        .find(x => collect(x, l => cls(l, "lbl")).some(l => l.textContent === "ARP SYNC"));
+      return c && collect(c, e => cls(e, "sw"))[0];
+    };
+    if (!arpSw()) { console.error("FOUT: arp sync-schakelaar niet gevonden"); failures++; }
     else {
-      arp.fire("click");
+      arpSw().fire("click");
       console.log("arp sync uit, rate leest:", rateOf().num.textContent);
       if (!/^[0-9]+$/.test(String(rateOf().num.textContent))) {
         console.error("FOUT: rate toont geen gewone waarde na arp sync uit");
         failures++;
       }
-      pick(document.getElementById("paramList"), "hbtn")
-        .find(b => b.title === "Arp sync").fire("click");     // weer aan
+      arpSw().fire("click");                                  // weer aan
     }
   }
 

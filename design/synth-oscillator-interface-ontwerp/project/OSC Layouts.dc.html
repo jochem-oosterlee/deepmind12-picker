@@ -16,8 +16,115 @@ a{color:#f08050;} a:hover{color:#ffa07a;}
 </helmet>
 <section style="display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start;padding:48px;">
 
+  <div id="7a" style="position:relative;display:flex;gap:16px;align-items:flex-start;">
+    <div style="position:absolute;top:-26px;left:0;color:#a99f8c;font-size:12px;letter-spacing:1px;">7a · compact: shape in de kop, toggles naast de faders</div>
+
+    <div style="width:320px;background:#37322c;border:1px solid #6a635a;border-radius:14px;padding:10px;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#2b2724;border:1px solid #5a534b;border-radius:9px;padding:4px 6px 4px 10px;">
+        <span style="color:#e6ddc9;font-weight:700;letter-spacing:2px;font-size:13px;">LFO 1</span>
+        <span style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:3px 8px;display:flex;align-items:center;gap:6px;">Triangle <svg width="16" height="9" viewBox="0 0 16 9"><polyline points="0,8 4,1 8,8 12,1 16,8" fill="none" stroke="#ee7a4e" stroke-width="1.5"></polyline></svg> ▾</span>
+      </div>
+      <div style="margin-top:8px;background:#241f1c;border:1px solid #4a443d;border-radius:8px;height:52px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        <svg width="280" height="42" viewBox="0 0 300 52"><polyline points="0,48 30,4 60,48 90,4 120,48 150,4 180,48 210,4 240,48 270,4 300,48" fill="none" stroke="#f0a030" stroke-width="2"></polyline></svg>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-top:10px;align-items:center;">
+        <div style="display:flex;gap:16px;justify-content:center;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">RATE</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:42%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">137</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">SLEW</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:88%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">0</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0.35;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PHASE</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:86%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">1°</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">DELAY</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:88%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">0</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;align-items:center;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">ARP SYNC</div>
+            <div style="width:30px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#8d8474;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Off</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">KEY SYNC</div>
+            <div style="width:30px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#8d8474;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Off</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PHASE</div>
+            <div style="width:44px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:2px;width:10px;height:10px;border-radius:50%;background:#f0a030;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Mono</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:320px;background:#37322c;border:1px solid #6a635a;border-radius:14px;padding:10px;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#2b2724;border:1px solid #5a534b;border-radius:9px;padding:4px 6px 4px 10px;">
+        <span style="color:#e6ddc9;font-weight:700;letter-spacing:2px;font-size:13px;">LFO 2</span>
+        <span style="color:#e6ddc9;font-size:11px;font-weight:600;background:#241f1c;border-radius:5px;padding:3px 8px;display:flex;align-items:center;gap:6px;">Triangle <svg width="16" height="9" viewBox="0 0 16 9"><polyline points="0,8 4,1 8,8 12,1 16,8" fill="none" stroke="#ee7a4e" stroke-width="1.5"></polyline></svg> ▾</span>
+      </div>
+      <div style="margin-top:8px;background:#241f1c;border:1px solid #4a443d;border-radius:8px;height:52px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:66px;background:rgba(238,122,78,0.08);border-right:1px dashed #5a463c;"></div>
+        <svg width="280" height="42" viewBox="0 0 300 52"><path d="M0,26 C10,10 20,42 32,30 C44,20 54,30 72,26 L102,4 L132,48 L162,4 L192,48 L222,4 L252,48 L282,4 L300,30" fill="none" stroke="#e05c48" stroke-width="2"></path></svg>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-top:10px;align-items:center;">
+        <div style="display:flex;gap:16px;justify-content:center;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">RATE</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:36%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">159</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">SLEW</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:88%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">0</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0.35;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PHASE</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:86%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">1°</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">DELAY</div>
+            <div style="width:5px;height:84px;background:#221f1c;border-radius:3px;position:relative;"><div style="position:absolute;left:50%;transform:translateX(-50%);top:38%;width:20px;height:11px;background:linear-gradient(#ddd4c2,#b0a692);border-radius:2px;"></div></div>
+            <div style="color:#f08050;font-weight:700;font-size:12px;">101</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;align-items:center;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">ARP SYNC</div>
+            <div style="width:30px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#8d8474;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Off</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">KEY SYNC</div>
+            <div style="width:30px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#8d8474;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Off</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div style="color:#f08050;font-size:8px;letter-spacing:1px;">PHASE</div>
+            <div style="width:44px;height:16px;border-radius:8px;background:#241f1c;border:1px solid #5a534b;position:relative;"><div style="position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#f0a030;"></div></div>
+            <div style="color:#8d8474;font-size:9px;">Poly</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="5a" style="position:relative;display:flex;gap:16px;align-items:flex-start;">
-    <div style="position:absolute;top:-26px;left:0;color:#a99f8c;font-size:12px;letter-spacing:1px;">5a · compact: label boven, waarde onder, geen kaders</div>
+    <div style="position:absolute;top:-26px;left:0;color:#a99f8c;font-size:12px;letter-spacing:1px;">5a · OSC 1 + OSC 2</div>
 
     <div style="width:300px;background:#37322c;border:1px solid #6a635a;border-radius:14px;padding:10px;box-sizing:border-box;">
       <div style="display:flex;align-items:center;justify-content:space-between;background:#2b2724;border:1px solid #5a534b;border-radius:9px;padding:4px 10px;">
