@@ -453,18 +453,36 @@ setTimeout(() => {
         failures++;
       }
 
-      // P.mod mode: knop stuurt 38, en het juiste lampje brandt
+      // P.mod mode: de knop stuurt 38 en het lampje moet meeschakelen
       const modeBtn = collect(panel,
         e => e.tagName === "BUTTON" && e.textContent === "P.mod mode")[0];
+      const litName = () => {
+        const on = collect(panel, e => String(e.className || "").split(" ").includes("lamp")
+                                    && e.classList.contains("on"));
+        if (on.length !== 1) return on.length + " lampjes";
+        // de naam zit in het span naast het bolletje
+        const txt = on[0].children.filter(c => c.tagName === "SPAN")[0];
+        return txt ? txt.textContent : "?";
+      };
+      const before = litName();
       sent = [];
       modeBtn.fire("click");
       const modeMsg = sent.filter(x => x[0] === "nrpn" && x[1] === 38).pop();
-      const lit = collect(panel, e => String(e.className || "").split(" ").includes("lamp")
-                                   && e.classList.contains("on"));
+      const after = litName();
       console.log("p.mod mode ->", JSON.stringify(modeMsg),
-                  "| brandend lampje:", lit.length);
-      if (!modeMsg || lit.length !== 1) {
-        console.error("FOUT: P.mod mode schakelt niet netjes tussen twee standen");
+                  "| lampje:", before, "->", after);
+      if (!modeMsg) {
+        console.error("FOUT: P.mod mode stuurt niet naar parameter 38");
+        failures++;
+      }
+      if (after === before || after.indexOf("lampjes") !== -1) {
+        console.error("FOUT: het lampje volgt de knop niet");
+        failures++;
+      }
+      // en terug, zodat de rest van de test onveranderd begint
+      modeBtn.fire("click");
+      if (litName() !== before) {
+        console.error("FOUT: tweede druk brengt het lampje niet terug");
         failures++;
       }
 

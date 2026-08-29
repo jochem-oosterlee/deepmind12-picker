@@ -1293,17 +1293,27 @@ const params = {
     }
     if (this.val[n] === v) return false;
     this.val[n] = v;
-    for (const fn of this.subs[n] || []) {
-      try { fn(v); } catch (e) { /* een regelaar die weg is */ }
-    }
+    this.tell(n, v);
     return true;
   },
 
   /** Waarde die de gebruiker zet: meteen zichtbaar en meteen onderweg. */
   fromUi(n, v, ch) {
+    const changed = this.val[n] !== v;
     this.val[n] = v;
     this.pend[n] = {v: v, ms: Date.now()};
-    return AndroidBridge.sendNRPN(n, v, ch);
+    const ok = AndroidBridge.sendNRPN(n, v, ch);
+    // Ook wat de gebruiker zelf zet gaat langs de abonnees: een knop kan een
+    // lampje ernaast aansturen zonder dat hij dat lampje hoeft te kennen.
+    // Eerst versturen, dan pas tekenen — het apparaat wacht nergens op.
+    if (changed) this.tell(n, v);
+    return ok;
+  },
+
+  tell(n, v) {
+    for (const fn of this.subs[n] || []) {
+      try { fn(v); } catch (e) { /* een regelaar die weg is */ }
+    }
   },
 };
 
@@ -1835,10 +1845,7 @@ function renderLfo(base, title) {
     paint();
     b.addEventListener("click", () => {
       doSend(P(base + off), get(off) > 0 ? 0 : 1);
-      paint();
       draw();
-      // met arp sync gaat de rate over op notewaarden: fader opnieuw opbouwen
-      if (off === 4) renderParams();
     });
     return b;
   };
@@ -1857,8 +1864,7 @@ function renderLfo(base, title) {
     const m = get(5);
     const next = m === PHASE_POLY ? PHASE_MONO
                : (m === PHASE_MONO ? degToRaw(lastPhase(base)) : PHASE_POLY);
-    sendParam(P(base + 5), next);
-    renderParams();            // de fader wordt actief of juist grijs
+    sendParam(P(base + 5), next);   // de opslag laat de opmaak volgen
   });
   grid.appendChild(phase);
 
@@ -1877,7 +1883,16 @@ function renderLfo(base, title) {
 
   // vorm en stand komen ook van de synth
   params.subscribe(base + 2, () => { showShape(); draw(); });
-  params.subscribe(base + 5, () => renderParams());
+  // Poly, mono en "een faseverschil" vragen elk een andere opmaak; binnen dat
+  // laatste hoeft er niets herbouwd te worden, ook niet terwijl je sleept.
+  const modeOf = r => (r <= PHASE_MONO ? r : 2);
+  let shownMode = modeOf(get(5));
+  params.subscribe(base + 5, v => {
+    const m = modeOf(v);
+    if (m === shownMode) return;
+    shownMode = m;
+    renderParams();
+  });
   [3, 4].forEach(off => params.subscribe(base + off, v => {
     Array.from(grid.children).forEach(b => {
       if (b.dataset && b.dataset.off !== undefined) {
@@ -1944,7 +1959,6 @@ function comboBox(label, options, num, onPick) {
     b.addEventListener("click", e => {
       if (e.stopPropagation) e.stopPropagation();
       onPick(i);
-      show();
       close();
     });
     pop.appendChild(b);
@@ -1971,10 +1985,7 @@ function stepBox(label, options, num, onPick) {
   const show = () => {
     v.textContent = options[Math.min(options.length - 1, params.get(num, 0))];
   };
-  b.addEventListener("click", () => {
-    onPick((params.get(num, 0) + 1) % options.length);
-    show();
-  });
+  b.addEventListener("click", () => onPick((params.get(num, 0) + 1) % options.length));
   show();
   params.subscribe(num, show);
   row.appendChild(b); row.appendChild(v);
@@ -2052,7 +2063,7 @@ function renderOsc1() {
         b.innerHTML = lfoGlyph(glyph, on ? "var(--accent)" : "var(--muted)");
       }
     };
-    b.addEventListener("click", () => { send(num, pval(P(num)) > 0 ? 0 : 1); show(); });
+    b.addEventListener("click", () => send(num, pval(P(num)) > 0 ? 0 : 1));
     show();
     params.subscribe(num, show);
     return b;
