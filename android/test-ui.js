@@ -725,6 +725,48 @@ setTimeout(() => {
     }
   }
 
+  // ---- effectpanelen: de namen volgen het geladen effect ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "FX").fire("click");
+    const xp = document.getElementById("paramList");
+    const cl3 = (e, c) => String(e.className || "").split(" ").includes(c);
+    const panels = xp.children.filter(e => cl3(e, "pnl"));
+    const names = panels.map(pn => {
+      const n = collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "?";
+    });
+    const labels = pn => collect(pn, e => cl3(e, "lbl")).map(e => e.textContent);
+    console.log("FX-panelen:", names.join(" "), "| eerste slot:",
+                labels(panels[0]).slice(0, 5).join(", "));
+    if (names.join(" ") !== "FX 1 FX 2 FX 3 FX 4") {
+      console.error("FOUT: de vier effectslots staan er niet");
+      failures++;
+    } else if (!labels(panels[0]).length) {
+      console.error("FOUT: het eerste slot toont geen parameternamen");
+      failures++;
+    } else {
+      // een ander effect kiezen geeft andere namen
+      const box = collect(panels[0], e => cl3(e, "pick"))[0];
+      const pop = collect(box, e => String(e.className || "") === "shapepop")[0];
+      console.log("keuzelijst met", pop.children.length, "effecten");
+      sent = [];
+      box.fire("click");
+      pop.children[21].fire("click");                 // Delay
+      const m = sent.filter(x => x[0] === "nrpn" && x[1] === 166).pop();
+      const after = labels(document.getElementById("paramList").children[0]);
+      console.log("gekozen:", JSON.stringify(m), "-> namen:", after.slice(0, 4).join(", "));
+      if (!m || m[2] !== 21) {
+        console.error("FOUT: het effecttype gaat niet naar parameter 166");
+        failures++;
+      }
+      if (pop.children.length !== 34 || after.indexOf("FACTORL") === -1) {
+        console.error("FOUT: de namen volgen het gekozen effect niet");
+        failures++;
+      }
+    }
+  }
+
   // ---- filterpaneel ----
   {
     [...document.getElementById("tabs").children]

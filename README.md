@@ -80,6 +80,15 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### The effects have no panel on the instrument
+
+There are no knobs for them: the FX menu shows an overview of the four slots
+and then a page per slot, "up to 12 parameters per slot, depending on the
+effect which is loaded", edited with the rotary and the data entry fader
+(7.2.7). What each of those twelve means is in chapter 9.3, which tables every
+effect's parameters by name. The app carries that table, so a slot's knobs are
+labelled for the effect that is loaded in it rather than "param 1 to 12".
+
 ### VCA and HPF are two sections, not one
 
 The VCA menu holds envelope depth, velocity sensitivity and pan spread, and

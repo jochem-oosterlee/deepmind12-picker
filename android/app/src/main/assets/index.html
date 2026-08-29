@@ -654,6 +654,47 @@ const FXT   = ["TC-DeepVRB","AmbVerb","RoomRev","VintageRev","HallRev","ChamberR
                "3TapDelay","4TapDelay","T-RayDelay","DecimDelay","ModDlyRev","Chorus","Chorus-D",
                "Flanger","Phaser","MoodFilter","DualPitch","RotarySpkr"];
 
+// Hoe de twaalf regelaars van een effect heten hangt af van welk effect er
+// geladen is. Overgenomen uit hoofdstuk 9.3 van de handleiding, in dezelfde
+// volgorde als FXT. Een effect met minder dan twaalf parameters heeft een
+// kortere rij.
+const FXP = [
+  ["Preset","Decay","Tone","PreDelay","Mix"],   // TC-DeepVRB
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","Mod","TailGain"],   // AmbVerb
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],   // RoomRev
+  ["PreDelay","Size","Decay","Lo Mult","Hi Mult","Density","LoCut","Hi Cut","ER Level","ER Delay","Mix","Freeze"],   // VintageRev
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","ModSpeed"],   // HallRev
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Shape","Spin"],   // ChamberRev
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Xover","ModDepth","ModSpeed"],   // PlateRev
+  ["PreDelay","Decay","Size","Damping","Diffusion","Mix","LoCut","Hi Cut","BassMult","Spread","Attack","Spin"],   // RichPltRev
+  ["PreDelay","Decay","Attack","Density","Spread","Mix","LoCut","HiSvFreq","HiSvGain","Diffusion"],   // GatedRev
+  ["PreDelay","Decay","Rise","Diffusion","Spread","Mix","LoCut","HiSvFreq","HiSvGain"],   // Reverse
+  ["Speed","Depth","Delay","Phase","Wave","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // ChorusVerb
+  ["Time","Pattern","FeedHC","Feedback","X-Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // DelayVerb
+  ["Speed","Depth","Delay","Phase","Feed","Balance","PreDelay","Decay","Size","Damping","LoCut","Mix"],   // FlangVerb
+  ["LoShelfGain","LoShelfFreq","LoMidGain","LoMidFreq","LoMidQ","HiMidGain","HiMidFreq","HiMidQ","HiShelfGain","HiShelfFreq","EQ"],   // MidasEQ
+  ["OutGain","Spread","BassGain","BassFreq","MidGain","MidQ","HiGain","HiFreq","FactorC"],   // Enhancer
+  ["Mode","InGain L/M","ThreshL/M","TImeL/M","DCBiasL/M","OutGainL/M","Bias Bal","InGain R/S","ThreshR/S","TImeR/S","DCBiasR/S","OutGainR/S"],   // FairComp
+  ["InputGain","Dist Types","Low Level","Low Drive","Xover Freq","Mid Level","Mid Drive","Xover Freq","High Level","High Drive","Cabinet","OutputGain"],   // MulBndDist
+  ["PreAmp","Buzz","Punch","Crunch","Drive","Level","Low","High","Cabinet"],   // RackAmp
+  ["On","InMode","OutMode","StSpread","LMFSpread","Balance","CntrDist","Gain"],   // EdisonEX1
+  ["Speed","Phase","Wave","Depth","EnvSpd","EnvDepth","Attack","Hold","Release"],   // AutoPan
+  ["Threshold","Range","Attack","Release","Hold","Punch","Mode","Power"],   // NoiseGate
+  ["Mix","Time","Mode","FactorL","FactorR","Offset","LC","HC","FeedLC","FeedL","FeedR","FeedHC"],   // Delay
+  ["Time","GainT","PanT","Feedback","FactorA","GainA","PanA","FactorB","GainB","PanB","X-Feed","Mix"],   // 3TapDelay
+  ["Time","Gain","Feedback","Spread","FactorA","GainA","FactorB","GainB","FactorC","GainC","X-Feed","Mix"],   // 4TapDelay
+  ["Mix","Delay","Sustain","Wobble","Tone"],   // T-RayDelay
+  ["Mix","Time Ms","Downsample","FactorL","FactorR","Bit-Reduce","Cutoff","Resonance","Type","FeedL","FeedR","Decimate"],   // DecimDelay
+  ["Time","Factor","Feedback","FeedHC","Depth","Speed","Mode","Rtype","Decay","Damping","Balance","Mix"],   // ModDlyRev
+  ["Speed","WidthL","WidthR","DelayL","DelayR","Mix","LoCut","Hi Cut","Phase","Wave","Spread"],   // Chorus
+  ["On","Mode","Mix","Sw1","Sw2","Sw3","Sw4"],   // Chorus-D
+  ["Speed","WidthL","WidthR","DelayL","Sets the modulation","Mix","LoCut","Hi Cut","Phase","FeedLC","FeedHC","Feed"],   // Flanger
+  ["Speed","Depth","Reso","Base Freq","Sets the modulation","Mix","Wave","Phase deg","EnvMod","Attack","Hold","Release"],   // Phaser
+  ["Speed","Depth","Resonance","Base Freq","Type LP","Mix","Wave","EnvMod","Attack","Release","Drive"],   // MoodFilter
+  ["Semi1","Cent1","Delay1","Gain1","Pan1","Mix","Semi2","Cent2","Delay2","Gain2","Pan2","HiCut"],   // DualPitch
+  ["LoSpeed","HiSpeed","Accel","Distance","Balance","Mix","Motor","Speed"],   // RotarySpkr
+];
+
 const fxSlot = (nr, type, p1, gain) => [
   H("FX slot " + nr), E(type, "FX " + nr + " type", FXT), S(gain, "FX " + nr + " gain", 150),
   ...Array.from({length: 12}, (_, i) => S(p1 + i, "FX " + nr + " param " + (i + 1)))
@@ -720,7 +761,7 @@ const PAGES = [
     S(120,"Swing (50–75%)",25), E(121,"Key sync & loop",["Loop on","Key sync on","Both on"]),
     S(122,"Slew rate"),
   ]},
-  {id:"fx", name:"FX", params:[
+  {id:"fx", name:"FX", panel:"fx", params:[
     E(222,"FX mode",["Insert","Send","Bypass"]), S(165,"FX routing",9),
     CT(113,"Analog thru"), CS(115,"3D controller X"), CS(116,"3D controller Y"), CS(117,"3D controller Z"),
     ...fxSlot(1, 166, 167, 218),
@@ -1942,6 +1983,31 @@ function renderEnv(base, title) {
   return box;
 }
 
+// ================== effectpanelen ==================
+// Op de synth zijn de effecten geen paneel maar een lijstje op het schermpje:
+// vier pagina's met per slot maximaal twaalf parameters, afhankelijk van het
+// geladen effect (handleiding 7.2.7). Hier staan ze wel als regelaars, met de
+// namen die bij dat effect horen.
+
+function renderFx(nr, typeN, p1, gainN) {
+  const kind = Math.min(FXT.length - 1, params.get(typeN, 0));
+  const names = FXP[kind] || [];
+
+  const cells = [];
+  names.forEach((nm, i) => {
+    if (!nm) return;
+    const c = cell(nm.toUpperCase());
+    c.appendChild(dial(p1 + i));
+    cells.push(c);
+  });
+
+  // een ander effect betekent andere namen, dus dan opnieuw tekenen
+  params.subscribe(typeN, () => renderParams());
+
+  return panelBox(470, "FX " + nr, [pickBox(typeN, FXT, {cols: 4})],
+    [panelFader(gainN, "GAIN", FADER_H)], cells, {cols: 6});
+}
+
 // ================== filterpaneel ==================
 
 /**
@@ -2593,6 +2659,13 @@ function renderParams() {
     wrap.appendChild(renderEnv(62, "VCF ENV"));
     wrap.appendChild(renderEnv(71, "MOD ENV"));
     list = [];
+  }
+  if (page.panel === "fx") {
+    [[1, 166, 167, 218], [2, 179, 180, 219],
+     [3, 192, 193, 220], [4, 205, 206, 221]]
+      .forEach(a => wrap.appendChild(renderFx(a[0], a[1], a[2], a[3])));
+    list = page.params.filter(p => p.n === undefined || p.n < 165 || p.n === 222
+                                   || p.n === 165);
   }
   if (page.panel === "vcf") {
     wrap.appendChild(renderVcf());
