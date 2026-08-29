@@ -2697,9 +2697,11 @@ function renderTune() {
   const body = document.createElement("div");
   body.className = "halves";
   // De hoofdstemming is een globale instelling, geen onderdeel van een
-  // programma; welke byte dat is weten we nog niet.
+  // programma; welke byte dat is weten we nog niet. Hij staat er dus wel, maar
+  // zonder waarde — anders leest hij die van een parameter waar hij niet bij hoort.
   body.appendChild(faderGroup("TUNE", [
-    panelFader(0, "GLOBAL", H, {disabled: true}),
+    panelFader(0, "GLOBAL", H, {disabled: true, value: 128,
+                                fmt: () => "—"}),
     panelFader(241, "TRANS", H, {min: 80, max: 176, fmt: v => v - 128}),
     panelFader(36, "BEND+", H, {max: 24}),
     panelFader(37, "BEND-", H, {max: 24, fmt: v => (v ? "-" + v : 0)}),
