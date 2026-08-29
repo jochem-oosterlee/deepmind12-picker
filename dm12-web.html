@@ -233,6 +233,10 @@
     border:1px solid var(--border); border-radius:8px; }
   /* de golfvorm rekt mee met de hoogte die de buitenste faders bepalen, zodat
      er onder het knoppenblok geen ruimte overblijft */
+  /* een klein label naast iets in de kop, zoals TRIG bij een envelope */
+  .trig { display:flex; align-items:center; gap:5px; }
+  .trig .lbl { color:var(--label); font-size:8px; letter-spacing:1px; }
+
   /* de golfvorm in een verzonken vak, over de volle breedte */
   .wavebox { height:52px; display:flex; align-items:center; justify-content:center;
     overflow:hidden; margin-top:8px; background:var(--well);
@@ -1254,14 +1258,18 @@ const PAGES = [
     S(45,"LFO depth"), E(46,"LFO select",["LFO 1","LFO 2"]),
     S(47,"Aftertouch → LFO"), S(48,"Mod wheel → LFO"), S(44,"Pitch bend → frequency"),
   ]},
-  {id:"env", name:"Env", params:[
+  {id:"env", name:"Env", panel:"env", params:[
+    // Alles staat in de drie panelen; deze lijst houdt de namen bij voor het
+    // logboek en voor "alles versturen".
     H("VCA envelope"),
     S(53,"Attack"), S(54,"Decay"), S(55,"Sustain"), S(56,"Release"), E(57,"Trigger",TRIG),
-    // niveau, diepte, aanslag en pan staan in het VCA/HPF-paneel op de filtertab
+    S(58,"Attack curve"), S(59,"Decay curve"), S(60,"Sustain curve"), S(61,"Release curve"),
     H("VCF envelope"),
     S(62,"Attack"), S(63,"Decay"), S(64,"Sustain"), S(65,"Release"), E(66,"Trigger",TRIG),
+    S(67,"Attack curve"), S(68,"Decay curve"), S(69,"Sustain curve"), S(70,"Release curve"),
     H("MOD envelope"),
     S(71,"Attack"), S(72,"Decay"), S(73,"Sustain"), S(74,"Release"), E(75,"Trigger",TRIG),
+    S(76,"Attack curve"), S(77,"Decay curve"), S(78,"Sustain curve"), S(79,"Release curve"),
   ]},
   {id:"voice", name:"Voice", params:[
     E(85,"Voice mode",POLY), E(84,"Voice priority",PRIO), E(86,"Envelope trigger",ETRIG),
@@ -2391,6 +2399,78 @@ function renderLfo(base, title) {
   return box;
 }
 
+// ================== envelopepanelen ==================
+
+/**
+ * De envelope zoals hij loopt: aanslag omhoog, verval naar het houdniveau,
+ * en na loslaten weer omlaag. De vier curve-instellingen bollen elk stuk op
+ * of hollen het uit, dus je ziet wat je draait.
+ */
+function envSvg(a, d, sus, r, ac, dc, sc, rc) {
+  const W = 264, H = 46, top = 4, bot = 44;
+  const ax = 2 + (a / 255) * 70;
+  const dx = ax + 6 + (d / 255) * 90;
+  const ys = bot - (sus / 255) * (bot - top);
+  const sx = Math.max(dx + 10, W - 68);
+  const rx = sx + 6 + (r / 255) * (W - 12 - sx);
+  // een curve boven de helft bolt op, eronder holt hij uit
+  const bend = (x1, y1, x2, y2, c) => {
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const k = ((c - 128) / 128) * 0.55;
+    return "Q" + (mx - (y2 - y1) * k).toFixed(1) + ","
+             + (my + (x2 - x1) * k).toFixed(1) + " "
+             + x2.toFixed(1) + "," + y2.toFixed(1);
+  };
+  const path = "M0," + bot
+    + bend(0, bot, ax, top, ac)
+    + bend(ax, top, dx, ys, dc)
+    + bend(dx, ys, sx, ys, sc)
+    + bend(sx, ys, rx, bot, rc)
+    + " Z";
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H
+    + '" class="wave"><path d="' + path + '" fill="var(--accent)" '
+    + 'fill-opacity="0.22" stroke="var(--accent)" stroke-width="1.5"/></svg>';
+}
+
+/** Eén envelope: tijden als faders, curves als knoppen, met de vorm erboven. */
+function renderEnv(base, title) {
+  const get = off => pval({k: "s", n: base + off, max: 255});
+
+  const graph = document.createElement("div");
+  graph.className = "wavebox env";
+  const draw = () => {
+    graph.innerHTML = envSvg(get(0), get(1), get(2), get(3),
+                             get(5), get(6), get(7), get(8));
+  };
+
+  const trig = document.createElement("span");
+  trig.className = "trig";
+  const tl = document.createElement("span");
+  tl.className = "lbl";
+  tl.textContent = "TRIG";
+  trig.appendChild(tl);
+  trig.appendChild(pickBox(base + 4, TRIG, {cols: 2}));
+
+  const H = 84;
+  const curves = [["A CURVE", 5], ["D CURVE", 6], ["S CURVE", 7], ["R CURVE", 8]]
+    .map(([l, off]) => {
+      const c = cell(l);
+      c.appendChild(dial(base + off, 255, draw));
+      return c;
+    });
+
+  const box = panelBox(300, title, [trig],
+    [panelFader(base + 0, "A", H, {after: draw}),
+     panelFader(base + 1, "D", H, {after: draw}),
+     panelFader(base + 2, "S", H, {after: draw}),
+     panelFader(base + 3, "R", H, {after: draw})],
+    curves, {top: graph, cols: 4});
+
+  [0, 1, 2, 3, 5, 6, 7, 8].forEach(off => params.subscribe(base + off, draw));
+  draw();
+  return box;
+}
+
 // ================== filterpaneel ==================
 
 /**
@@ -2633,7 +2713,7 @@ function pickBox(num, options, opts) {
 }
 
 /** Kleine draaiknop met de waarde eronder. */
-function dial(num, max) {
+function dial(num, max, after) {
   const wrap = document.createElement("div");
   const d = document.createElement("div");
   d.className = "dial";
@@ -2650,6 +2730,7 @@ function dial(num, max) {
     // nul staat rechtop, en vandaar 270 graden met de klok mee
     needle.style.transform = "rotate(" + ((v / top) * 270) + "deg)";
     num_.textContent = v;
+    if (after) after();
   };
   paint(params.get(num, 0));
   params.subscribe(num, paint);
@@ -2979,6 +3060,12 @@ function renderParams() {
     wrap.appendChild(renderOsc2());
     list = page.params.filter(p => !(OSC_PANEL.has(p.n)
       || p.l === "Oscillator 1" || p.l === "Oscillator 2"));
+  }
+  if (page.panel === "env") {
+    wrap.appendChild(renderEnv(53, "VCA ENV"));
+    wrap.appendChild(renderEnv(62, "VCF ENV"));
+    wrap.appendChild(renderEnv(71, "MOD ENV"));
+    list = [];
   }
   if (page.panel === "vcf") {
     wrap.appendChild(renderVcf());

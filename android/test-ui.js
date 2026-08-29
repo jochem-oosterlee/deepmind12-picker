@@ -269,7 +269,7 @@ for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn
 // een parameterregelaar verzetten (laatste param-tab is nog actief gerenderd)
 try {
   const tabsArr = [...document.getElementById("tabs").children];
-  tabsArr.find(t => t.textContent === "Env").fire("click");
+  tabsArr.find(t => t.textContent === "Voice").fire("click");
   const list = document.getElementById("paramList");
   sent = [];
   // met een skin zijn het draaiknoppen, zonder skin schuifregelaars
@@ -537,6 +537,63 @@ setTimeout(() => {
     }
     lfoTab.fire("click");            // terug, de rest van de test gaat over LFO
   }
+  // ---- envelopepanelen ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Env").fire("click");
+    const ep = document.getElementById("paramList");
+    const cl2 = (e, c) => String(e.className || "").split(" ").includes(c);
+    const names = ep.children.map(pn => {
+      const n = collect(pn, e => String(e.className || "") === "name")[0];
+      return n ? n.textContent : "?";
+    });
+    const one = ep.children[0];
+    const shape = [collect(one, e => cl2(e, "lfader")).length,
+                   collect(one, e => cl2(e, "dial")).length,
+                   collect(one, e => cl2(e, "pick")).length].join("/");
+    console.log("envelopes:", names.join(" + "), "| fader/knop/keuze:", shape);
+    if (names.join() !== "VCA ENV,VCF ENV,MOD ENV" || shape !== "4/4/1") {
+      console.error("FOUT: de envelopepanelen staan er niet zoals ontworpen");
+      failures++;
+    } else {
+      // de tekening moet meebewegen met de tijden én met de curves
+      const svg = () => String(collect(one, e => cl2(e, "wavebox"))[0]._html || "");
+      const before = svg();
+      const dials = collect(one, e => cl2(e, "dial"));
+      dials[0].fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 8});
+      dials[0].fire("pointermove", {clientY: 140, preventDefault() {}, shiftKey: false});
+      dials[0].fire("pointerup", {});
+      const afterCurve = svg();
+      const lane = collect(one, e => cl2(e, "lfader"))[0];
+      lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 9});
+      lane.fire("pointermove", {clientY: 240, preventDefault() {}, shiftKey: false});
+      lane.fire("pointerup", {});
+      console.log("tekening verandert door de curve:", afterCurve !== before,
+                  "| en door de attack:", svg() !== afterCurve);
+      if (afterCurve === before) {
+        console.error("FOUT: de curve-knop tekent de envelope niet opnieuw");
+        failures++;
+      }
+      if (svg() === afterCurve) {
+        console.error("FOUT: de attack-fader tekent de envelope niet opnieuw");
+        failures++;
+      }
+      // de curve-knoppen sturen naar 58 t/m 61
+      sent = [];
+      collect(one, e => cl2(e, "dial")).forEach((d, i) => {
+        d.fire("pointerdown", {clientY: 200, preventDefault() {}, pointerId: 8});
+        d.fire("pointermove", {clientY: 190, preventDefault() {}, shiftKey: false});
+        d.fire("pointerup", {});
+      });
+      const nums = sent.filter(x => x[0] === "nrpn").map(x => x[1]);
+      console.log("curve-knoppen sturen naar", [...new Set(nums)].join(", "));
+      if ([58, 59, 60, 61].some(n => nums.indexOf(n) === -1)) {
+        console.error("FOUT: de curves gaan niet naar 58 t/m 61");
+        failures++;
+      }
+    }
+  }
+
   // ---- filterpaneel ----
   {
     [...document.getElementById("tabs").children]
