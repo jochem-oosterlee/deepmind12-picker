@@ -71,6 +71,15 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
 - Parameter names and value labels cannot be read from the synth — MIDI carries
   numbers only. The Global tab lets you name them once and export the result.
 
+### LFO phase (from the instrument's own menu)
+
+Parameter 5 is one control with two meanings: **0 puts every voice in the same
+phase**, which sounds like mono, and **1 to 154 gives each voice its own
+offset**. The menu on the synth offers exactly that range, so the app keeps to
+it — over MIDI the parameter happily stores anything up to 255, it just is not
+a setting you can reach on the instrument. Slew (parameter 6) does use the full
+0-255.
+
 ### An LFO rate that follows the clock (measured)
 
 With arp sync on (parameter 4), the panel no longer shows a rate but a note

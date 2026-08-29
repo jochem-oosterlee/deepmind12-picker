@@ -460,7 +460,37 @@ setTimeout(() => {
         failures++;
       }
     }
-    // Phase-knop stapt door poly, mono en faseverschil; poly en mono zijn
+    // de faseregelaar loopt van 1 tot 154, zoals het menu op het apparaat
+    const phaseBox = collect(plist, e => String(e.className || "") === "vf")
+      .find(b => collect(b, x => String(x.className || "") === "vcap")
+                   .some(c => c.textContent === "Phase"));
+    const phaseLane = phaseBox
+      && collect(phaseBox, e => String(e.className || "").includes("lfader"))[0];
+    if (!phaseLane) {
+      console.error("FOUT: faseregelaar niet gevonden");
+      failures++;
+    } else {
+      const swipe = (from, to) => {
+        sent = [];
+        phaseLane.fire("pointerdown", {clientY: from, preventDefault() {}, pointerId: 5});
+        phaseLane.fire("pointermove", {clientY: to, preventDefault() {}, shiftKey: false});
+        phaseLane.fire("pointerup", {});
+        return sent.filter(x => x[0] === "nrpn" && x[1] === 5).pop();
+      };
+      const low = swipe(100, 900), high = swipe(900, -900);
+      console.log("fase helemaal omlaag ->", JSON.stringify(low),
+                  "| helemaal omhoog ->", JSON.stringify(high));
+      if (!low || low[2] !== 1) {
+        console.error("FOUT: fase gaat onder 1");
+        failures++;
+      }
+      if (!high || high[2] !== 154) {
+        console.error("FOUT: fase gaat niet tot 154");
+        failures++;
+      }
+    }
+
+    // Phase-knop wipt tussen mono (0) en een faseverschil; poly en mono zijn
     // lampjes en mogen dus niet aanklikbaar zijn
     const lamps = collect(plist, e => String(e.className || "").split(" ").includes("lamp"));
     const phaseBtn = collect(plist, e => e.textContent === "Phase"
