@@ -2128,15 +2128,16 @@ function renderTune() {
                 {middle: 128, fmt: v => fmt({k: "b"}, v), parse: t => +t + 128}),
     panelFader(241, "TRANS", H,
                 {min: 80, max: 176, fmt: v => v - 128, parse: t => +t + 128}),
-    // Allebei van -24 tot +24 halve tonen; de handleiding houdt het nog op 0-24.
-    // In de byte staat het met teken (232 is -24), maar bij "omlaag" telt de
-    // synth andersom: byte 232 leest daar als +24. Naast elkaar gelegd met de
-    // editor van het apparaat: die toont -24 en +24, met allebei het kapje
-    // onderaan - vandaar dat de tweede fader gespiegeld staat.
+    // Allebei van -24 tot +24 halve tonen, en lezen gaat anders dan schrijven.
+    // In het programmablok staat een byte met teken: 232 is -24, en bij
+    // "omlaag" telt de synth dat omgekeerd (232 leest daar als +24). Maar over
+    // NRPN verwacht hij een verschoven getal: 0 is -24, 24 is nul, 48 is +24.
+    // Uitgemeten op het apparaat, want de handleiding houdt het op 0-24 en dat
+    // klopt met geen van beide.
     panelFader(36, "BEND+", H, {min: -24, max: 24,
-                toShown: signed8, toRaw: unsigned8}),
+                toShown: signed8, toRaw: d => d + 24}),
     panelFader(37, "BEND-", H, {min: -24, max: 24, flip: true,
-                toShown: v => -signed8(v), toRaw: d => unsigned8(-d)}),
+                toShown: v => -signed8(v), toRaw: d => 24 - d}),
   ]));
   const bar = document.createElement("div");
   bar.className = "vrule";

@@ -142,12 +142,16 @@ follows the instrument: VCF, then VCA, then HPF with the boost.
 
 ### Pitch bend runs both ways
 
-The manual gives 36 and 37 as 0-24 semitones. On this firmware they are signed
-bytes running -24 to +24, and the two count opposite ways: byte 232 is -24 on
-the up one and +24 on the down one. Both faders put their lowest reading at the
-bottom, so the down one appears mirrored. Read off the instrument's editor with
-both at their extreme: it showed -24 and +24 with both caps at the bottom while
-the bytes held 232.
+The manual gives 36 and 37 as 0-24 semitones. They are -24 to +24, and reading
+them is not the same as writing them:
+
+- **In the program data** they are signed bytes: 232 is -24. The "down" one
+  counts the other way, so 232 reads as +24 there.
+- **Over NRPN** they are offset instead: 0 is -24, 24 is nought, 48 is +24. Send
+  a 0 meaning "no bend" and the synth goes to -24, which is how this came out.
+
+So the app reads them signed and writes them offset. Neither encoding is the
+one the manual gives.
 
 A warning from getting this wrong twice: measure with the app's own writes out
 of the way. A byte we had written with a wrong assumption looked like evidence

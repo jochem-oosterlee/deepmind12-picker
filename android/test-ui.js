@@ -592,8 +592,9 @@ setTimeout(() => {
           .find(b => caps(b)[0] === nm);
         // bend+ heeft -24 onderin, bend- juist +24 onderin
         // onderaan / bovenaan: welke byte eruit gaat en wat er komt te staan
-        [["BEND+", 36, 232, 24, "-24", "24"],
-         ["BEND-", 37, 232, 24, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
+        // wat er onderaan en bovenaan uit gaat: over NRPN 0 tot 48
+        [["BEND+", 36, 0, 48, "-24", "24"],
+         ["BEND-", 37, 0, 48, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
           const box = bend(nm);
           const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
