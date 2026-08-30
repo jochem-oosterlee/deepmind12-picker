@@ -1036,6 +1036,21 @@ setTimeout(() => {
         failures++;
       }
 
+      // de knoppen staan naast de faders, en het paneel heeft geen vaste maat
+      {
+        const slot = document.getElementById("paramList").children
+          .filter(e => cl3(e, "pnl"))[1];
+        const side = collect(slot, e => cl3(e, "pside"));
+        const below = collect(slot, e => cl3(e, "rule"));
+        console.log("knoppen naast de faders:", side.length ? "ja" : "nee",
+                    "| streep eronder:", below.length ? "ja" : "nee",
+                    "| vaste breedte:", slot.style.width || "geen");
+        if (!side.length || below.length || slot.style.width) {
+          console.error("FOUT: de effectknoppen staan niet naast de faders");
+          failures++;
+        }
+      }
+
       // mix is een percentage en houdt op bij 100
       {
         // na het kiezen van een effect is het paneel opnieuw getekend
