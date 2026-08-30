@@ -849,7 +849,7 @@ function pollNow() {
     // het vorige. De synth stuurt een program change, maar niet de inhoud, dus
     // vragen we die er zelf bij op.
     if (lib.curProg !== lastProg) {
-      if (lastProg !== null) setTimeout(() => AndroidBridge.requestEditBuffer(devId), 200);
+      if (lastProg !== null) setTimeout(askEditBuffer, 200);
       lastProg = lib.curProg;
     }
     if (lib.paramRev !== lastParamRev) {
@@ -1128,6 +1128,12 @@ function buildTabs() {
   }
 }
 
+/** Vraagt de inhoud van de edit buffer op en onthoudt wanneer dat was. */
+function askEditBuffer() {
+  params.askedAt = Date.now();
+  return AndroidBridge.requestEditBuffer(devId);
+}
+
 function isParamTab() { return PAGES.some(p => p.id === tab); }
 
 /** Welke tab staat er in de url? Zo blijft F5 op dezelfde pagina. */
@@ -1294,7 +1300,7 @@ function sendProgram(bank, prog) {
       el.classList.toggle("current", el.dataset.key === current);
     }
     // parameters van het nieuwe programma ophalen
-    setTimeout(() => AndroidBridge.requestEditBuffer(devId), 250);
+    setTimeout(askEditBuffer, 250);
   } else {
     statusText.textContent = "not connected to the synth";
   }
@@ -1375,6 +1381,9 @@ const params = {
   pend: {},         // wat wij zelf net stuurden, met tijdstip
   subs: {},         // parameternummer -> functies die bijgewerkt willen worden
   ECHO_MS: 3000,
+  // wanneer we voor het laatst om de inhoud vroegen; een antwoord dat ouder is
+  // dan jouw wijziging weet daar nog niets van
+  askedAt: 0,
 
   get(n, fallback) {
     return this.val[n] === undefined ? fallback : this.val[n];
@@ -1392,7 +1401,11 @@ const params = {
     const p = this.pend[n];
     if (p) {
       if (p.v === v) delete this.pend[n];                       // bevestigd
-      else if (Date.now() - p.ms < this.ECHO_MS) return false;  // onze is nieuwer
+      // Twee redenen om een afwijkende lezing te laten liggen: hij kan van
+      // vóór onze wijziging zijn (dan weet hij er niets van), en anders is
+      // onze zet nog te vers om al beantwoord te zijn.
+      else if (p.ms > this.askedAt) return false;
+      else if (Date.now() - p.ms < this.ECHO_MS) return false;
     }
     if (this.val[n] === v) return false;
     this.val[n] = v;
@@ -3019,7 +3032,7 @@ function flash(el, ok) {
 const readBtn = document.getElementById("readBtn");
 readBtn.addEventListener("click", () => {
   AndroidBridge.appNotify(devId);
-  const ok = AndroidBridge.requestEditBuffer(devId);
+  const ok = askEditBuffer();
   flash(readBtn, ok);
   statusText.textContent = ok ? "edit buffer requested, waiting for a reply…"
                               : "not connected — nothing to request";
@@ -3054,10 +3067,10 @@ function setAuto(on) {
   autoTimer = null;
   if (on) {
     autoTimer = setInterval(() => {
-      if (!dragging && libState && libState.dev >= 0) AndroidBridge.requestEditBuffer(devId);
+      if (!dragging && libState && libState.dev >= 0) askEditBuffer();
     }, 2500);
     AndroidBridge.appNotify(devId);
-    AndroidBridge.requestEditBuffer(devId);
+    askEditBuffer();
   }
 }
 autoBtn.addEventListener("click", () => setAuto(!autoSync));

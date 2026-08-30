@@ -57,7 +57,11 @@ while it runs.
   `params.subscribe(n, fn)` and repaints itself; a value change must never
   rebuild the page. What you just set is held as pending for `ECHO_MS`, so a
   reading that has not caught up cannot drag your knob back — keep that window
-  comfortably longer than the poll interval.
+  comfortably longer than the poll interval. A reading is also ignored when it
+  answers a request that went out *before* your change (`params.askedAt`): a
+  full dump takes seconds, and the one already in flight knows nothing about
+  what you just moved. Ask for the buffer through `askEditBuffer()` so that
+  stays true.
 - **Rebuild only when the shape changes.** `loadSynthParams()` re-renders solely
   when a changed parameter is on screen *and* nobody subscribes to it
   (`shownParams`). A page rebuild during typing or dragging is a bug, and the

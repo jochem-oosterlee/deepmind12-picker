@@ -416,6 +416,7 @@ setTimeout(() => {
   let fxCheck = null;
   let bendCheck = null;
   const progChecks = [];
+  const staleChecks = [];
 
   // ---- oscillatorpanelen, volgens het ontwerp ----
   {
@@ -871,6 +872,34 @@ setTimeout(() => {
         failures++;
       }
     }
+  }
+
+  // ---- een uitlezing van voor je wijziging draait die niet terug ----
+  {
+    // de resonantie van het filter: die raakt geen enkele andere test aan
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Filter").fire("click");
+    const box = collect(document.getElementById("paramList"),
+      e => String(e.className || "") === "vf")
+      .find(b => collect(b, x => String(x.className || "") === "vcap")
+                   .some(c => c.textContent === "RES"));
+    const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
+    const num = collect(box, e => String(e.className || "") === "vnum")[0];
+    // de app vraagt om de inhoud, daarna zet jij iets, daarna komt het antwoord
+    reqEdits++;                       // alsof er net gevraagd is
+    lane.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 2});
+    lane.fire("pointermove", {clientY: 200, preventDefault() {}, shiftKey: false});
+    lane.fire("pointerup", {});
+    const mine = num.textContent;
+    paramBytes[41] = 3;               // het late antwoord met de oude waarde
+    paramRev++;
+    staleChecks.push(() => {
+      console.log("late uitlezing:", mine, "->", num.textContent);
+      if (num.textContent !== mine) {
+        console.error("FOUT: een oude uitlezing draait je eigen zet terug");
+        failures++;
+      }
+    });
   }
 
   // ---- wisselt de synth van programma, dan halen we de inhoud opnieuw op ----
@@ -1432,6 +1461,7 @@ setTimeout(() => {
         pwmChecks.forEach(fn => fn());
         while (envChecks.length) envChecks.shift()();
         progChecks.forEach(fn => fn());
+        staleChecks.forEach(fn => fn());
         const nowOn = sawOf().classList.contains("on");
         console.log("golfvormknop na een melding van de synth:",
                     nowOn ? "aan" : "uit", "(was " + (wasOn ? "aan" : "uit") + ")");
