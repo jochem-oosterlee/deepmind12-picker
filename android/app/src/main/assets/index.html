@@ -219,6 +219,9 @@
     margin-top:10px; }
   .modrow { display:grid; grid-template-columns:16px 1fr 14px 1fr 88px 34px;
     gap:6px; align-items:center; }
+  /* zonder dit mag een kolom niet kleiner dan zijn inhoud, en duwt een lange
+     naam de diepte en de waarde het paneel uit */
+  .modrow > * { min-width:0; }
   .modrow .nr { color:var(--muted); font-size:9px; font-weight:700; }
   .modrow .arrow { color:var(--label); font-size:10px; text-align:center; }
   .modrow .num { color:var(--label); font-weight:700; font-size:11px;

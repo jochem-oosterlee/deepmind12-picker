@@ -596,6 +596,16 @@ setTimeout(() => {
         console.error("FOUT: de bron gaat niet naar parameter 93");
         failures++;
       }
+      // de regels mogen niet buiten het paneel vallen
+      {
+        const css = require("fs").readFileSync(process.argv[2], "utf8").split("</style>")[0];
+        const rule = (css.match(/^  \.modrow > \* \{[^}]*\}/m) || [""])[0];
+        if (!/min-width:\s*0/.test(rule)) {
+          console.error("FOUT: zonder krimpende kolommen loopt een regel het paneel uit");
+          failures++;
+        }
+      }
+
       // de diepte ligt plat en telt met teken
       const bar = collect(rows[0], e => cl5(e, "hfad"))[0];
       const val = collect(rows[0], e => cl5(e, "num"))[0];
