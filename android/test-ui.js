@@ -975,6 +975,27 @@ setTimeout(() => {
         failures++;
       }
 
+      // mix is een percentage en houdt op bij 100
+      {
+        // na het kiezen van een effect is het paneel opnieuw getekend
+        const slot1 = document.getElementById("paramList").children
+          .filter(e => cl3(e, "pnl"))[1];
+        const box3 = collect(slot1, e => cl3(e, "vf"))
+          .find(b => collect(b, x => String(x.className || "") === "vcap")
+                       .some(c => c.textContent === "MIX"));
+        const lane3 = collect(box3, e => String(e.className || "").includes("lfader"))[0];
+        sent = [];
+        lane3.fire("pointerdown", {clientY: 300, preventDefault() {}, pointerId: 5});
+        lane3.fire("pointermove", {clientY: -900, preventDefault() {}, shiftKey: false});
+        lane3.fire("pointerup", {});
+        const top3 = sent.filter(x => x[0] === "nrpn").pop();
+        console.log("mix helemaal open ->", JSON.stringify(top3));
+        if (!top3 || top3[2] !== 100) {
+          console.error("FOUT: mix gaat niet tot 100");
+          failures++;
+        }
+      }
+
       // de gain loopt tot 150; helemaal open moet dus 150 sturen
       {
         const box2 = collect(panels[0], e => String(e.className || "") === "vf")

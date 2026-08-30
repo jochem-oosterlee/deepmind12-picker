@@ -2682,8 +2682,9 @@ function renderFx(nr, typeN, p1, gainN) {
   return panelBox(470, "FX " + nr, [pickBox(typeN, FXT, {cols: 4})],
     // de uitgangsversterking loopt tot 150, niet tot 255 (handleiding p120)
     [panelFader(gainN, "GAIN", FADER_H, {max: 150}),
+     // mix is een percentage: die houdt op bij 100, niet bij 255
      panelFader(mixAt >= 0 ? p1 + mixAt : p1, "MIX", FADER_H,
-                {disabled: mixAt < 0})],
+                {disabled: mixAt < 0, max: 100})],
     cells, {cols: 6});
 }
 
