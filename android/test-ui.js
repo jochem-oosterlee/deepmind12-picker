@@ -81,7 +81,7 @@ global.document = {
   activeElement: null,
   body: makeEl("body"),
 };
-global.location = {protocol: "http:", hash: "#lfo"};
+global.location = {protocol: "http:", hash: "#mod"};
 global.history = {
   replaceState(_a, _b, url) { global.location.hash = String(url); },
 };
@@ -193,8 +193,8 @@ console.log("opstarten: ok");
 {
   const sel = document.getElementById("tabs").children.find(t =>
     String(t.className || "").includes("sel"));
-  console.log("tab uit de url (#lfo):", sel ? sel.textContent : "geen");
-  if (!sel || sel.textContent !== "LFO") {
+  console.log("tab uit de url (#mod):", sel ? sel.textContent : "geen");
+  if (!sel || sel.textContent !== "Mod") {
     console.error("FOUT: tab niet uit de url overgenomen");
     process.exit(1);
   }
@@ -409,8 +409,15 @@ setTimeout(() => {
     return out;
   };
 
-  const lfoTab = [...document.getElementById("tabs").children]
-    .find(t => t.textContent === "LFO");
+  // Alles staat op de Panel-tab; de losse tabs bestaan niet meer.
+  const panelTab = [...document.getElementById("tabs").children]
+    .find(t => t.textContent === "Panel");
+  const openPanels = () => { panelTab.fire("click"); };
+  const panelNamed = name => document.getElementById("paramList").children
+    .filter(e => String(e.className || "").split(" ").includes("pnl"))
+    .find(pn => collect(pn, e => String(e.className || "") === "name")
+                  .some(n => n.textContent === name));
+  const lfoTab = panelTab;
   const pwmChecks = [];
   const envChecks = [];
   let fxCheck = null;
@@ -421,9 +428,9 @@ setTimeout(() => {
   // ---- oscillatorpanelen, volgens het ontwerp ----
   {
     [...document.getElementById("tabs").children]
-      .find(t => t.textContent === "OSC").fire("click");
+      .find(t => t.textContent === "Panel").fire("click");
     const op = document.getElementById("paramList");
-    const panels = op.children.filter(e => String(e.className || "") === "pnl");
+    const panels = ["OSC 1", "OSC 2"].map(panelNamed);
     const nameOf = pn => {
       const n = collect(pn, e => String(e.className || "") === "name")[0];
       return n ? n.textContent : "geen";
@@ -771,14 +778,11 @@ setTimeout(() => {
   // ---- envelopepanelen ----
   {
     [...document.getElementById("tabs").children]
-      .find(t => t.textContent === "Env").fire("click");
+      .find(t => t.textContent === "Panel").fire("click");
     const ep = document.getElementById("paramList");
     const cl2 = (e, c) => String(e.className || "").split(" ").includes(c);
-    const names = ep.children.map(pn => {
-      const n = collect(pn, e => String(e.className || "") === "name")[0];
-      return n ? n.textContent : "?";
-    });
-    const one = ep.children[0];
+    const names = ["VCA ENV", "VCF ENV", "MOD ENV"].map(n => panelNamed(n) ? n : "?");
+    const one = panelNamed("VCA ENV");
     const shape = [collect(one, e => cl2(e, "lfader")).length,
                    collect(one, e => cl2(e, "dial")).length,
                    collect(one, e => cl2(e, "pick")).length].join("/");
@@ -936,7 +940,7 @@ setTimeout(() => {
   {
     // de resonantie van het filter: die raakt geen enkele andere test aan
     [...document.getElementById("tabs").children]
-      .find(t => t.textContent === "Filter").fire("click");
+      .find(t => t.textContent === "Panel").fire("click");
     const box = collect(document.getElementById("paramList"),
       e => String(e.className || "") === "vf")
       .find(b => collect(b, x => String(x.className || "") === "vcap")
@@ -1100,9 +1104,9 @@ setTimeout(() => {
   // ---- filterpaneel ----
   {
     [...document.getElementById("tabs").children]
-      .find(t => t.textContent === "Filter").fire("click");
+      .find(t => t.textContent === "Panel").fire("click");
     const fp = document.getElementById("paramList");
-    const panel = fp.children[0], vca = fp.children[1], hpf = fp.children[2];
+    const panel = panelNamed("VCF"), vca = panelNamed("VCA"), hpf = panelNamed("HPF");
     const has = (root, c) => collect(root, e => String(e.className || "").split(" ").includes(c));
     const nameOf = pn => {
       const n = pn && collect(pn, e => String(e.className || "") === "name")[0];
@@ -1216,8 +1220,10 @@ setTimeout(() => {
                   "| in HPF:", collect(hpf, e => String(e.className || "") === "vcap")
                     .map(e => e.textContent).join(", "),
                   "| los eronder:", fp.children.length - 3);
-      if (fp.children.length !== 3) {
-        console.error("FOUT: er staat nog iets los onder de filterpanelen");
+      const loose = fp.children.filter(e => !String(e.className || "").split(" ")
+        .includes("pnl")).length;
+      if (loose) {
+        console.error("FOUT: er staat iets los tussen de panelen");
         failures++;
       }
     }
@@ -1239,15 +1245,16 @@ setTimeout(() => {
     };
   };
 
-  const lfos = plist.children.filter(e => cls(e, "lfo"));
-  const lanes = pick(plist, "lfader");
+  const lfos = ["LFO 1", "LFO 2"].map(panelNamed);
+  const inLfos = c => lfos.reduce((n, pn) => n + pick(pn, c).length, 0);
+  const lanes = lfos.length === 2 ? pick(lfos[0], "lfader").concat(pick(lfos[1], "lfader")) : [];
   const cellNamed = (root, name) => collect(root, e => cls(e, "cell"))
     .find(c => collect(c, x => cls(x, "lbl")).some(l => l.textContent === name));
-  console.log("LFO-panelen:", lfos.length, "| faders:", lanes.length,
-              "| vormvakken:", pick(plist, "pick").length,
-              "| schakelaars:", pick(plist, "sw").length);
-  if (lfos.length !== 2 || lanes.length !== 8 || pick(plist, "pick").length !== 2
-      || pick(plist, "sw").length !== 6) {
+  console.log("LFO-panelen:", lfos.filter(Boolean).length, "| faders:", lanes.length,
+              "| vormvakken:", inLfos("pick"),
+              "| schakelaars:", inLfos("sw"));
+  if (lfos.filter(Boolean).length !== 2 || lanes.length !== 8 || inLfos("pick") !== 2
+      || inLfos("sw") !== 6) {
     console.error("FOUT: LFO-panelen niet volledig opgebouwd");
     failures++;
   } else {
@@ -1466,7 +1473,7 @@ setTimeout(() => {
 
     // ---- houdt de tussenlaag beide kanten bij? ----
     const tabsNow = [...document.getElementById("tabs").children];
-    tabsNow.find(t => t.textContent === "LFO").fire("click");
+    tabsNow.find(t => t.textContent === "Panel").fire("click");
     const findAll = (root, pred) => {
       const out = [];
       (function walk(e) {
@@ -1530,7 +1537,7 @@ setTimeout(() => {
 
       // laatste controle: verandert de synth iets, dan volgt het paneel
       [...document.getElementById("tabs").children]
-        .find(t => t.textContent === "OSC").fire("click");
+        .find(t => t.textContent === "Panel").fire("click");
       const sawOf = () => collect(document.getElementById("paramList"),
         e => String(e.className || "").split(" ").includes("hbtn"))[0];
       const wasOn = sawOf().classList.contains("on");

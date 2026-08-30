@@ -1343,7 +1343,9 @@ const fxSlot = (nr, type, p1, gain) => [
 ];
 
 const PAGES = [
-  {id:"osc", name:"OSC", panel:"osc", params:[
+  // De Panel-tab tekent deze vier al; ze staan hier nog voor hun namen (in
+  // het logboek en bij "alles versturen") en worden niet als tab getoond.
+  {id:"osc", name:"OSC", panel:"osc", hide:true, params:[
     H("Oscillator 1"),
     E(14,"Range",RANGE), T(18,"Pulse wave"), T(19,"Sawtooth"), T(20,"OSC sync"),
     S(25,"PWM depth"), E(16,"PWM source",MODSRC),
@@ -1361,7 +1363,7 @@ const PAGES = [
     S(34,"Portamento time"), E(35,"Portamento mode",PORTA),
     B(91,"Portamento balance"), S(36,"Pitch bend up",24), S(37,"Pitch bend down",24),
   ]},
-  {id:"vcf", name:"Filter", panel:"vcf", params:[
+  {id:"vcf", name:"Filter", panel:"vcf", hide:true, params:[
     S(39,"Frequency"), S(41,"Resonance"), S(40,"High-pass (HPF)"),
     S(42,"Envelope depth"), E(50,"Envelope polarity",["Negative","Positive"]),
     E(51,"Filter poles",["4-pole","2-pole"]), T(52,"Bass boost"),
@@ -1369,7 +1371,7 @@ const PAGES = [
     S(45,"LFO depth"), E(46,"LFO select",["LFO 1","LFO 2"]),
     S(47,"Aftertouch → LFO"), S(48,"Mod wheel → LFO"), S(44,"Pitch bend → frequency"),
   ]},
-  {id:"env", name:"Env", panel:"env", params:[
+  {id:"env", name:"Env", panel:"env", hide:true, params:[
     // Alles staat in de drie panelen; deze lijst houdt de namen bij voor het
     // logboek en voor "alles versturen".
     H("VCA envelope"),
@@ -1387,7 +1389,7 @@ const PAGES = [
     S(87,"Unison detune"), S(88,"Voice drift"), S(89,"Parameter drift"), S(90,"Drift rate"),
     S(241,"Program transpose",176),
   ]},
-  {id:"lfo", name:"LFO", custom:"lfo", params:[
+  {id:"lfo", name:"LFO", custom:"lfo", hide:true, params:[
     H("LFO 1"),
     S(0,"Rate"), S(1,"Delay / fade"), E(2,"Shape",SHAPE), T(3,"Key sync"), T(4,"Arp sync"),
     S(5,"Poly / mono / spread"), S(6,"Slew rate"),
@@ -1760,7 +1762,7 @@ function buildTabs() {
   const t = document.getElementById("tabs");
   t.innerHTML = "";
   const all = [{id:"presets", name:"Presets"}, {id:"lib", name:"Library"},
-               ...PAGES, {id:"global", name:"Global"}];
+               ...PAGES.filter(p => !p.hide), {id:"global", name:"Global"}];
   for (const p of all) {
     const b = document.createElement("button");
     b.className = "tab" + (tab === p.id ? " sel" : "");
@@ -1777,6 +1779,12 @@ function askEditBuffer() {
 }
 
 function isParamTab() { return PAGES.some(p => p.id === tab); }
+
+/** Een pagina zonder tab hoort niet als startpunt: dan maar het paneel. */
+function visibleTab(id) {
+  const p = PAGES.find(x => x.id === id);
+  return p && p.hide ? "panel" : id;
+}
 
 /** Welke tab staat er in de url? Zo blijft F5 op dezelfde pagina. */
 function tabFromUrl() {
@@ -5071,7 +5079,7 @@ document.getElementById("libExportBtn").addEventListener("click", () => {
 });
 
 // eerst de interface opbouwen, daarna pas verbinding en status
-tab = tabFromUrl() || tab;
+tab = visibleTab(tabFromUrl() || tab);
 setUrlTab();
 if (typeof window !== "undefined" && window.addEventListener) {
   window.addEventListener("hashchange", () => {

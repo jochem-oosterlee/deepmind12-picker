@@ -122,13 +122,13 @@ write back), global settings over NRPN with your own labels and menus, the LFO
 panels, discovery, and the readable SysEx log.
 
 The **Panel** tab holds every panel at once, in signal order: LFO 1 and 2, OSC
-1 and 2, VCF, VCA, HPF, and the three envelopes. The separate tabs still exist
-and render the same panels.
+1 and 2, VCF, VCA, HPF, and the three envelopes. The pages those panels came
+from (`osc`, `vcf`, `env`, `lfo`) are still in `PAGES` but carry `hide:true`:
+they have no tab of their own, and only their parameter lists are still used -
+by the log, by "send page", and to build the Panel tab's own list.
 
 Open threads:
 
 - Arp/Seq is still plain cards; no design for it yet.
-- Whether the separate per-section tabs are still worth keeping now that the
-  Panel tab shows everything.
 - 18 global settings are still unnamed, and the user's own Global layout has not
   been committed as a shared mapping file.
