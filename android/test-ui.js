@@ -128,7 +128,7 @@ const paramBytes = Array.from({length: 242}, (_, i) => (i * 7) & 0xFF);
 const globalBytes = Array.from({length: 45}, (_, i) => (i * 3) & 0xFF);
 global.AndroidBridge = {
   getStatus: () => JSON.stringify({connected: true, status: "verbonden met FakeDM12",
-    event: "", wifi: "WiFi verbonden: Deepmind12", wifiConnected: true, ip: "192.168.12.1"}),
+    event: "", link: "USB", ip: "192.168.12.1"}),
   libStatus: () => JSON.stringify({names: 256, patches: 3, nameDumps: 2, patchDumps: 3,
     badNames: 0, curBank: 0, curProg: curProg, iface: 2, dev: 0, editBuffer: true, paramRev: paramRev,
     info: "edit buffer ontvangen", pkts: 42, sysex: 2, sysexLen: 2353, segs: 10, framing: 0,
@@ -149,7 +149,6 @@ global.AndroidBridge = {
   writeGlobalBlock: (json, d) => { sent.push(["writeGlobalBlock", JSON.parse(json).length, d]); return true; },
   libNames: () => JSON.stringify({"A-0": ["Blue Dolphin", 2, 1], "A-1": ["Bass Pong", 1, 0]}),
   libParams: () => JSON.stringify(paramBytes),
-  getWifiCreds: () => JSON.stringify({ssid: "Deepmind12", pw: "Passphrase"}),
   send: (b, p, c) => { sent.push(["prog", b, p, c]); return true; },
   sendCC: (cc, v, c) => { sent.push(["cc", cc, v, c]); return true; },
   // de nagebootste synth neemt over wat de app stuurt, net als het apparaat
@@ -159,8 +158,6 @@ global.AndroidBridge = {
   appNotify: d => { sent.push(["notify", d]); return true; },
   panic: c => { sent.push(["panic", c]); return true; },
   setIp: ip => sent.push(["ip", ip]),
-  connectWifi: (s, p) => sent.push(["wifi", s, p]),
-  disconnectWifi: () => sent.push(["wifioff"]),
   requestBankNames: (b, d) => { sent.push(["reqNames", b, d]); return true; },
   requestProgram: (b, p, d) => { sent.push(["reqProg", b, p, d]); return true; },
   requestEditBuffer: d => { sent.push(["reqEdit", d]); reqEdits++; return true; },
@@ -258,10 +255,10 @@ try {
 } catch (e) { console.error("FOUT bij preset klikken:", e.message); failures++; }
 
 // alle knoppen in de kop en de bibliotheek
-for (const id of ["gearBtn","ipBtn","wifiBtn","wifiOffBtn","notifyBtn","panicBtn",
+for (const id of ["gearBtn","ipBtn","notifyBtn","panicBtn",
                   "backupBtn","restoreBtn","scanNames","scanBankPatches","libSaveBtn",
                   "libExportBtn","readBtn","pushBtn","autoBtn","gReadBtn","gHelpBtn",
-                  "findBtn","gWatchBtn","gExportBtn","gSnapBtn","gSnapRestore","themeBtn"]) {
+                  "findBtn","gWatchBtn","gExportBtn","gSnapBtn","gSnapRestore"]) {
   try {
     sent = [];
     document.getElementById(id).fire("click");
@@ -593,8 +590,9 @@ setTimeout(() => {
         const bend = nm => collect(panels[1], e => String(e.className || "") === "vf")
           .find(b => caps(b)[0] === nm);
         // bend+ heeft -24 onderin, bend- juist +24 onderin
+        // onderaan / bovenaan: welke byte eruit gaat en wat er komt te staan
         [["BEND+", 36, 232, 24, "-24", "24"],
-         ["BEND-", 37, 24, 232, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
+         ["BEND-", 37, 232, 24, "24", "-24"]].forEach(([nm, par, lo, hi, loT, hiT]) => {
           const box = bend(nm);
           const lane = collect(box, e => String(e.className || "").includes("lfader"))[0];
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
@@ -634,7 +632,7 @@ setTimeout(() => {
                          .some(c => c.textContent === "BEND-"));
           const num = collect(box, e => String(e.className || "") === "vnum")[0];
           console.log("byte 43 buiten de schaal toont:", num.textContent);
-          if (num.textContent !== "24") {
+          if (num.textContent !== "-24") {
             console.error("FOUT: een waarde buiten de schaal wordt niet begrensd");
             failures++;
           }
@@ -1453,6 +1451,30 @@ setTimeout(() => {
           [...document.getElementById("tabs").children]
             .find(t => t.textContent === "FX").fire("click");
           fxCheck();
+        }
+
+        // in de kop hoort alleen te staan of er verbinding is
+        const led = document.getElementById("led");
+        const st = document.getElementById("statusText");
+        console.log("kop:", JSON.stringify(led.className), JSON.stringify(st.textContent),
+                    "| ballon:", JSON.stringify(st.title));
+        if (led.className !== "ok") {
+          console.error("FOUT: lampje staat niet op verbonden");
+          failures++;
+        }
+        if (st.textContent !== "USB") {
+          console.error("FOUT: in de kop hoort alleen USB of WiFi te staan");
+          failures++;
+        }
+        if (!st.title.includes("FakeDM12")) {
+          console.error("FOUT: het hele verhaal hoort in de tekstballon");
+          failures++;
+        }
+        // de nagemaakte DOM maakt onbekende id's aan, dus kijk in de boekhouding:
+        // heeft de pagina ze nooit opgevraagd, dan bestaan ze niet meer
+        if (elements.has("ssidInput") || elements.has("wifiBtn")) {
+          console.error("FOUT: de pagina gebruikt nog WiFi-knoppen");
+          failures++;
         }
 
         if (global.__onerror && errors.length) console.log("meldingen:", errors);

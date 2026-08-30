@@ -77,6 +77,12 @@ The manual documents 24 global settings and a 45-byte block. Neither still holds
   step either way. The manual has a Global Commands table that lists it fourth,
   but that table is not the block's byte order - byte 3 reads 0 on a synth that
   is in tune, which would be -128 cents. Measured by turning it and watching.
+- **The WiFi connection is not restored on power-up.** Only the network *mode*
+  (Off / Client / Access Point) survives a power cycle, as the manual says in
+  passing; the connection itself comes back Disabled every time, in both modes,
+  and has to be started with +/YES at the instrument. There is no newer firmware
+  that changes this - 1.1.2 is the last one - and the documented Global Commands
+  hold nothing about the network, so there is no known way to do it over MIDI.
 - **VCA-MODE is global byte 47** (so NRPN 347): 0 is transparent, 1 is ballsy -
   the louder VCA characteristic from before firmware 1.0.5. It arrived in 1.1.0
   and is in neither the 2016 manual nor its parameter table; found by switching
@@ -137,9 +143,11 @@ follows the instrument: VCF, then VCA, then HPF with the boost.
 ### Pitch bend runs both ways
 
 The manual gives 36 and 37 as 0-24 semitones. On this firmware they are signed
-bytes running -24 to +24: 232 in the byte reads as -24, for both of them. What
-differs is the fader, not the encoding - the instrument's editor puts +24 at
-the bottom of the "down" one and -24 at the top, the mirror of its neighbour.
+bytes running -24 to +24, and the two count opposite ways: byte 232 is -24 on
+the up one and +24 on the down one. Both faders put their lowest reading at the
+bottom, so the down one appears mirrored. Read off the instrument's editor with
+both at their extreme: it showed -24 and +24 with both caps at the bottom while
+the bytes held 232.
 
 A warning from getting this wrong twice: measure with the app's own writes out
 of the way. A byte we had written with a wrong assumption looked like evidence
@@ -188,8 +196,10 @@ gradle assembleDebug   # or open the folder in Android Studio
 
 The APK lands in `android/app/build/outputs/apk/debug/`; a built one is under
 [Releases](../../releases). The app finds the synth by scanning the subnet, or you
-type its IP address. In access-point mode it connects to the synth's own WiFi
-network on request.
+type its IP address. It also joins the synth's own WiFi network by itself, and
+keeps trying: the access point only exists once someone switches it on at the
+instrument, which is usually long after the app is open. Nothing to set - the
+header only shows whether there is a connection.
 
 ## PC version
 
@@ -197,6 +207,9 @@ network on request.
 Open it in Chrome or Edge, allow MIDI including SysEx, and pick a MIDI port by
 typing part of its name. Connect over USB, or over WiFi with
 [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html) as a network port.
+A DeepMind on the USB cable wins from the network bridge: served by the bridge,
+the page still takes the cable if it finds one, and it switches over on its own
+when you plug the cable in later. The header says which of the two it is.
 If `file://` will not do, serve it with `python -m http.server` and open
 `http://localhost:8000/dm12-web.html`.
 
@@ -222,6 +235,28 @@ time and otherwise sweeps every network this computer is on until a device
 answers. It keeps doing that while it runs, so a synth that is switched on
 later, or that moves to another address, is picked up on its own.
 ```
+
+In access-point mode the synth has no router to hand out addresses, so this
+computer has to join the synth's own network. The bridge does that by itself, as
+soon as the access point is on the air: no flag, nothing to fill in. On that
+network the synth is always **192.168.12.1**, so there is nothing to sweep either
+- it goes straight there. It only looks when the normal sweep found nothing, so a
+synth in client mode is still found first. Windows only; elsewhere the switch
+stays yours to make.
+
+**It joins on a WiFi adapter that is free, and never takes the one carrying your
+network.** That is the difference with the Android app: Android hands the app its
+own network next to the phone's normal one, so nothing is lost. Windows has no
+equivalent - one adapter sits on one network - so having both at the same time
+needs a second interface:
+
+- a **network cable** for your normal network, which leaves the WiFi free for the
+  synth (the simplest fix if there is a socket nearby), or
+- a **second WiFi adapter**, a USB one will do.
+
+With neither, the bridge leaves your network alone and says so. Start it with
+`--ap-takeover` to let it switch your only adapter over anyway; then it puts that
+adapter back on its old network when you stop it with Ctrl+C.
 
 Then open `http://localhost:8080` on that computer, or
 `http://<its-ip>:8080` from a tablet or phone on the same network. Standard

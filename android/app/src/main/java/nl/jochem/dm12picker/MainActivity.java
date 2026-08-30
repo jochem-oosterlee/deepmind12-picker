@@ -26,8 +26,18 @@ import java.util.concurrent.FutureTask;
 
 public class MainActivity extends Activity {
 
-    private static final String DEFAULT_SSID = "Deepmind12";
-    private static final String DEFAULT_PW = "Passphrase";
+    // Het accesspoint van de synth. Vast gegeven, net als het adres dat de
+    // DeepMind daar altijd heeft; het wachtwoord is hoofdlettergevoelig.
+    private static final String AP_SSID = "Deepmind12";
+    private static final String AP_PW = "PassPhrase";
+    private static final String AP_IP = "192.168.12.1";
+
+    // Het accesspoint van de synth bestaat pas nadat iemand het op het instrument
+    // aanzet: de DeepMind komt na het opstarten altijd op Disabled terug. Een
+    // enkele poging bij het starten van de app is dus bijna altijd te vroeg.
+    private static final long AUTO_WIFI_FIRST = 4000;
+    private static final long AUTO_WIFI_MIN = 15000;
+    private static final long AUTO_WIFI_MAX = 120000;
 
     private AppleMidiSession session;
     private SysexLibrary lib;
@@ -37,7 +47,11 @@ public class MainActivity extends Activity {
     private int rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
     private ConnectivityManager.NetworkCallback specCallback;
     private volatile boolean specActive = false;
-    private volatile String wifiState = "";
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private Runnable autoWifiTick;
+    private boolean specPending = false;    // er loopt al een aanvraag
+    private boolean saidWifiOff = false;    // die melding maar een keer
+    private long autoWifiWait = AUTO_WIFI_MIN;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,14 +106,21 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Verbind zelf met het accesspoint van de synth als de sessie niet binnen
-        // een paar seconden staat (dan zit de tablet nog op een ander netwerk).
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!session.connected && !specActive) {
-                connectSpecifier(prefs.getString("ssid", DEFAULT_SSID),
-                        prefs.getString("pw", DEFAULT_PW));
+        // Verbind zelf met het accesspoint van de synth zolang de sessie niet staat.
+        // Blijven proberen, want het accesspoint komt pas op als het bij het
+        // instrument aangezet wordt - vaak lang nadat de app al open staat.
+        autoWifiTick = new Runnable() {
+            @Override
+            public void run() {
+                if (specActive || specPending || session.connected) {
+                    scheduleAutoWifi(AUTO_WIFI_MIN);
+                    return;
+                }
+                connectSpecifier(AP_SSID, AP_PW);
+                scheduleAutoWifi(autoWifiWait);
             }
-        }, 4000);
+        };
+        scheduleAutoWifi(AUTO_WIFI_FIRST);
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -114,9 +135,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (autoWifiTick != null) ui.removeCallbacks(autoWifiTick);
         disconnectSpecifier();
         if (lib != null) lib.save(getFilesDir());
         if (session != null) session.close();
+    }
+
+    /** Volgende poging op het accesspoint van de synth inplannen. */
+    private void scheduleAutoWifi(long delayMs) {
+        if (autoWifiTick == null) return;
+        ui.removeCallbacks(autoWifiTick);
+        ui.postDelayed(autoWifiTick, delayMs);
     }
 
     private void bindToWifi() {
@@ -146,23 +175,22 @@ public class MainActivity extends Activity {
 
     /** Verbind (app-gebonden) met het accesspoint van de DeepMind. Android 10+. */
     private void connectSpecifier(String ssid, String password) {
-        Toast.makeText(this, "WiFi request: " + ssid, Toast.LENGTH_SHORT).show();
-        if (Build.VERSION.SDK_INT < 29) {
-            wifiState = "needs Android 10+; connect manually in settings";
-            return;
-        }
+        if (Build.VERSION.SDK_INT < 29) return;  // dan is het handwerk in de instellingen
         try {
             WifiManager wm = (WifiManager) getApplicationContext()
                     .getSystemService(Context.WIFI_SERVICE);
             if (wm != null && !wm.isWifiEnabled()) {
-                wifiState = "WiFi is off - turn WiFi on in Android";
-                Toast.makeText(this, wifiState, Toast.LENGTH_LONG).show();
+                if (!saidWifiOff) {
+                    saidWifiOff = true;
+                    Toast.makeText(this, "WiFi is off - turn WiFi on in Android",
+                            Toast.LENGTH_LONG).show();
+                }
                 return;
             }
         } catch (Exception ignored) {
         }
         disconnectSpecifier();
-        wifiState = "connecting to " + ssid + "...";
+        saidWifiOff = false;
         WifiNetworkSpecifier.Builder spec = new WifiNetworkSpecifier.Builder()
                 .setSsid(ssid);
         if (password != null && !password.isEmpty()) {
@@ -177,9 +205,10 @@ public class MainActivity extends Activity {
             @Override
             public void onAvailable(Network network) {
                 specActive = true;
+                specPending = false;
+                autoWifiWait = AUTO_WIFI_MIN;
                 cm.bindProcessToNetwork(network);
                 if (session != null) session.bindTo(network);
-                wifiState = "WiFi connected: " + ssid;
                 // de synth is de gateway van zijn eigen accesspoint
                 retargetToGateway();
             }
@@ -187,21 +216,25 @@ public class MainActivity extends Activity {
             @Override
             public void onUnavailable() {
                 specActive = false;
-                wifiState = "WiFi connection failed or cancelled";
+                specPending = false;
+                // Afgewezen of niets gevonden: rustiger aan doen, anders staat de
+                // systeemdialoog elke vijftien seconden weer in beeld.
+                autoWifiWait = Math.min(autoWifiWait * 2, AUTO_WIFI_MAX);
                 specCallback = null;
             }
 
             @Override
             public void onLost(Network network) {
                 specActive = false;
+                specPending = false;
                 cm.bindProcessToNetwork(null);
-                wifiState = "WiFi disconnected";
             }
         };
         try {
+            specPending = true;
             cm.requestNetwork(req, specCallback, new Handler(Looper.getMainLooper()));
         } catch (Exception e) {
-            wifiState = "WiFi request failed: " + e.getMessage();
+            specPending = false;
             specCallback = null;
         }
     }
@@ -214,10 +247,10 @@ public class MainActivity extends Activity {
             }
             specCallback = null;
         }
+        specPending = false;
         if (specActive) {
             specActive = false;
             cm.bindProcessToNetwork(null);
-            wifiState = "WiFi released";
         }
     }
 
@@ -234,7 +267,7 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {
         }
-        return "192.168.4.1";
+        return AP_IP;
     }
 
     /** Na een nieuwe WiFi-verbinding kan het gateway-IP veranderd zijn. */
@@ -260,12 +293,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String getStatus() {
+            // op Android loopt alles over AppleMIDI, dus altijd WiFi
             return "{\"connected\":" + session.connected
+                    + ",\"link\":\"WiFi\""
                     + ",\"status\":\"" + jsonEscape(session.status)
                     + "\",\"event\":\"" + jsonEscape(session.lastEvent)
-                    + "\",\"wifi\":\"" + jsonEscape(wifiState)
-                    + "\",\"wifiConnected\":" + specActive
-                    + ",\"ip\":\"" + jsonEscape(session.getPeerIp()) + "\"}";
+                    + "\",\"ip\":\"" + jsonEscape(session.getPeerIp()) + "\"}";
         }
 
         @JavascriptInterface
@@ -275,16 +308,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        @JavascriptInterface
-        public void connectWifi(String ssid, String password) {
-            if (ssid == null || ssid.trim().isEmpty()) return;
-            String s = ssid.trim();
-            String p = password == null ? "" : password;
-            prefs.edit().putString("ssid", s).putString("pw", p).apply();
-            runOnUiThread(() -> connectSpecifier(s, p));
-        }
-
-        @JavascriptInterface
+                @JavascriptInterface
         public void discover() {
             session.discover();
         }
@@ -303,13 +327,7 @@ public class MainActivity extends Activity {
             return sb.append("]}").toString();
         }
 
-        @JavascriptInterface
-        public String getWifiCreds() {
-            return "{\"ssid\":\"" + jsonEscape(prefs.getString("ssid", DEFAULT_SSID))
-                    + "\",\"pw\":\"" + jsonEscape(prefs.getString("pw", DEFAULT_PW)) + "\"}";
-        }
-
-        @JavascriptInterface
+                @JavascriptInterface
         public boolean sendCC(int cc, int value, int ch) {
             return session.sendCC(Math.max(0, Math.min(127, cc)),
                     Math.max(0, Math.min(127, value)), Math.max(0, Math.min(15, ch)));
@@ -449,12 +467,7 @@ public class MainActivity extends Activity {
             return a && b;
         }
 
-        @JavascriptInterface
-        public void disconnectWifi() {
-            runOnUiThread(MainActivity.this::disconnectSpecifier);
-        }
-
-        @JavascriptInterface
+                @JavascriptInterface
         public void useGatewayIp() {
             retargetToGateway();
         }

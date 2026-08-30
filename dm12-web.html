@@ -21,34 +21,8 @@
     --shadow:0 1px 2px rgba(0,0,0,.35);
     --radius:9px;
   }
-  /* het lichte thema met indigo als accent */
-  body[data-theme="light"] {
-    --bg:#f3f5f9; --panel:#ffffff; --panel2:#f7f9fc;
-    --well:#eef1f7; --track:#e3e8f1;
-    --border:#dde2ec; --border-soft:#e6eaf2; --divider:#e6eaf2;
-    --text:#1e2748; --muted:#7c869c;
-    --accent:#2f3d7c; --label:#48579c; --accent-soft:#eef1f9;
-    --active:#a2571a; --active-soft:#fdf3e7; --star:#c9930b;
-    --ok:#256b47; --ok-soft:#eaf4ee; --bad:#a6301f;
-    --cap-hi:#ffffff; --cap-lo:#c9d0de;
-    --wave-bg:#fdfdff; --wave-grid:#eceff6; --wave-axis:#dde2ec;
-    --shadow:0 1px 2px rgba(20,30,60,.05), 0 1px 3px rgba(20,30,60,.06);
-  }
-  /* het oorspronkelijke donkerblauwe thema */
-  body[data-theme="dark"] {
-    --bg:#14161a; --panel:#1d2026; --panel2:#23272e;
-    --well:#191c22; --track:#15181d;
-    --border:#32363e; --border-soft:#2a2e35; --divider:#2a2e35;
-    --text:#e8eaed; --muted:#8a919c;
-    --accent:#4da3ff; --label:#7ab8ff; --accent-soft:#1e3350;
-    --active:#ffb547; --active-soft:#2c2415; --star:#ffd24d;
-    --ok:#6fd487; --ok-soft:#16281c; --bad:#ff7b72;
-    --cap-hi:#c6ccd8; --cap-lo:#8f97a5;
-    --wave-bg:#0f1115; --wave-grid:#22262e; --wave-axis:#2c313a;
-    --shadow:0 1px 2px rgba(0,0,0,.3);
-  }
-  /* opgelichte knop krijgt een gloed in de donkere thema's */
-  body:not([data-theme="light"]) button.on {
+  /* opgelichte knop krijgt een gloed */
+  button.on {
     box-shadow:inset 0 0 0 1px var(--accent), 0 0 7px -1px var(--accent); }
 
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
@@ -61,7 +35,6 @@
     border-bottom:1px solid var(--border); }
   .row { display:flex; align-items:center; gap:5px; margin-bottom:6px; }
   #led { width:11px; height:11px; border-radius:50%; background:var(--bad); flex:none; }
-  #led.wifi { background:var(--active); }
   #led.ok { background:var(--ok); }
   #statusText { flex:1; min-width:0; font-size:11px; color:var(--muted);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -460,7 +433,6 @@
   <div class="row">
     <span id="led" title="connection status"></span>
     <span id="statusText">connecting…</span>
-    <button class="mini" id="themeBtn" title="switch the look">skin</button>
     <button class="mini" id="logBtn" title="show what comes in and goes out">log</button>
     <button class="mini" id="gearBtn" title="settings">⚙</button>
   </div>
@@ -481,9 +453,6 @@
       <select id="midiCh"></select>
     </div>
     <div class="row" id="foundRow" style="display:none;flex-wrap:wrap"></div>
-    <div class="row">
-      <span style="font-size:12px;color:var(--muted)">Verbinding via USB of rtpMIDI — kies hierboven de MIDI-poort.</span><input type="text" id="ssidInput" style="display:none"><input type="text" id="pwInput" style="display:none"><button class="mini" id="wifiBtn" style="display:none"></button><button class="mini" id="wifiOffBtn" style="display:none"></button>
-    </div>
     <div class="row">
       <button class="mini" id="notifyBtn">Announce to synth</button>
       <button class="mini" id="panicBtn">Panic</button>
@@ -601,7 +570,7 @@
     log: [], logRev: 0,
   };
 
-  let midi = null, out = null, preferred = "";
+  let midi = null, out = null, preferred = "", midiWhy = "";
   let rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
 
   // "midi"   = rechtstreeks via Web MIDI (USB of rtpMIDI)
@@ -864,19 +833,34 @@
                    : "no MIDI output found — connect the DeepMind over USB, or start rtpMIDI";
   }
 
+  /** Een poort die naar de synth zelf klinkt, niet zomaar het eerste apparaat. */
+  function isSynthPort(port) { return /deepmind|dm12/i.test(port.name || ""); }
+
+  /** Vraagt Web MIDI aan. Levert null als de browser of de gebruiker nee zegt. */
+  function midiAccess() {
+    if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
+      midiWhy = "this browser has no Web MIDI — use Chrome or Edge,"
+              + " or start dm12-bridge.py";
+      return Promise.resolve(null);
+    }
+    return navigator.requestMIDIAccess({sysex: true}).then(a => a, () => {
+      midiWhy = "MIDI access denied (SysEx must be allowed)";
+      return null;
+    });
+  }
+
+  function useMidi(access) {
+    mode = "midi";
+    midi = access;
+    midi.onstatechange = pickPorts;
+    pickPorts();
+  }
+
   function initWebMidi() {
     mode = "midi";
-    if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
-      S.status = "this browser has no Web MIDI — use Chrome or Edge,"
-               + " or start dm12-bridge.py";
-      return;
-    }
-    navigator.requestMIDIAccess({sysex: true}).then(access => {
-      midi = access;
-      midi.onstatechange = pickPorts;
-      pickPorts();
-    }, () => {
-      S.status = "MIDI access denied (SysEx must be allowed)";
+    midiAccess().then(access => {
+      if (access) useMidi(access);
+      else S.status = midiWhy;
     });
   }
 
@@ -886,7 +870,7 @@
     mode = "bridge";
     S.status = "network bridge found";
     (async () => {
-      for (;;) {
+      while (mode === "bridge") {
         try {
           const d = await (await fetch("/status")).json();
           S.connected = !!d.connected;
@@ -902,7 +886,7 @@
       }
     })();
     (async () => {
-      for (;;) {
+      while (mode === "bridge") {
         try {
           const d = await (await fetch("/recv?since=" + bridgeSeq + "&wait=1")).json();
           bridgeSeq = d.next;
@@ -943,16 +927,37 @@
   }
 
   function init() {
-    // wordt deze pagina door de netwerkbrug geserveerd? Dan die gebruiken.
-    if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)
-        && typeof fetch === "function") {
-      fetch("/status").then(r => r.json()).then(d => {
-        if (d && d.transport === "bridge") startBridge();
-        else initWebMidi();
-      }).catch(() => initWebMidi());
-    } else {
+    const served = typeof location !== "undefined" && /^https?:$/.test(location.protocol)
+                && typeof fetch === "function";
+    if (!served) {
       initWebMidi();
+      return;
     }
+    // Hangt de synth aan de kabel, dan gaat die voor: rechtstreeks is korter dan
+    // via de brug. Pas als er geen DeepMind-poort is, komt het netwerk in beeld.
+    midiAccess().then(access => {
+      if (access && [...access.outputs.values()].some(isSynthPort)) {
+        useMidi(access);
+        return;
+      }
+      fetch("/status").then(r => r.json()).then(d => {
+        if (d && d.transport === "bridge") {
+          startBridge();
+          // wordt de kabel er later ingestoken, dan alsnog overstappen
+          if (access) {
+            access.onstatechange = () => {
+              if (mode === "bridge" && [...access.outputs.values()].some(isSynthPort)) {
+                useMidi(access);
+              }
+            };
+          }
+        } else if (access) useMidi(access);
+        else S.status = midiWhy;
+      }).catch(() => {
+        if (access) useMidi(access);
+        else S.status = midiWhy;
+      });
+    });
   }
 
   function send(bytes) {
@@ -999,8 +1004,8 @@
 
   window.AndroidBridge = {
     getStatus: () => JSON.stringify({
-      connected: S.connected, status: S.status, event: "",
-      wifi: "", wifiConnected: false, ip: S.portName,
+      connected: S.connected, status: S.status, event: "", ip: S.portName,
+      link: mode === "bridge" ? "WiFi" : "USB",
     }),
 
     libStatus: () => JSON.stringify({
@@ -1130,10 +1135,6 @@
       setTimeout(tick, 700);
     },
     discovered: () => JSON.stringify(disco),
-    getWifiCreds: () => JSON.stringify({ssid: "", pw: ""}),
-    connectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
-    disconnectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
-
     copyToClipboard: clip,
     readClipboard: () => (navigator.clipboard && navigator.clipboard.readText)
       ? navigator.clipboard.readText().catch(() => "")
@@ -1428,10 +1429,11 @@ function pollNow() {
   try { s = JSON.parse(AndroidBridge.getStatus()); }
   catch { led.className = ""; statusText.textContent = "bridge error"; return; }
 
-  led.className = s.connected ? "ok" : (s.wifiConnected ? "wifi" : "");
-  let txt = s.connected ? "connected" : s.status;
-  if (!s.connected && s.wifi) txt = s.wifi + " · " + txt;
-  if (!s.connected && s.event) txt += " · " + s.event;
+  // Een lampje en waarlangs het loopt, meer hoeft er in de kop niet te staan.
+  // Het hele verhaal hangt eronder als tekstballon, voor als er iets niet lukt.
+  led.className = s.connected ? "ok" : "";
+  const link = s.link || "WiFi";
+  let note = s.status + (!s.connected && s.event ? " · " + s.event : "");
   if (document.activeElement !== ipInput) ipInput.value = s.ip;
 
   // meld je aan zodra de sessie er is: dan zet de synth NRPN + SysEx aan
@@ -1453,9 +1455,9 @@ function pollNow() {
     document.getElementById("devInfo").textContent =
       "dev " + (lib.dev < 0 ? "?" : lib.dev) + (lib.iface >= 0 ? " · iface " + lib.iface : "");
     if (s.connected && lib.curBank >= 0 && lib.curProg >= 0) {
-      txt += " · synth: " + BANKS[lib.curBank] + (lib.curProg + 1);
+      note += " · synth: " + BANKS[lib.curBank] + (lib.curProg + 1);
     }
-    if (lib.info) txt += " · " + lib.info;
+    if (lib.info) note += " · " + lib.info;
     document.getElementById("libStat").textContent =
       `names: ${lib.names}/1024 · patches: ${lib.patches} · dumps: ${lib.nameDumps}/${lib.patchDumps}`
       + (lib.badNames ? ` · unreadable: ${lib.badNames}` : "")
@@ -1475,19 +1477,20 @@ function pollNow() {
       lastParamRev = lib.paramRev;
       loadSynthParams();
       if (readWaiting) {
-        txt = "values received from the synth · " + txt;
+        note = "values received from the synth · " + note;
         readWaiting = 0;
       }
     } else if (readWaiting && Date.now() - readWaiting > 4000) {
-      txt = "no reply from the synth to the read request · " + txt;
+      note = "no reply from the synth to the read request · " + note;
       readWaiting = 0;
     }
     scanTick(lib);
     if (isParamTab()) updateParamNote();
     if (lib.globalRev !== lastGlobalRev) { lastGlobalRev = lib.globalRev; loadGlobals(); }
-    if (scan) txt = `scan ${scan.i}/${scan.items.length} · ` + txt;
+    if (scan) note = `scan ${scan.i}/${scan.items.length} · ` + note;
   }
-  statusText.textContent = txt;
+  statusText.textContent = link;
+  statusText.title = note;
 }
 
 function loadDevNames() {
@@ -1566,49 +1569,24 @@ function renderLog(force) {
   }
 }
 
-// Drie skins: het paneelthema uit het ontwerp (grafiet met oranje), het lichte
-// indigo-thema en het oorspronkelijke donkerblauw. Alles hangt aan
-// kleurvariabelen, dus dit is puur een naam op de body zetten.
-const THEMES = ["panel", "light", "dark"];
-let theme = store.load("dm12.theme", "panel");
-if (!THEMES.includes(theme) && theme !== "local") theme = "panel";   // oude naam
-
-// Eigen stijl: staat er een local-assets/skin.css naast de app, dan wordt die
-// erbij geladen en komt er een vierde skin. Zo kun je eigen afbeeldingen en
-// kleuren gebruiken zonder dat die in het project terechtkomen.
+// Eén kleurschema: dat uit het ontwerp, met de eigen stijl eroverheen als die
+// er is. Staat er een local-assets/skin.css naast de app, dan wordt die geladen
+// en gaat de body op "local" staan; zonder dat bestand blijft het ontwerp zelf
+// staan, want alles hangt aan dezelfde kleurvariabelen.
 (function loadLocalSkin() {
   if (!document.head || !document.createElement) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = "local-assets/skin.css";
   link.onload = () => {
-    if (!THEMES.includes("local")) THEMES.push("local");
-    const b = document.getElementById("themeBtn");
-    if (b) b.title = "switch the look (local skin found)";
+    document.body.dataset.theme = "local";
+    // de golfvorm en de vormtekeningen halen hun kleur uit dezelfde variabelen,
+    // maar staan als vaste tekst in de SVG, dus opnieuw tekenen
+    if (isParamTab()) renderParams();
   };
-  link.onerror = () => {
-    // geen eigen stijl aanwezig; dat is de normale situatie
-    if (theme === "local") { theme = "panel"; applyTheme(); }
-  };
+  // geen eigen stijl aanwezig? Dat is de normale situatie: niets te doen.
   document.head.appendChild(link);
 })();
-
-function applyTheme() {
-  if (theme === "panel") delete document.body.dataset.theme;
-  else document.body.dataset.theme = theme;
-  const b = document.getElementById("themeBtn");
-  if (b) b.textContent = theme;
-  // de golfvorm en de vormtekeningen halen hun kleur uit dezelfde variabelen,
-  // maar staan als vaste tekst in de SVG, dus opnieuw tekenen
-  if (isParamTab()) renderParams();
-}
-
-document.getElementById("themeBtn").addEventListener("click", () => {
-  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-  store.save("dm12.theme", theme);
-  applyTheme();
-  statusText.textContent = "skin: " + theme;
-});
 
 document.getElementById("logBtn").addEventListener("click", () => {
   logOpen = !logOpen;
@@ -1690,17 +1668,6 @@ for (let i = 0; i < 16; i++) {
 chSel.value = channel;
 chSel.addEventListener("change", () => { channel = +chSel.value; store.save("dm12.channel", channel); });
 
-const ssidInput = document.getElementById("ssidInput");
-const pwInput = document.getElementById("pwInput");
-try {
-  const c = JSON.parse(AndroidBridge.getWifiCreds());
-  ssidInput.value = c.ssid; pwInput.value = c.pw;
-} catch { ssidInput.value = "Deepmind12"; pwInput.value = "Passphrase"; }
-document.getElementById("wifiBtn").addEventListener("click", () => {
-  AndroidBridge.connectWifi(ssidInput.value.trim(), pwInput.value);
-  statusText.textContent = "WiFi request started…";
-});
-document.getElementById("wifiOffBtn").addEventListener("click", () => AndroidBridge.disconnectWifi());
 document.getElementById("notifyBtn").addEventListener("click", () => {
   AndroidBridge.appNotify(-1);
   statusText.textContent = "announcement sent";
@@ -2769,14 +2736,15 @@ function renderTune() {
                 {middle: 128, fmt: v => fmt({k: "b"}, v), parse: t => +t + 128}),
     panelFader(241, "TRANS", H,
                 {min: 80, max: 176, fmt: v => v - 128, parse: t => +t + 128}),
-    // Allebei van -24 tot +24 halve tonen, en allebei met teken in de byte:
-    // 232 is -24. De handleiding houdt het nog op 0-24. Het verschil zit in de
-    // baan: bij "omlaag" staat +24 onderaan en -24 bovenaan, net als op het
-    // apparaat.
+    // Allebei van -24 tot +24 halve tonen; de handleiding houdt het nog op 0-24.
+    // In de byte staat het met teken (232 is -24), maar bij "omlaag" telt de
+    // synth andersom: byte 232 leest daar als +24. Naast elkaar gelegd met de
+    // editor van het apparaat: die toont -24 en +24, met allebei het kapje
+    // onderaan - vandaar dat de tweede fader gespiegeld staat.
     panelFader(36, "BEND+", H, {min: -24, max: 24,
                 toShown: signed8, toRaw: unsigned8}),
     panelFader(37, "BEND-", H, {min: -24, max: 24, flip: true,
-                toShown: signed8, toRaw: unsigned8}),
+                toShown: v => -signed8(v), toRaw: d => unsigned8(-d)}),
   ]));
   const bar = document.createElement("div");
   bar.className = "vrule";
@@ -4930,7 +4898,6 @@ document.getElementById("libExportBtn").addEventListener("click", () => {
 });
 
 // eerst de interface opbouwen, daarna pas verbinding en status
-applyTheme();
 tab = tabFromUrl() || tab;
 setUrlTab();
 if (typeof window !== "undefined" && window.addEventListener) {

@@ -51,6 +51,195 @@ LAST_IP_FILE = os.path.join(HERE, ".dm12-last-ip")
 NO_IP = "192.0.2.1"
 
 
+# Het accesspoint van de synth. De DeepMind zet het niet uit zichzelf aan na het
+# opstarten - dat blijft een druk op +/YES bij het instrument - maar zodra het in
+# de lucht is, schakelt deze computer er vanzelf naartoe. Daar is de synth altijd
+# 192.168.12.1, dus dan hoeft er ook niets meer afgezocht te worden.
+AP_SSID = "Deepmind12"
+AP_PW = "PassPhrase"
+AP_IP = "192.168.12.1"
+AP = {"back_to": None, "iface": None, "note": "", "takeover": False, "said": False}
+
+
+# netsh kost tientallen milliseconden en de brug kijkt vaak; welke adapter op
+# welk net zit verandert niet zo snel.
+_here = {"ifaces": None, "at": 0.0}
+
+
+def wlan_interfaces_cached(max_age=5.0):
+    now = time.monotonic()
+    if _here["ifaces"] is None or now - _here["at"] > max_age:
+        _here["ifaces"] = wlan_interfaces() if _windows() else []
+        _here["at"] = now
+    return _here["ifaces"]
+
+
+def on_ap():
+    return any(i["ssid"] == AP_SSID for i in wlan_interfaces_cached())
+
+
+AP_PROFILE = """<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+  <name>%(ssid)s</name>
+  <SSIDConfig><SSID><name>%(ssid)s</name></SSID></SSIDConfig>
+  <connectionType>ESS</connectionType>
+  <!-- handmatig: Windows mag deze pc niet uit zichzelf van het thuisnet
+       halen zodra de synth zijn accesspoint aanzet -->
+  <connectionMode>manual</connectionMode>
+  <MSM><security>
+    <authEncryption><authentication>WPA2PSK</authentication><encryption>AES</encryption><useOneX>false</useOneX></authEncryption>
+    <sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>%(pw)s</keyMaterial></sharedKey>
+  </security></MSM>
+</WLANProfile>
+"""
+
+
+def _windows():
+    # netsh is Windows-eigen; elders blijft het overschakelen handwerk
+    return os.name == "nt"
+
+
+def _netsh(*args):
+    """netsh wlan ... en de uitvoer als tekst terug; leeg als het niet kan."""
+    try:
+        out = subprocess.run(["netsh", "wlan"] + list(args),
+                             capture_output=True, timeout=20)
+    except Exception:
+        return ""
+    return (out.stdout + out.stderr).decode("utf-8", "replace")
+
+
+def wlan_interfaces():
+    """Alle WiFi-adapters, met de naam en het netwerk waar ze op zitten.
+
+    De sleutels van netsh zijn vertaald op een niet-Engelse Windows, op "SSID"
+    na. Dus: elk blok is een adapter, de eerste regel is de naam hoe die ook
+    heet, en het netwerk staat achter de sleutel die wel vastligt.
+    """
+    ifaces, rows = [], []
+
+    def flush():
+        # de kopregel van netsh ("There is 1 interface...") is geen adapter
+        if len(rows) >= 3:
+            iface = {"name": rows[0][1], "ssid": ""}
+            for key, val in rows:
+                if key.upper() == "SSID":
+                    iface["ssid"] = val
+            ifaces.append(iface)
+        rows.clear()
+
+    for line in _netsh("show", "interfaces").splitlines():
+        if ":" in line:
+            key, val = line.split(":", 1)
+            rows.append((key.strip(), val.strip()))
+        else:
+            flush()
+    flush()
+    return ifaces
+
+
+def wlan_in_range(ssid):
+    """Zendt het accesspoint van de synth op dit moment?"""
+    out = _netsh("show", "networks")
+    for line in out.splitlines():
+        if ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        if key.strip().upper().startswith("SSID") and val.strip() == ssid:
+            return True
+    return False
+
+
+def wlan_profile(ssid, pw):
+    """Zorgt dat Windows een profiel voor dit netwerk kent."""
+    if ssid in _netsh("show", "profiles"):
+        return True
+    xml = AP_PROFILE % {"ssid": ssid, "pw": pw}
+    path = os.path.join(HERE, ".dm12-ap-profile.xml")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(xml)
+        _netsh("add", "profile", "filename=" + path, "user=current")
+        # de melding van netsh is vertaald, dus niet daarop afgaan maar gewoon
+        # opnieuw vragen of het profiel er nu staat
+        ok = ssid in _netsh("show", "profiles")
+    except OSError:
+        return False
+    finally:
+        try:  # het wachtwoord staat er leesbaar in, dus meteen weg
+            os.remove(path)
+        except OSError:
+            pass
+    return ok
+
+
+def ap_interface():
+    """De adapter waarmee we naar het accesspoint mogen.
+
+    Niet degene die dit netwerk draagt: de verbinding met de synth hoort erbij te
+    komen, niet in de plaats. Op Windows kan een adapter maar op een net tegelijk
+    zitten, dus dat vraagt om een tweede adapter (of een netwerkkabel, dan is de
+    WiFi vrij). Met --ap-takeover mag hij de enige adapter toch overnemen.
+    """
+    ifaces = wlan_interfaces()
+    for i in ifaces:
+        if i["ssid"] == AP_SSID:
+            return i
+    for i in ifaces:
+        if not i["ssid"]:
+            return i
+    return ifaces[0] if (AP["takeover"] and ifaces) else None
+
+
+def ap_join():
+    """Verbindt met het accesspoint van de synth als dat kan."""
+    if not _windows():
+        return False
+    iface = ap_interface()
+    if iface is None:
+        AP["note"] = "every WiFi adapter is on another network"
+        if not AP["said"]:
+            AP["said"] = True
+            print("The synth's access point needs a WiFi adapter that is free.")
+            print("  This pc has one, and it is on another network. Plug in a")
+            print("  network cable (that frees the WiFi), add a second WiFi")
+            print("  adapter, or start with --ap-takeover to switch it over.")
+        return False
+    if iface["ssid"] == AP_SSID:
+        return False               # er al
+    if not wlan_in_range(AP_SSID):
+        AP["note"] = "the synth's access point is not on the air yet"
+        return False
+    if not wlan_profile(AP_SSID, AP_PW):
+        AP["note"] = "could not store a WiFi profile for " + AP_SSID
+        return False
+    if iface["ssid"]:              # alleen met --ap-takeover: onthouden waarvoor
+        AP["back_to"] = iface["ssid"]
+        AP["iface"] = iface["name"]
+    print("Access point %s is on the air; connecting %s" % (AP_SSID, iface["name"]))
+    _netsh("connect", "name=" + AP_SSID, "interface=" + iface["name"])
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        _here["at"] = 0.0
+        if on_ap():
+            AP["note"] = "connected to " + AP_SSID
+            print("  connected to %s on %s" % (AP_SSID, iface["name"]))
+            return True
+        time.sleep(1)
+    AP["note"] = "could not connect to " + AP_SSID + " (wrong password?)"
+    print("  " + AP["note"])
+    return False
+
+
+def ap_restore():
+    """Alleen als we een adapter hebben overgenomen: terug naar dat netwerk."""
+    if not _windows() or not AP["back_to"] or not AP["iface"]:
+        return
+    print("Back to %s" % AP["back_to"])
+    _netsh("connect", "name=" + AP["back_to"], "interface=" + AP["iface"])
+    _here["at"] = 0.0
+
+
 def remembered_ip():
     try:
         with open(LAST_IP_FILE, encoding="utf-8") as f:
@@ -169,6 +358,20 @@ class AppleMIDISession:
         except Exception:
             found = []
         ip = pick_synth(found)
+        if not ip:
+            # Niets op dit net. Staat het accesspoint van de synth inmiddels aan,
+            # stap er dan naartoe: daar hoeft niet gezocht te worden, want de
+            # synth is er altijd 192.168.12.1.
+            try:
+                switched = ap_join()
+            except Exception:
+                switched = False
+            if switched:
+                with self.lock:
+                    self.searching = False
+                self.retarget(AP_IP)
+                self.status = "on the synth's access point"
+                return
         with self.lock:
             self.searching = False
             if self.connected or ip == self.peer_ip:
@@ -706,10 +909,15 @@ def main():
     for o in [a for a in sys.argv[1:] if a.startswith("--")]:
         if o.startswith("--http-port="):
             http_port = int(o.split("=", 1)[1])
+        elif o == "--ap-takeover":
+            AP["takeover"] = True
 
     searching = False
     if args:
         ip = args[0]
+    elif on_ap():
+        # al op het net van de synth: daar is hij altijd op hetzelfde adres
+        ip = AP_IP
     else:
         ip = remembered_ip()
         if ip:
@@ -728,6 +936,8 @@ def main():
     print("  synth      : %s" % ("searching the network..." if searching else ip))
     print("  this pc    : http://localhost:%d" % http_port)
     print("  tablet     : http://%s:%d" % (own, http_port))
+    print("  access pt  : %s (joined on a free WiFi adapter when it is on the air)"
+          % AP_SSID)
     print("  stop       : Ctrl+C")
     try:
         server.serve_forever()
@@ -736,6 +946,7 @@ def main():
     finally:
         session.close()
         server.server_close()
+        ap_restore()
 
 
 if __name__ == "__main__":

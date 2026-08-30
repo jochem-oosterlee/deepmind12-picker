@@ -20,6 +20,8 @@ local-assets/*
 !local-assets/README.md
 !local-assets/skin.css.example
 .dm12-last-ip
+# WiFi-profiel voor het accesspoint: het wachtwoord staat er leesbaar in
+.dm12-ap-profile.xml
 
 # Ontwerpbundel uit Claude Design: het ontwerp zelf houden we bij, de
 # runtime en de plaatjes eromheen niet

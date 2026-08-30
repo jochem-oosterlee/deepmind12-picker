@@ -44,7 +44,7 @@
     log: [], logRev: 0,
   };
 
-  let midi = null, out = null, preferred = "";
+  let midi = null, out = null, preferred = "", midiWhy = "";
   let rxParamMsb = 0, rxParamLsb = 0, rxDataMsb = 0;
 
   // "midi"   = rechtstreeks via Web MIDI (USB of rtpMIDI)
@@ -307,19 +307,34 @@
                    : "no MIDI output found — connect the DeepMind over USB, or start rtpMIDI";
   }
 
+  /** Een poort die naar de synth zelf klinkt, niet zomaar het eerste apparaat. */
+  function isSynthPort(port) { return /deepmind|dm12/i.test(port.name || ""); }
+
+  /** Vraagt Web MIDI aan. Levert null als de browser of de gebruiker nee zegt. */
+  function midiAccess() {
+    if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
+      midiWhy = "this browser has no Web MIDI — use Chrome or Edge,"
+              + " or start dm12-bridge.py";
+      return Promise.resolve(null);
+    }
+    return navigator.requestMIDIAccess({sysex: true}).then(a => a, () => {
+      midiWhy = "MIDI access denied (SysEx must be allowed)";
+      return null;
+    });
+  }
+
+  function useMidi(access) {
+    mode = "midi";
+    midi = access;
+    midi.onstatechange = pickPorts;
+    pickPorts();
+  }
+
   function initWebMidi() {
     mode = "midi";
-    if (typeof navigator === "undefined" || !navigator.requestMIDIAccess) {
-      S.status = "this browser has no Web MIDI — use Chrome or Edge,"
-               + " or start dm12-bridge.py";
-      return;
-    }
-    navigator.requestMIDIAccess({sysex: true}).then(access => {
-      midi = access;
-      midi.onstatechange = pickPorts;
-      pickPorts();
-    }, () => {
-      S.status = "MIDI access denied (SysEx must be allowed)";
+    midiAccess().then(access => {
+      if (access) useMidi(access);
+      else S.status = midiWhy;
     });
   }
 
@@ -329,7 +344,7 @@
     mode = "bridge";
     S.status = "network bridge found";
     (async () => {
-      for (;;) {
+      while (mode === "bridge") {
         try {
           const d = await (await fetch("/status")).json();
           S.connected = !!d.connected;
@@ -345,7 +360,7 @@
       }
     })();
     (async () => {
-      for (;;) {
+      while (mode === "bridge") {
         try {
           const d = await (await fetch("/recv?since=" + bridgeSeq + "&wait=1")).json();
           bridgeSeq = d.next;
@@ -386,16 +401,37 @@
   }
 
   function init() {
-    // wordt deze pagina door de netwerkbrug geserveerd? Dan die gebruiken.
-    if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)
-        && typeof fetch === "function") {
-      fetch("/status").then(r => r.json()).then(d => {
-        if (d && d.transport === "bridge") startBridge();
-        else initWebMidi();
-      }).catch(() => initWebMidi());
-    } else {
+    const served = typeof location !== "undefined" && /^https?:$/.test(location.protocol)
+                && typeof fetch === "function";
+    if (!served) {
       initWebMidi();
+      return;
     }
+    // Hangt de synth aan de kabel, dan gaat die voor: rechtstreeks is korter dan
+    // via de brug. Pas als er geen DeepMind-poort is, komt het netwerk in beeld.
+    midiAccess().then(access => {
+      if (access && [...access.outputs.values()].some(isSynthPort)) {
+        useMidi(access);
+        return;
+      }
+      fetch("/status").then(r => r.json()).then(d => {
+        if (d && d.transport === "bridge") {
+          startBridge();
+          // wordt de kabel er later ingestoken, dan alsnog overstappen
+          if (access) {
+            access.onstatechange = () => {
+              if (mode === "bridge" && [...access.outputs.values()].some(isSynthPort)) {
+                useMidi(access);
+              }
+            };
+          }
+        } else if (access) useMidi(access);
+        else S.status = midiWhy;
+      }).catch(() => {
+        if (access) useMidi(access);
+        else S.status = midiWhy;
+      });
+    });
   }
 
   function send(bytes) {
@@ -442,8 +478,8 @@
 
   window.AndroidBridge = {
     getStatus: () => JSON.stringify({
-      connected: S.connected, status: S.status, event: "",
-      wifi: "", wifiConnected: false, ip: S.portName,
+      connected: S.connected, status: S.status, event: "", ip: S.portName,
+      link: mode === "bridge" ? "WiFi" : "USB",
     }),
 
     libStatus: () => JSON.stringify({
@@ -573,10 +609,6 @@
       setTimeout(tick, 700);
     },
     discovered: () => JSON.stringify(disco),
-    getWifiCreds: () => JSON.stringify({ssid: "", pw: ""}),
-    connectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
-    disconnectWifi: () => { S.info = "on a PC the connection runs over USB or rtpMIDI"; },
-
     copyToClipboard: clip,
     readClipboard: () => (navigator.clipboard && navigator.clipboard.readText)
       ? navigator.clipboard.readText().catch(() => "")

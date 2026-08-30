@@ -70,12 +70,18 @@ while it runs.
   probably already a class for it. The building blocks live in the CSS as
   `.pnl` (frame plus head), `.fads` (row of faders), `.cells`/`.cell` (grid
   below the rule), `.seg` (a handful of settings side by side, `.amber` for the
-  second accent), `.pick` (long list), `.dial`, `.sw` and `.hbtn`. Themes are
-  token sets: the design is the default, `light` and `dark` redefine the same
-  names.
+  second accent), `.pick` (long list), `.dial`, `.sw` and `.hbtn`. There is one
+  colour scheme now - the design's own token set. The light and dark variants
+  were dropped along with the switch in the header; a skin still overrides the
+  same tokens.
 - **Skin.** `local-assets/` holds Arturia Jun-6 V bitmaps and `skin.css`; it is
   gitignored on purpose (not ours to publish), so every layout must also look
-  right without it. Hence the two test runs. Buttons do not get an LED.
+  right without it. Hence the two test runs. Loading it is automatic - it sets
+  `data-theme="local"`, and without the file the design's own colours stay.
+  Buttons do not get an LED.
+- **The header is one LED and one word**: `USB` or `WiFi`, whichever the page is
+  talking over. Everything else - what it is waiting for, which program the synth
+  reports, what the library just did - hangs under it as the tooltip.
 
 ## House style
 

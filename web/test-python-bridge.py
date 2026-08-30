@@ -156,8 +156,125 @@ def check_helpers():
         dm12.LAST_IP_FILE = keep
 
 
+# Uitvoer van netsh, zoals een Nederlandse Windows hem geeft: de meldingen en de
+# meeste sleutels zijn vertaald, "SSID" niet. De code mag dus alleen daarop
+# afgaan, en op de vorm van de blokken.
+NETSH_HEAD = """Er is %d interface op het systeem:
+"""
+NETSH_IFACE = """
+    Naam                   : %s
+    Stuurprogramma         : Testadapter
+    GUID                   : 40cab3d4-8905-4dcb-9a74-0f7f9880e081
+    Status                 : %s
+    SSID                   : %s
+    AP BSSID               : 02:11:22:33:44:55
+"""
+NETSH_NET = """    SSID 1 : Thuisnet
+    SSID 2 : Deepmind12
+"""
+NETSH_NET_HOME = """    SSID 1 : Thuisnet
+"""
+NETSH_PROFILE = """    Profiel voor alle gebruikers : %s
+"""
+
+
+def check_ap():
+    """Verbinden met het accesspoint van de synth, met netsh nagemaakt."""
+    print("accesspoint van de synth:")
+    calls = []
+    # een pc met een ingebouwde adapter op het thuisnet en een tweede erbij
+    state = {"ifaces": [["Wi-Fi", "Thuisnet"], ["Wi-Fi 2", ""]],
+             "profiles": [], "in_range": True, "xml": ""}
+
+    def find(name):
+        for iface in state["ifaces"]:
+            if iface[0] == name:
+                return iface
+        return None
+
+    def fake_netsh(*args):
+        calls.append(" ".join(args))
+        if args[:2] == ("show", "interfaces"):
+            out = NETSH_HEAD % len(state["ifaces"])
+            for name, ssid in state["ifaces"]:
+                out += NETSH_IFACE % (
+                    name, "verbonden" if ssid else "niet verbonden", ssid)
+            return out
+        if args[:2] == ("show", "networks"):
+            return NETSH_NET if state["in_range"] else NETSH_NET_HOME
+        if args[:2] == ("show", "profiles"):
+            return "".join(NETSH_PROFILE % p for p in state["profiles"])
+        if args[:2] == ("add", "profile"):
+            with open(args[2].split("=", 1)[1], encoding="utf-8") as f:
+                state["xml"] = f.read()
+            state["profiles"].append("Deepmind12")
+            return "Profiel Deepmind12 is toegevoegd aan interface Wi-Fi."
+        if args[0] == "connect":
+            iface = find(args[2].split("=", 1)[1])
+            if iface:
+                iface[1] = args[1].split("=", 1)[1]
+            return "Verbindingsaanvraag is voltooid."
+        return ""
+
+    keep_netsh, keep_win = dm12._netsh, dm12._windows
+    dm12._netsh, dm12._windows = fake_netsh, lambda: True
+    dm12.AP.update(back_to=None, iface=None, takeover=False, said=False)
+    dm12._here["at"] = 0.0
+    try:
+        names = [i["name"] for i in dm12.wlan_interfaces()]
+        check(names == ["Wi-Fi", "Wi-Fi 2"], "beide adapters gelezen: %s" % names)
+        check(dm12.wlan_in_range("Deepmind12"), "accesspoint staat in de lucht")
+        check(not dm12.on_ap(), "we zitten er nog niet op")
+
+        state["in_range"] = False
+        check(dm12.ap_join() is False and find("Wi-Fi 2")[1] == "",
+              "accesspoint uit: niets doen")
+
+        state["in_range"] = True
+        check(dm12.ap_join() is True, "accesspoint aan: erbij verbinden")
+        check(find("Wi-Fi")[1] == "Thuisnet", "het thuisnet blijft waar het was")
+        check(find("Wi-Fi 2")[1] == "Deepmind12", "de vrije adapter pakt de synth")
+        check(dm12.AP["back_to"] is None, "niets om naar terug te keren")
+        check("PassPhrase" in state["xml"] and "WPA2PSK" in state["xml"],
+              "profiel met het wachtwoord erin")
+        check(not os.path.exists(os.path.join(ROOT, ".dm12-ap-profile.xml")),
+              "profielbestand weer opgeruimd")
+
+        dm12._here["at"] = 0.0
+        calls[:] = []
+        check(dm12.ap_join() is False
+              and not any(c.startswith("connect") for c in calls),
+              "al verbonden: niet opnieuw")
+
+        # en met maar een adapter, die bezet is: afblijven
+        state["ifaces"] = [["Wi-Fi", "Thuisnet"]]
+        dm12._here["at"] = 0.0
+        calls[:] = []
+        check(dm12.ap_join() is False
+              and not any(c.startswith("connect") for c in calls)
+              and find("Wi-Fi")[1] == "Thuisnet",
+              "enige adapter is bezet: het thuisnet blijft staan")
+        check("adapter" in dm12.AP["note"], "en zegt waarom: %r" % dm12.AP["note"])
+
+        # tenzij erom gevraagd is
+        dm12.AP["takeover"] = True
+        dm12._here["at"] = 0.0
+        check(dm12.ap_join() is True and find("Wi-Fi")[1] == "Deepmind12",
+              "met --ap-takeover mag hij hem toch overnemen")
+        check(dm12.AP["back_to"] == "Thuisnet" and dm12.AP["iface"] == "Wi-Fi",
+              "onthoudt waar die adapter vandaan kwam")
+        dm12.ap_restore()
+        check(find("Wi-Fi")[1] == "Thuisnet", "en zet hem bij het afsluiten terug")
+    finally:
+        dm12._netsh, dm12._windows = keep_netsh, keep_win
+        dm12.AP.update(back_to=None, iface=None, takeover=False, said=False)
+        dm12._here["ifaces"] = None
+        dm12._here["at"] = 0.0
+
+
 def main():
     check_helpers()
+    check_ap()
     threading.Thread(target=fake_deepmind, daemon=True).start()
     time.sleep(0.2)
 
