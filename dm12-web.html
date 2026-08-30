@@ -213,6 +213,24 @@
     justify-content:center; overflow:hidden; }
   .routes button svg { display:block; }
 
+  /* modulatiematrix: acht regels van bron naar bestemming, met de diepte
+     als liggende schuif erachter */
+  .mods { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px;
+    margin-top:10px; }
+  .modrow { display:grid; grid-template-columns:16px 1fr 14px 1fr 88px 34px;
+    gap:6px; align-items:center; }
+  .modrow .nr { color:var(--muted); font-size:9px; font-weight:700; }
+  .modrow .arrow { color:var(--label); font-size:10px; text-align:center; }
+  .modrow .num { color:var(--label); font-weight:700; font-size:11px;
+    text-align:right; }
+  .modrow.idle .pick, .modrow.idle .arrow { color:var(--muted); }
+  /* liggende schuif: dezelfde gleuf en hetzelfde kapje, een kwartslag om */
+  .hfad { height:5px; background:var(--track); border-radius:3px;
+    position:relative; cursor:ew-resize; touch-action:none; }
+  .hfad i { position:absolute; top:50%; transform:translateY(-50%);
+    width:10px; height:14px; margin-left:-5px; border-radius:2px;
+    background:linear-gradient(90deg,var(--cap-hi),var(--cap-lo)); }
+
   /* paneel met twee helften, gescheiden door een streep */
   .halves { display:flex; gap:14px; align-items:stretch; margin-top:10px;
     justify-content:center; }
@@ -1392,7 +1410,7 @@ const PAGES = [
     ...fxSlot(3, 192, 193, 220),
     ...fxSlot(4, 205, 206, 221),
   ]},
-  {id:"mod", name:"Mod", params:[
+  {id:"mod", name:"Mod", panel:"mod", params:[
     ...[0,1,2,3,4,5,6,7].flatMap(i => [
       H("Mod " + (i + 1)),
       S(93 + i * 3, "Source (0–22, see manual)", 22),
@@ -2688,6 +2706,139 @@ function renderFx(nr, typeN, p1, gainN) {
     cells, {cols: 6});
 }
 
+// Bronnen en bestemmingen van de modulatiematrix, uit hoofdstuk 8.9 van de
+// handleiding. Nul is bij allebei "geen"; daarna volgt de lijst op nummer.
+const MODSRCS = [
+  "None","Pitch Bend","Mod Wheel","Foot Ctrl","BreathCtrl","Pressure",
+  "LFO1","LFO2","Env1","Env2","Env3","Note Num","Note Vel","Ctrl Seq",
+  "LFO1 Uni","LFO2 Uni","LFO1 Fade","LFO2 Fade","NoteOff Vel","Voice Num",
+  "CC X","CC Y","CC Z"
+];
+
+const MODDSTS = [
+  "None","LFO1 Rate","LFO1 Delay","LFO1 Slew","LFO1 Shape","LFO2 Rate",
+  "LFO2 Delay","LFO2 Slew","LFO2 Shape","OSC1+2 Pit","OSC1 Pitch",
+  "OSC2 Pitch","OSC1 PM","PWM Depth","TMod Depth","OSC2 PM","Porta Time",
+  "VCF Freq","VCF Res","VCF Env","VCF LFO","Env Rates","All Attack",
+  "All Decay","All Sus","All Rel","Env1 Rates","Env2 Rates","Env3 Rates",
+  "Env1CurveS All","Env2CurveS All","Env3CurveS All","Env1 Attack",
+  "Env1 Decay","Env1 Sus","Env1 Rel","Env1 AtCur","Env1 DcyCur",
+  "Env1 SuSCur","Env1 RelCur","Env2 Attack","Env2 Decay","Env2 Sus",
+  "Env2 Rel","Env2 AtCur","Env2 DcyCur","Env2 SuSCur","Env2 RelCur",
+  "Env3 Attack","Env3 Decay","Env3 Sus","Env3 Rel","Env3 AtCur",
+  "Env3 DcyCur","Env3 SuSCur","Env3 RelCur","VCA All**","VCA Active**",
+  "VCA EnvDep","Pan Spread","VCA Pan","OSC2 Lvl","Noise Lvl","HP Freq",
+  "Uni Detune","OSC Drift","Param Drift","Drift Rate","Arp Gate","Seq Slew",
+  "Mod 1","Mod 2","Mod 3","Mod 4","Mod 5","Mod 6","Mod 7","Mod 8","FX1 P1",
+  "FX1 P2","FX1 P3","FX1 P4","FX1 P5","FX1 P6","FX1 P7","FX1 P8","FX1 P9",
+  "FX1 P10","FX1 P11","FX1 P12","FX2 P1","FX2 P2","FX2 P3","FX2 P4",
+  "FX2 P5","FX2 P6","FX2 P7","FX2 P8","FX2 P9","FX2 P10","FX2 P11",
+  "FX2 P12","FX3 P1","FX3 P2","FX3 P3","FX3 P4","FX3 P5","FX3 P6","FX3 P7",
+  "FX3 P8","FX3 P9","FX3 P10","FX3 P11","FX3 P12","FX4 P1","FX4 P2",
+  "FX4 P3","FX4 P4","FX4 P5","FX4 P6","FX4 P7","FX4 P8","FX4 P9","FX4 P10",
+  "FX4 P11","FX4 P12","FX1 Level","FX2 Level","FX3 Level","FX4 Level"
+];
+
+// ================== modulatiematrix ==================
+// Acht bussen, elk een bron, een bestemming en een diepte. De diepte ligt hier
+// plat: verticaal zou een regel te hoog worden (indeling 14a).
+
+/** Liggende schuif voor een waarde met teken (-128 tot +127). */
+function hFader(num, width) {
+  const bar = document.createElement("div");
+  bar.className = "hfad";
+  const cap = document.createElement("i");
+  bar.appendChild(cap);
+  const paint = () => {
+    const v = pval({k: "s", n: num, max: 255});
+    cap.style.left = ((v / 255) * 100).toFixed(1) + "%";
+  };
+  paint();
+  params.subscribe(num, paint);
+
+  let from = null, startVal = 0;
+  bar.addEventListener("pointerdown", e => {
+    from = e.clientX;
+    startVal = params.get(num, 128);
+    markDragging();
+    if (bar.setPointerCapture && e.pointerId !== undefined) {
+      try { bar.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    if (e.preventDefault) e.preventDefault();
+  });
+  bar.addEventListener("pointermove", e => {
+    if (from === null) return;
+    markDragging();
+    const v = startVal + ((e.clientX - from) / (width || 88)) * 255
+                         * (e.shiftKey ? 0.25 : 1);
+    paramSet(num, Math.max(0, Math.min(255, Math.round(v))), true);
+  });
+  const end = () => {
+    if (from === null) return;
+    from = null;
+    dragging = false;
+    paramSet(num, params.get(num, 128));
+  };
+  bar.addEventListener("pointerup", end);
+  bar.addEventListener("pointercancel", end);
+  bar.addEventListener("dblclick", () => paramSet(num, 128));
+  return bar;
+}
+
+function renderMod() {
+  const box = document.createElement("div");
+  box.className = "pnl";
+  box.style.width = "640px";
+
+  const head = document.createElement("div");
+  head.className = "head";
+  const nm = document.createElement("span");
+  nm.className = "name";
+  nm.textContent = "MOD MATRIX";
+  head.appendChild(nm);
+  box.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "mods";
+  box.appendChild(grid);
+
+  for (let i = 0; i < 8; i++) {
+    const srcN = 93 + i * 3, dstN = srcN + 1, depN = srcN + 2;
+    const row = document.createElement("div");
+    row.className = "modrow";
+
+    const nr = document.createElement("span");
+    nr.className = "nr";
+    nr.textContent = i + 1;
+    row.appendChild(nr);
+    row.appendChild(pickBox(srcN, MODSRCS, {cols: 3}));
+
+    const arrow = document.createElement("span");
+    arrow.className = "arrow";
+    arrow.textContent = "\u2192";
+    row.appendChild(arrow);
+    row.appendChild(pickBox(dstN, MODDSTS, {cols: 4}));
+    row.appendChild(hFader(depN, 88));
+
+    const val = document.createElement("div");
+    val.className = "num";
+    const showVal = () => { val.textContent = fmt({k: "b"}, params.get(depN, 128)); };
+    showVal();
+    params.subscribe(depN, showVal);
+    typeIn(val, () => String(val.textContent).replace(/[^0-9+-]/g, ""),
+           t => { const n = parseFloat(t); if (!isNaN(n)) paramSet(depN, Math.max(0, Math.min(255, Math.round(n) + 128))); });
+    row.appendChild(val);
+
+    // een bus zonder bron doet niets; die staat gedempt
+    const showIdle = () => row.classList.toggle("idle", params.get(srcN, 0) === 0);
+    showIdle();
+    params.subscribe(srcN, showIdle);
+
+    grid.appendChild(row);
+  }
+  return box;
+}
+
 // ================== stemgedrag en stemming ==================
 // Indeling 12a splitst wat je tijdens het spelen aanraakt (stemtoewijzing en
 // portamento) van wat je een keer goed zet (stemming en drift).
@@ -3535,6 +3686,10 @@ function renderParams() {
     wrap.appendChild(renderEnv(53, "VCA ENV"));
     wrap.appendChild(renderEnv(62, "VCF ENV"));
     wrap.appendChild(renderEnv(71, "MOD ENV"));
+    list = [];
+  }
+  if (page.panel === "mod") {
+    wrap.appendChild(renderMod());
     list = [];
   }
   if (page.panel === "voice") {

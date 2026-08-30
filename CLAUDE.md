@@ -127,7 +127,7 @@ and render the same panels.
 
 Open threads:
 
-- Voice, Arp/Seq, FX and Mod are still plain cards; no design for them yet.
+- Arp/Seq is still plain cards; no design for it yet.
 - Whether the separate per-section tabs are still worth keeping now that the
   Panel tab shows everything.
 - 18 global settings are still unnamed, and the user's own Global layout has not

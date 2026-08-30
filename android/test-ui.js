@@ -269,7 +269,7 @@ for (const id of ["gearBtn","ipBtn","notifyBtn","panicBtn",
 // een parameterregelaar verzetten (laatste param-tab is nog actief gerenderd)
 try {
   const tabsArr = [...document.getElementById("tabs").children];
-  tabsArr.find(t => t.textContent === "Mod").fire("click");
+  tabsArr.find(t => t.textContent === "Arp/Seq").fire("click");
   const list = document.getElementById("paramList");
   sent = [];
   // met een skin zijn het draaiknoppen, zonder skin schuifregelaars
@@ -562,6 +562,53 @@ setTimeout(() => {
     if (lanes < 30) {
       console.error("FOUT: er ontbreken faders op de paneeltab");
       failures++;
+    }
+  }
+
+  // ---- modulatiematrix ----
+  {
+    [...document.getElementById("tabs").children]
+      .find(t => t.textContent === "Mod").fire("click");
+    const mp = document.getElementById("paramList");
+    const cl5 = (e, c) => String(e.className || "").split(" ").includes(c);
+    const rows = collect(mp, e => cl5(e, "modrow"));
+    const picks = collect(rows[0], e => cl5(e, "pick"));
+    console.log("mod matrix:", rows.length, "bussen |", picks.length, "keuzes per bus",
+                "| schuiven:", collect(mp, e => cl5(e, "hfad")).length);
+    if (rows.length !== 8 || picks.length !== 2) {
+      console.error("FOUT: de acht bussen staan er niet zoals ontworpen");
+      failures++;
+    } else {
+      // bron en bestemming van de eerste bus
+      const pop = collect(picks[0], e => String(e.className || "") === "shapepop")[0];
+      const dpop = collect(picks[1], e => String(e.className || "") === "shapepop")[0];
+      console.log("bronnen:", pop.children.length, "| bestemmingen:", dpop.children.length);
+      if (pop.children.length !== 23 || dpop.children.length !== 130) {
+        console.error("FOUT: de lijsten hebben niet 23 bronnen en 130 bestemmingen");
+        failures++;
+      }
+      sent = [];
+      picks[0].fire("click");
+      pop.children[2].fire("click");                 // Mod Wheel
+      const m = sent.filter(x => x[0] === "nrpn" && x[1] === 93).pop();
+      console.log("bron gekozen ->", JSON.stringify(m));
+      if (!m || m[2] !== 2) {
+        console.error("FOUT: de bron gaat niet naar parameter 93");
+        failures++;
+      }
+      // de diepte ligt plat en telt met teken
+      const bar = collect(rows[0], e => cl5(e, "hfad"))[0];
+      const val = collect(rows[0], e => cl5(e, "num"))[0];
+      sent = [];
+      bar.fire("pointerdown", {clientX: 40, preventDefault() {}, pointerId: 4});
+      bar.fire("pointermove", {clientX: 400, preventDefault() {}, shiftKey: false});
+      bar.fire("pointerup", {});
+      const d = sent.filter(x => x[0] === "nrpn" && x[1] === 95).pop();
+      console.log("diepte helemaal open ->", JSON.stringify(d), "toont", val.textContent);
+      if (!d || d[2] !== 255 || val.textContent !== "+127") {
+        console.error("FOUT: de diepte loopt niet tot +127");
+        failures++;
+      }
     }
   }
 
